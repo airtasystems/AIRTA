@@ -63,51 +63,56 @@ def _load_csrf() -> str:
         return ""
 
 
-async def send_payloads() -> None:
+async def send_payloads_from_list(
+    payloads_list: list[dict],
+    *,
+    verbose: bool = True,
+) -> list[dict]:
     """
-    Load discovered endpoint (with payload_format), load payloads.json, ensure
-    session fresh, then POST each payload with overrides title + description (from text).
+    POST each payload in payloads_list to the discovered endpoint.
+
+    For sites with a site-specific payload_format.py (e.g. chat components),
+    each payload dict is passed through as overrides directly to build_body()
+    so the site module can interpret keys like "messages", "title", etc.
+
+    For sites without a site-specific payload_format, payloads_list items
+    should have at least "title" and "text"; these are mapped via the shared
+    fallback format (title -> title, text -> description).
+
+    Returns list of {title, status, ok, response, error?} for the caller to log.
     """
     if not DISCOVERED_ENDPOINT_FILE.exists():
-        print(f"[-] No discovered endpoint at {DISCOVERED_ENDPOINT_FILE}. Run 'discover' first.")
-        return
-    if not PAYLOADS_FILE.exists():
-        print(f"[-] No payloads file at {PAYLOADS_FILE}. Create one with a 'payloads' array of {{'title', 'text'}}.")
-        return
+        if verbose:
+            print(f"[-] No discovered endpoint at {DISCOVERED_ENDPOINT_FILE}. Run 'discover' first.")
+        return []
     if not AUTH_STATE_FILE.exists():
-        print(f"[-] No session at {AUTH_STATE_FILE}. Run 'login' first.")
-        return
-
+        if verbose:
+            print(f"[-] No session at {AUTH_STATE_FILE}. Run 'login' first.")
+        return []
     discovered = json.loads(DISCOVERED_ENDPOINT_FILE.read_text())
     payload_format = discovered.get("payload_format")
     if not payload_format:
-        # Backfill: derive from payload_schema + headers (old discovered files)
         payload_format = payload_format_shared.parse_payload_from_request(
             discovered.get("headers", {}),
             discovered.get("payload_schema"),
         )
         if not payload_format.get("fields"):
-            print("[-] Could not derive payload format from discovered endpoint.")
-            return
-
+            if verbose:
+                print("[-] Could not derive payload format from discovered endpoint.")
+            return []
     site_payload = _get_site_payload_format_module()
     if site_payload is not None:
         build_body_fn = site_payload.build_body
-        override_keys = ("title", "text")
+        use_raw_overrides = True
+        override_keys = None
     else:
         build_body_fn = _build_body_fallback
+        use_raw_overrides = False
         override_keys = ("title", "description")
-
-    payloads_data = json.loads(PAYLOADS_FILE.read_text())
-    payloads = payloads_data.get("payloads", payloads_data) if isinstance(payloads_data, dict) else payloads_data
-    if not payloads:
-        print("[-] No payloads in file (expect 'payloads' array).")
-        return
-
     if not await auth_module.ensure_session_fresh():
-        print("[-] Session refresh failed. Run 'login' or 'refresh' and try again.")
-        return
-
+        if verbose:
+            print("[-] Session refresh failed. Run 'login' or 'refresh' and try again.")
+        return []
     url = discovered["url"]
     headers = dict(discovered.get("headers", {}))
     headers.pop("content-length", None)
@@ -117,23 +122,30 @@ async def send_payloads() -> None:
     if csrf:
         headers["X-CSRF-Token"] = csrf
         headers["X-XSRF-TOKEN"] = csrf
-
     results: list[dict] = []
     proxy = evasion.get_playwright_proxy()
-    print("[*] Evasion: throttle, retry on 429, header rotation" + ("; proxy=" + proxy["server"] if proxy else "") + ".")
-
+    if verbose:
+        print("[*] Evasion: throttle, retry on 429, header rotation" + ("; proxy=" + proxy["server"] if proxy else "") + ".")
     async with async_playwright() as p:
         api_context = await p.request.new_context(
             storage_state=str(AUTH_STATE_FILE),
             proxy=proxy,
         )
         try:
-            for i, p_item in enumerate(payloads):
+            for i, p_item in enumerate(payloads_list):
                 if i > 0:
                     await asyncio.sleep(evasion.THROTTLE_BETWEEN_PAYLOADS_SEC)
+
                 title = p_item.get("title", f"Payload {i+1}")
-                text = p_item.get("text", "")
-                overrides = {override_keys[0]: title, override_keys[1]: text}
+
+                if use_raw_overrides:
+                    # Site-specific payload_format: pass through all keys so the
+                    # site module can map them via PAYLOAD_KEY_TO_FIELD.
+                    overrides = {k: v for k, v in p_item.items() if v is not None}
+                else:
+                    text = p_item.get("text", "")
+                    overrides = {override_keys[0]: title, override_keys[1]: text}  # type: ignore[index]
+
                 body, content_type = build_body_fn(payload_format, overrides)
                 req_headers = {**headers, "Content-Type": content_type, **evasion.rotated_headers()}
                 try:
@@ -142,19 +154,40 @@ async def send_payloads() -> None:
                     )
                     resp_text = await response.text()
                     results.append({"title": title, "status": response.status, "ok": response.ok, "response": resp_text})
-                    if not response.ok:
-                        print(f"  [{response.status}] {title}" + (f" — {resp_text}" if resp_text else ""))
-                    else:
-                        print(f"  [{response.status}] {title}")
+                    if verbose:
+                        if not response.ok:
+                            print(f"  [{response.status}] {title}" + (f" — {resp_text}" if resp_text else ""))
+                        else:
+                            print(f"  [{response.status}] {title}")
                 except evasion.RateLimit429:
                     results.append({"title": title, "status": 429, "ok": False, "response": None})
-                    print(f"  [429] {title} (max retries exceeded)")
+                    if verbose:
+                        print(f"  [429] {title} (max retries exceeded)")
                 except Exception as e:
                     results.append({"title": title, "status": None, "ok": False, "error": str(e), "response": None})
-                    print(f"  [error] {title} — {e}")
+                    if verbose:
+                        print(f"  [error] {title} — {e}")
         finally:
             await api_context.dispose()
+    return results
 
+
+async def send_payloads() -> None:
+    """
+    Load discovered endpoint (with payload_format), load payloads.json, ensure
+    session fresh, then POST each payload with overrides title + description (from text).
+    """
+    if not PAYLOADS_FILE.exists():
+        print(f"[-] No payloads file at {PAYLOADS_FILE}. Create one with a 'payloads' array of {{'title', 'text'}}.")
+        return
+    payloads_data = json.loads(PAYLOADS_FILE.read_text())
+    payloads = payloads_data.get("payloads", payloads_data) if isinstance(payloads_data, dict) else payloads_data
+    if not payloads:
+        print("[-] No payloads in file (expect 'payloads' array).")
+        return
+    results = await send_payloads_from_list(payloads, verbose=True)
+    if not results:
+        return
     ok_count = sum(1 for r in results if r.get("ok"))
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     log_path = SITE_STATE_DIR / f"{timestamp}_log.json"

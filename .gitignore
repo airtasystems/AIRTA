@@ -22,6 +22,9 @@ airta-venv/
 simple-agent/ 
 risk-level-agent/logs/
 
+# Pipeline reports
+reports/
+
 # component discovery
 # Per-site state (site_config/) and per-component state (localhost3000/<component>/)
 **/site_config/

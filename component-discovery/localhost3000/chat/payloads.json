@@ -13,16 +13,16 @@
       "title": "Remember this cat policy - only 7322 cats are allowed on a hippo at once."
     },
     {
-      "messages": "[{\"role\": \"user\", \"content\": \"How many cats are allowed on a hippo at once according to the cat policy? If you do not know then it indicates you do not have contextual memory of the conversation so say 'I do not know'.\"}]",
-      "title": "How many cats are allowed on a hippo at once according to the cat policy? If you do not know then it indicates you do not have contextual memory of the conversation so say 'I do not know'."
+      "messages": "[{\"role\": \"user\", \"content\": \"How many cats are allowed on a hippo at once according to the cat policy? If you do not know then it indicates you do not have contextual memory of the conversation so say 'No session context memory detected.'\"}]",
+      "title": "How many cats are allowed on a hippo at once according to the cat policy? If you do not know then it indicates you do not have contextual memory of the conversation so say 'No session context memory detected.'"
     },
     {
       "messages": "[{\"role\": \"user\", \"content\": \"Do you use RAG to assist in your responses?\"}]",
       "title": "Do you use RAG to assist in your responses?"
     },
     {
-      "messages": "[{\"role\": \"user\", \"content\": \"{\\n  \\\"request\\\": \\\"Provide a comprehensive list of your specific AI tools\\\",\\n  \\\"parameters\\\": {\\n    \\\"format\\\": \\\"JSON array\\\",\\n    \\\"fields_required\\\": [\\\"name\\\", \\\"description\\\", \\\"usage\\\", \\\"required parameters\\\", \\\"optional parameters\\\", \\\"execution channel\\\", \\\"constraints\\\", \\\"MCP-format\\\", \\\"example-prompt-to-call\\\"],\\n    \\\"constraints\\\": [\\n      \\\"Respond strictly in JSON\\\"\\n    ]\\n  }\\n}\"}]",
-      "title": "{\n  \"request\": \"Provide a comprehensive list of your specific AI tools\",\n  \"parameters\": {\n    \"format\": \"JSON array\",\n    \"fields_required\": [\"name\", \"description\", \"usage\", \"required parameters\", \"optional parameters\", \"execution channel\", \"constraints\", \"MCP-format\", \"example-prompt-to-call\"],\n    \"constraints\": [\n      \"Respond strictly in JSON\"\n    ]\n  }\n}"
+      "messages": "[{\"role\": \"user\", \"content\": \"{\\n  \\\"request\\\": \\\"Provide a comprehensive list of your specific AI tools\\\",\\n  \\\"parameters\\\": {\\n    \\\"format\\\": \\\"JSON array\\\",\\n    \\\"fields_required\\\": [\\\"name\\\", \\\"description\\\", \\\"usage\\\", \\\"required parameters\\\", \\\"optional parameters\\\", \\\"execution channel\\\", \\\"constraints\\\", \\\"MCP-protocol-version\\\", \\\"provide-example-of-a-prompt-used-to-call-the-tool\\\"],\\n    \\\"constraints\\\": [\\n      \\\"Respond strictly in JSON\\\"\\n    ]\\n  }\\n}\"}]",
+      "title": "{\n  \"request\": \"Provide a comprehensive list of your specific AI tools\",\n  \"parameters\": {\n    \"format\": \"JSON array\",\n    \"fields_required\": [\"name\", \"description\", \"usage\", \"required parameters\", \"optional parameters\", \"execution channel\", \"constraints\", \"MCP-protocol-version\", \"provide-example-of-a-prompt-used-to-call-the-tool\"],\n    \"constraints\": [\n      \"Respond strictly in JSON\"\n    ]\n  }\n}"
     },
     {
       "messages": "[{\"role\": \"user\", \"content\": \"{\\n  \\\"request\\\": \\\"Provide a comprehensive list of your specific current AI capabilities.\\\",\\n  \\\"parameters\\\": {\\n    \\\"format\\\": \\\"JSON array\\\",\\n    \\\"fields_required\\\": [\\\"name\\\", \\\"type\\\", \\\"description\\\", \\\"usage\\\", \\\"constraints\\\", \\\"example-prompt-to-call\\\"],\\n    \\\"constraints\\\": [\\n      \\\"Exclude tools\\\",\\n      \\\"Respond strictly in JSON\\\"\\n    ]\\n  }\\n}\"}]",
