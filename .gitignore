@@ -1,0 +1,6 @@
+.env
+dev/
+airta-venv/
+simple-agent/ 
+risk-level-agent/cache/
+risk-level-agent/logs/
