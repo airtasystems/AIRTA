@@ -4,9 +4,10 @@ CLI for the LLM endpoint discovery app.
   python -m component_discovery run   # Interactive loop: login, discover, generate, refresh, test payloads
   python -m component_discovery login
   python -m component_discovery discover
+  python -m component_discovery discover-multi   # Capture 3 messages to see full-history vs incremental
   python -m component_discovery generate-payload-module
   python -m component_discovery refresh
-  python -m component_discovery send-payloads   # Or use "Test payloads" (5) from the run menu
+  python -m component_discovery send-payloads   # Or use "Test payloads" from the run menu
 """
 import argparse
 import asyncio
@@ -79,6 +80,13 @@ def cmd_discover(args):
     _run(discover.discover_endpoint(headless=args.headless))
 
 
+def cmd_discover_multi(args):
+    _run(discover.discover_endpoint_multi(
+        num_messages=args.num_messages,
+        headless=args.headless,
+    ))
+
+
 def cmd_generate_payload_module(args):
     from . import generate_site_payload
     generate_site_payload.generate_payload_module()
@@ -129,34 +137,37 @@ def _run_loop_menu():
     while True:
         print()
         print("  1) Login          — capture session + CSRF (browser)")
-        print("  2) Discover       — intercept API request (browser)")
-        print("  3) Generate       — Gemini: payload_format + send_payloads; payloads.json from diagnostics")
-        print("  4) Refresh now    — refresh session + CSRF once")
-        print("  5) Test payloads — send payloads.json to discovered endpoint (same as send-payloads)")
-        print("  6) Analyze log    — Gemini: analyze latest *_log.json → discovery.json")
-        print("  7) Exit")
+        print("  2) Discover       — intercept one API request (browser)")
+        print("  3) Discover multi — intercept 3 messages in one conversation (browser)")
+        print("  4) Generate       — Gemini: payload_format + send_payloads; payloads.json from diagnostics")
+        print("  5) Refresh now    — refresh session + CSRF once")
+        print("  6) Test payloads — send payloads.json to discovered endpoint (same as send-payloads)")
+        print("  7) Analyze log    — Gemini: analyze latest *_log.json → discovery.json")
+        print("  8) Exit")
         print()
         try:
-            choice = input("  Choice [1-7]: ").strip()
+            choice = input("  Choice [1-8]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if not choice:
             continue
-        if choice == "7" or choice.lower() == "q":
+        if choice == "8" or choice.lower() == "q":
             break
         if choice == "1":
             _run(auth.capture_login_and_csrf(headless=False))
         elif choice == "2":
             _run(discover.discover_endpoint(headless=False))
         elif choice == "3":
+            _run(discover.discover_endpoint_multi(num_messages=3, headless=False))
+        elif choice == "4":
             from . import generate_site_payload
             generate_site_payload.generate_payload_module()
-        elif choice == "4":
-            _run(auth.refresh_session())
         elif choice == "5":
-            _send_payloads_impl()
+            _run(auth.refresh_session())
         elif choice == "6":
+            _send_payloads_impl()
+        elif choice == "7":
             import sys
             from pathlib import Path
             _root = Path(__file__).resolve().parent.parent
@@ -199,6 +210,19 @@ def main():
         help="Open app with saved session; you make one LLM request in the app. Endpoint is captured.",
     )
     discover_p.set_defaults(func=cmd_discover)
+
+    discover_multi_p = sub.add_parser(
+        "discover-multi",
+        help="Open app; you send 3 messages in the UI. Each request is captured to see full-history vs incremental.",
+    )
+    discover_multi_p.set_defaults(func=cmd_discover_multi)
+    discover_multi_p.add_argument(
+        "--num-messages",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Number of messages to capture (default: 3).",
+    )
 
     gen_p = sub.add_parser(
         "generate-payload-module",

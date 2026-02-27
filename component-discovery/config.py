@@ -51,6 +51,7 @@ DISCOVERED_REFRESH_URL_FILE = SITE_CONFIG_DIR / "discovered_refresh_url.txt"
 SITE_STATE_DIR = _COMPONENT_DIR / _sitename / COMPONENT
 SITE_STATE_DIR.mkdir(parents=True, exist_ok=True)
 DISCOVERED_ENDPOINT_FILE = SITE_STATE_DIR / "discovered_endpoint.json"
+DISCOVERED_MULTI_FILE = SITE_STATE_DIR / "discovered_multi_endpoint.json"
 PAYLOADS_FILE = SITE_STATE_DIR / "payloads.json"
 
 # Optional: diagnostics/diagnostics.json (project root); when present, chat component can use it as payload source

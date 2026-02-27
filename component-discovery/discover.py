@@ -14,6 +14,7 @@ from .config import (
     BASE_URL,
     AUTH_STATE_FILE,
     DISCOVERED_ENDPOINT_FILE,
+    DISCOVERED_MULTI_FILE,
     TARGET_API_URL,
 )
 from . import evasion
@@ -123,14 +124,7 @@ async def discover_endpoint(*, headless: bool = False) -> None:
 
         await request_caught.wait()
 
-        # Normalize headers for JSON (some values are lists). Omit volatile headers
-        # (CSRF, cookie) so we always inject the current token from csrf_token.json at send time.
-        SKIP_HEADERS = {"x-csrf-token", "x-xsrf-token", "cookie", "content-length", "host", "accept-encoding"}
-        headers_serializable = {}
-        for k, v in captured.get("headers", {}).items():
-            if k.lower() in SKIP_HEADERS:
-                continue
-            headers_serializable[k] = v if isinstance(v, str) else v[0] if v else ""
+        headers_serializable = _serialize_headers(captured.get("headers", {}))
 
         # Derive structured payload format so we can build requests later without re-parsing
         raw_payload = captured.get("payload_schema")
@@ -150,6 +144,131 @@ async def discover_endpoint(*, headless: bool = False) -> None:
         print(f"\n[+] Discovered endpoint saved to {DISCOVERED_ENDPOINT_FILE.name}")
         print("[*] Payload format:", payload_fmt.get("encoding"), "— fields:", list(payload_fmt.get("fields", {}).keys()))
         print("[*] URL:", out["url"])
+
+        await context.close()
+        await browser.close()
+
+
+# Headers we omit when serializing so we can inject current token at send time
+_SKIP_HEADERS = {"x-csrf-token", "x-xsrf-token", "cookie", "content-length", "host", "accept-encoding"}
+
+
+def _serialize_headers(headers: dict) -> dict:
+    """Normalize headers for JSON; omit volatile ones."""
+    out = {}
+    for k, v in headers.items():
+        if k.lower() in _SKIP_HEADERS:
+            continue
+        out[k] = v if isinstance(v, str) else (v[0] if v else "")
+    return out
+
+
+async def discover_endpoint_multi(
+    *,
+    num_messages: int = 3,
+    headless: bool = False,
+) -> None:
+    """
+    Launch browser with saved auth; user sends num_messages (default 3) in the UI.
+    We intercept each matching POST and save URL, method, headers, and payload
+    for every request so we can see how the UI sends follow-up messages (full
+    history vs incremental).
+    """
+    if not TARGET_API_URL:
+        print("[-] Set LOCAL_API_URL or TARGET_API_URL in .env (the API URL to intercept).")
+        return
+    if not AUTH_STATE_FILE.exists():
+        print(f"[-] No saved session at {AUTH_STATE_FILE}. Run 'login' first.")
+        return
+
+    if not await auth_module.ensure_session_fresh():
+        print("[-] Session refresh failed. Run 'login' or 'refresh' and try again.")
+        return
+
+    captured_list: list[dict] = []
+    all_caught = asyncio.Event()
+    expected_path = _normalize_path(TARGET_API_URL)
+
+    def handle_request(request):
+        if request.method != "POST":
+            return
+        if not _is_same_origin(request.url):
+            return
+        req_path = _normalize_path(request.url)
+        if req_path != expected_path:
+            print(f"[*] POST (skip): {req_path} — expected {expected_path}")
+            return
+        try:
+            post_data = request.post_data
+            if post_data and len(post_data) < 20:
+                print(f"[*] POST (skip): body too small ({len(post_data)} chars)")
+                return
+        except Exception:
+            pass
+
+        n = len(captured_list) + 1
+        print(f"\n[+] Intercepted request {n}/{num_messages}: {request.url}")
+        try:
+            payload_schema = request.post_data_json
+        except Exception:
+            payload_schema = request.post_data
+        captured_list.append({
+            "url": request.url,
+            "method": request.method,
+            "headers": dict(request.headers),
+            "payload_schema": payload_schema,
+        })
+        if len(captured_list) >= num_messages:
+            all_caught.set()
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+        context = await browser.new_context(
+            storage_state=str(AUTH_STATE_FILE),
+            viewport={"width": evasion.VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT},
+        )
+        page = await context.new_page()
+        if await evasion.apply_stealth(page):
+            print("[*] Stealth applied (WAF evasion).")
+
+        page.on("request", handle_request)
+
+        print(f"[*] Opening app at {BASE_URL} (session loaded)...")
+        await page.goto(BASE_URL)
+        await asyncio.sleep(evasion.human_delay(300, 700))
+        await evasion.scroll_human_like(page, -80, steps=3)
+
+        print("\n" + "=" * 60)
+        print(f"[!] In the browser: send exactly {num_messages} messages to the LLM (one at a time).")
+        print("[!] This app will capture each request to see how the UI sends follow-up messages.")
+        print("=" * 60 + "\n")
+
+        await all_caught.wait()
+
+        requests_out = []
+        for i, cap in enumerate(captured_list):
+            headers_serializable = _serialize_headers(cap.get("headers", {}))
+            raw_payload = cap.get("payload_schema")
+            payload_fmt = payload_format_module.parse_payload_from_request(
+                headers_serializable, raw_payload
+            )
+            requests_out.append({
+                "url": cap["url"],
+                "method": cap["method"],
+                "headers": headers_serializable,
+                "payload_format": payload_fmt,
+                "payload_schema": raw_payload,
+            })
+            print(f"[*] Request {i + 1}: fields {list(payload_fmt.get('fields', {}).keys())}")
+
+        out = {
+            "num_captured": len(requests_out),
+            "requests": requests_out,
+        }
+        DISCOVERED_MULTI_FILE.write_text(json.dumps(out, indent=2))
+
+        print(f"\n[+] Multi-message discovery saved to {DISCOVERED_MULTI_FILE.name}")
+        print(f"[*] Captured {len(requests_out)} requests; compare payload_schema to see full-history vs incremental.")
 
         await context.close()
         await browser.close()

@@ -3,7 +3,9 @@
 Unified AIRTA pipeline entry point.
 Run from project root: python main.py [options]
 
-Orchestrates: optional discovery -> run compliance tests -> optional diagnostics -> risk assessment -> report.
+Orchestrates: optional discovery -> diagnostics (send payloads + analyze_log -> discovery.json) -> compliance tests -> risk assessment -> report.
+
+discovery.json (meta, capabilities, tools, has_context, uses_rag, uses_mcp) is produced before tests so future runs can use it to decide whether to run multishot, agent, or capabilities tests.
 """
 import argparse
 import asyncio
@@ -31,7 +33,7 @@ def _setup_paths(root: Path) -> None:
     pkg.__file__ = str(cd_dir / "__init__.py")
     sys.modules["component_discovery"] = pkg
 
-    load_order = ["config", "evasion", "payload_format", "auth", "discover", "send_payloads", "generate_site_payload"]
+    load_order = ["config", "evasion", "payload_format", "auth", "discover", "send_payloads", "run_diagnostics", "generate_site_payload"]
     for name in load_order:
         py_file = cd_dir / f"{name}.py"
         if not py_file.exists():
@@ -86,6 +88,12 @@ async def _run_discovery() -> bool:
     return True
 
 
+async def _run_diagnostics_send(discovery_config, diagnostics_path: Path, log_dir: Path | None = None) -> Path | None:
+    """Run diagnostics-only flow: adapt format from discovered endpoint, send, write log. Does not use payloads.json."""
+    from component_discovery import run_diagnostics
+    return await run_diagnostics.run_diagnostics_send(discovery_config, diagnostics_path, log_dir=log_dir, verbose=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Unified AIRTA pipeline: discovery (optional), compliance tests, diagnostics (optional), risk assessment.",
@@ -98,7 +106,7 @@ def main() -> None:
     parser.add_argument(
         "--skip-diagnostics",
         action="store_true",
-        help="Skip running diagnostics (analyze_log) after compliance tests.",
+        help="Skip running diagnostics (send diagnostics payloads + analyze_log) before compliance tests.",
     )
     parser.add_argument(
         "--test-file",
@@ -115,8 +123,8 @@ def main() -> None:
     parser.add_argument(
         "--report-dir",
         type=Path,
-        default=Path("reports"),
-        help="Directory for pipeline report (default: reports/).",
+        default=None,
+        help="Optional: also copy pipeline_report.json here. Run logs are in sitename/component/logs/{timestamp}/.",
     )
     parser.add_argument(
         "--force-discovery",
@@ -131,13 +139,17 @@ def main() -> None:
 
     # Resolve paths relative to root
     test_file = args.test_file if args.test_file.is_absolute() else root / args.test_file
-    report_dir = args.report_dir if args.report_dir.is_absolute() else root / args.report_dir
-    report_dir.mkdir(parents=True, exist_ok=True)
 
     # Set COMPONENT for config
     os.environ["COMPONENT"] = args.component
 
     from component_discovery import config as discovery_config
+
+    # Run log dir: sitename/component/logs/{timestamp}/ for this round
+    run_timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    run_log_dir = discovery_config.SITE_STATE_DIR / "logs" / run_timestamp
+    run_log_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[*] Run logs: {run_log_dir}")
 
     # 1. Optional discovery
     if not args.skip_discovery and not args.force_discovery:
@@ -155,22 +167,33 @@ def main() -> None:
         print("[-] No auth state. Run without --skip-discovery or run login first.")
         sys.exit(1)
 
-    # 2. Run compliance tests
+    # 2. Diagnostics (before tests): send diagnostics from diagnostics.json (format adapted to endpoint), then analyze_log -> discovery.json
+    # discovery.json is used later to decide whether to run multishot, agent, or capabilities tests.
+    discovery_json_path = discovery_config.SITE_STATE_DIR / "discovery.json"
+    diagnostics_path = root / "diagnostics" / "diagnostics.json"
+    if not args.skip_diagnostics:
+        print("[*] Running diagnostics (format-adapted send + analyze_log) before compliance tests...")
+        try:
+            diag_log_path = asyncio.run(_run_diagnostics_send(discovery_config, diagnostics_path, log_dir=run_log_dir))
+            if diag_log_path is None:
+                print("[*] No diagnostics or no results; skipping analyze_log.")
+            else:
+                from diagnostics import analyze_log
+                analyze_log.analyze_log_and_write_discovery(
+                    discovery_config.SITE_STATE_DIR, diagnostics_log_path=diag_log_path
+                )
+        except Exception as e:
+            print(f"[!] Diagnostics failed: {e}")
+    elif discovery_json_path.exists():
+        print("[*] Using existing discovery.json (diagnostics skipped).")
+
+    # 3. Run compliance tests
     from pipeline.run_tests import run_compliance_tests
 
-    compliance_log_path = asyncio.run(run_compliance_tests(test_file, verbose=True))
+    compliance_log_path = asyncio.run(run_compliance_tests(test_file, log_dir=run_log_dir, verbose=True))
     if compliance_log_path is None:
         print("[-] Compliance test run produced no log. Exiting.")
         sys.exit(1)
-
-    # 3. Optional diagnostics
-    if not args.skip_diagnostics:
-        try:
-            from diagnostics import analyze_log
-            print("[*] Running diagnostics (analyze_log)...")
-            analyze_log.analyze_log_and_write_discovery(discovery_config.SITE_STATE_DIR)
-        except Exception as e:
-            print(f"[!] Diagnostics failed: {e}")
 
     # 4. Risk assessment
     from pipeline.risk_assess import run_risk_assessment
@@ -195,19 +218,31 @@ def main() -> None:
             if _severity_index(new_level) < _severity_index(current):
                 mandate_rollup[m] = new_level
 
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    # Copy discovery.json into run log dir so this round has everything in one place
+    if discovery_json_path.exists():
+        import shutil
+        shutil.copy2(discovery_json_path, run_log_dir / "discovery.json")
+
     report = {
-        "timestamp": timestamp,
+        "timestamp": run_timestamp,
+        "run_log_dir": str(run_log_dir),
         "compliance_log": str(compliance_log_path),
         "test_file": str(test_file),
+        "discovery_json": str(run_log_dir / "discovery.json") if (run_log_dir / "discovery.json").exists() else None,
         "adversarial_results": risk_results,
         "mandate_rollup": mandate_rollup,
         "calibration_count": len(calibration_results),
         "calibration_ok_count": sum(1 for r in calibration_results if r.get("ok")),
     }
-    report_path = report_dir / f"pipeline_report_{timestamp}.json"
+    report_path = run_log_dir / "pipeline_report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"[+] Pipeline report: {report_path}")
+    if args.report_dir is not None:
+        args.report_dir.mkdir(parents=True, exist_ok=True)
+        copy_report = args.report_dir if args.report_dir.is_absolute() else root / args.report_dir
+        copy_report.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(report_path, copy_report / f"pipeline_report_{run_timestamp}.json")
 
     # Summary
     print("\n=== Summary ===")

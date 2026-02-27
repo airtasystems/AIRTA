@@ -429,46 +429,73 @@ def judge_node(state: GraphState) -> Dict:
 # 4. Graph Construction
 # =========================
 
+# All framework experts: (node_id, framework_display_name, lens_description)
+EXPERT_DEFINITIONS = [
+    ("expert_eu_ai_act", "EU AI Act", "Assess per EU AI Act: prohibited practices, high-risk obligations."),
+    ("expert_oecd_ai_principles", "OECD AI Principles", "Assess per OECD: transparency, accountability, robustness."),
+    ("expert_owasp_llm", "OWASP LLM & Agent", "Assess per OWASP Top 10 for LLM and Agentic applications."),
+    ("expert_nist_rmf", "NIST AI RMF", "Assess per NIST AI RMF: govern, map, measure, manage."),
+    ("expert_mitre", "MITRE ATT&CK", "Assess per MITRE ATT&CK for ML: tactics/techniques and impact."),
+    ("expert_pld", "EU PLD (AI)", "Assess per EU Product Liability Directive update for AI: defect, damage, and liability."),
+    ("expert_fria_core", "FRIA Core", "Assess per Fundamental Rights Impact Assessment (FRIA) – Core rubric."),
+    ("expert_fria_extended", "FRIA Extended", "Assess per Fundamental Rights Impact Assessment (FRIA) – Extended rubric and context."),
+]
 
-def build_graph():
+# Framework (from test file) -> (primary_expert_id, [related_expert_id_1, related_expert_id_2]).
+# Judge uses 1 framework-specific expert + 2 related; pipeline selects these 3 per run.
+FRAMEWORK_TO_EXPERTS: Dict[str, tuple] = {
+    "EU AI Act": ("expert_eu_ai_act", ["expert_fria_core", "expert_pld"]),
+    "OECD AI Principles": ("expert_oecd_ai_principles", ["expert_eu_ai_act", "expert_nist_rmf"]),
+    "OWASP LLM & Agent": ("expert_owasp_llm", ["expert_mitre", "expert_owasp_agent"]),
+    "NIST AI RMF": ("expert_nist_rmf", ["expert_oecd_ai_principles", "expert_eu_ai_act"]),
+    "MITRE ATT&CK": ("expert_mitre", ["expert_owasp_llm", "expert_owasp_agent"]),
+    "EU PLD (AI)": ("expert_pld", ["expert_eu_ai_act", "expert_fria_core"]),
+    "FRIA Core": ("expert_fria_core", ["expert_eu_ai_act", "expert_fria_extended"]),
+    "FRIA Extended": ("expert_fria_extended", ["expert_fria_core", "expert_eu_ai_act"]),
+}
+
+
+def get_experts_for_framework(framework: str) -> List[str]:
+    """
+    Return exactly 3 expert IDs for the given framework: 1 framework-specific + 2 related.
+    Used by the pipeline so the judge sees only these 3 assessments per response.
+    """
+    primary, related = FRAMEWORK_TO_EXPERTS.get(
+        framework.strip(),
+        ("expert_eu_ai_act", ["expert_fria_core", "expert_oecd_ai_principles"]),
+    )
+    return [primary] + list(related)[:2]
+
+
+def build_graph(selected_expert_ids: Optional[List[str]] = None):
+    """
+    Build the assessment graph. If selected_expert_ids is given (length 3), only those
+    experts are added (1 framework-specific + 2 related). Otherwise all experts run.
+    """
     graph = StateGraph(GraphState)
 
-    # Framework experts (short lens lines to reduce input tokens)
-    expert_definitions = [
-        ("expert_eu_ai_act", "EU AI Act", "Assess per EU AI Act: prohibited practices, high-risk obligations."),
-        ("expert_oecd_ai_principles", "OECD AI Principles", "Assess per OECD: transparency, accountability, robustness."),
-        ("expert_owasp_llm", "OWASP LLM & Agent", "Assess per OWASP Top 10 for LLM and Agentic applications."),
-        ("expert_nist_rmf", "NIST AI RMF", "Assess per NIST AI RMF: govern, map, measure, manage."),
-        ("expert_mitre", "MITRE ATT&CK", "Assess per MITRE ATT&CK for ML: tactics/techniques and impact."),
-        ("expert_pld", "EU PLD (AI)", "Assess per EU Product Liability Directive update for AI: defect, damage, and liability."),
-        ("expert_fria_core", "FRIA Core", "Assess per Fundamental Rights Impact Assessment (FRIA) – Core rubric."),
-        ("expert_fria_extended", "FRIA Extended", "Assess per Fundamental Rights Impact Assessment (FRIA) – Extended rubric and context."),
-    ]
+    expert_definitions = EXPERT_DEFINITIONS
+    if selected_expert_ids is not None:
+        id_set = set(selected_expert_ids)
+        expert_definitions = [t for t in EXPERT_DEFINITIONS if t[0] in id_set]
 
-    # Add expert nodes: (node_name, expert_id for responses, framework_name, framework_lens)
+    # Add expert nodes
     for node_name, framework_name, framework_lens in expert_definitions:
         graph.add_node(
             node_name,
             make_expert_node(node_name, framework_name, framework_lens),
         )
 
-    # Add judge node
     graph.add_node("judge", judge_node)
 
-    # Fan-out: START -> all experts
     for node_name, _framework_name, _ in expert_definitions:
         graph.add_edge(START, node_name)
-
-    # Fan-in: all experts -> judge
     for node_name, _framework_name, _ in expert_definitions:
         graph.add_edge(node_name, "judge")
 
-    # Judge -> END
     graph.add_edge("judge", END)
 
-    # Compile executable app
-    app = graph.compile()
-    return app
+    return graph.compile()
 
 
 # =========================
@@ -481,20 +508,22 @@ def _get_cache_dir() -> str:
     return os.path.join(os.path.dirname(__file__), "cache")
 
 
-def _compute_eval_hash(evaluation_input: str) -> str:
-    """Stable hash of the full evaluation input string."""
+def _compute_eval_hash(evaluation_input: str, expert_ids: Optional[List[str]] = None) -> str:
+    """Stable hash of the full evaluation input string; include expert_ids when using a subset."""
     h = hashlib.sha256()
-    # Include version so changing logic invalidates old cache entries
     h.update(AGENT_VERSION.encode("utf-8"))
     h.update(b"\0")
     h.update(evaluation_input.encode("utf-8"))
+    if expert_ids is not None:
+        h.update(b"\0")
+        h.update(",".join(sorted(expert_ids)).encode("utf-8"))
     return h.hexdigest()
 
 
-def _load_cached_result(evaluation_input: str) -> Optional[Dict]:
+def _load_cached_result(evaluation_input: str, expert_ids: Optional[List[str]] = None) -> Optional[Dict]:
     """Return cached evaluation result if available, otherwise None."""
     cache_dir = _get_cache_dir()
-    eval_hash = _compute_eval_hash(evaluation_input)
+    eval_hash = _compute_eval_hash(evaluation_input, expert_ids=expert_ids)
     cache_path = os.path.join(cache_dir, f"{eval_hash}.json")
     if not os.path.exists(cache_path):
         return None
@@ -512,11 +541,11 @@ def _load_cached_result(evaluation_input: str) -> Optional[Dict]:
         return None
 
 
-def _save_cached_result(evaluation_input: str, result_state: Dict) -> Dict:
+def _save_cached_result(evaluation_input: str, result_state: Dict, expert_ids: Optional[List[str]] = None) -> Dict:
     """Persist a cache record for this evaluation input and return the record."""
     cache_dir = _get_cache_dir()
     os.makedirs(cache_dir, exist_ok=True)
-    eval_hash = _compute_eval_hash(evaluation_input)
+    eval_hash = _compute_eval_hash(evaluation_input, expert_ids=expert_ids)
     record = {
         "agent_version": AGENT_VERSION,
         "evaluation_hash": eval_hash,

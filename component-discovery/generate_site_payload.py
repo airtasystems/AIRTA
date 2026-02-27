@@ -126,10 +126,8 @@ def build_body(payload_format: dict[str, Any], overrides: dict[str, Any] | None 
     encoding = payload_format.get("encoding", "unknown")
     fields = dict(payload_format.get("fields", {{}}))
     fields.update(field_overrides)
-
     if encoding == "multipart/form-data":
         boundary = payload_format.get("boundary", "----formboundary")
-        # Multipart requires string values
         str_fields = {{k: v if isinstance(v, str) else json.dumps(v) for k, v in fields.items()}}
         body = _build_multipart(boundary, str_fields)
         return body, f"multipart/form-data; boundary={{boundary}}"

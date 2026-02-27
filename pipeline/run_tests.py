@@ -38,6 +38,7 @@ def _flatten_prompts(test_data: dict) -> list[dict]:
 async def run_compliance_tests(
     test_file_path: Path,
     *,
+    log_dir: Path | None = None,
     verbose: bool = True,
 ) -> Path | None:
     """
@@ -120,7 +121,11 @@ async def run_compliance_tests(
         })
 
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    log_path = discovery_config.SITE_STATE_DIR / f"compliance_{timestamp}_log.json"
+    if log_dir is not None:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "compliance_log.json"
+    else:
+        log_path = discovery_config.SITE_STATE_DIR / f"compliance_{timestamp}_log.json"
     log_payload = {
         "timestamp": timestamp,
         "framework": test_data.get("framework", "EU AI Act"),

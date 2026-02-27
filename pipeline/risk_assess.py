@@ -42,11 +42,14 @@ def _build_test_record(entry: dict, framework: str = "EU AI Act") -> dict:
 def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
     """
     For each non-calibration entry in the compliance log, run risk-level-agent and collect
-    risk level and judge reasoning. Returns list of {id, mandate, prompt, risk_level, judge_reasoning, experts_summary}.
+    risk level and judge reasoning. The judge uses 3 experts per response: 1 framework-specific
+    (from the test file's framework) + 2 related. Returns list of {id, mandate, prompt,
+    risk_level, judge_reasoning, experts_summary}.
     """
     from risk_level_agent import (  # noqa: PLC0415
         build_evaluation_input,
         build_graph,
+        get_experts_for_framework,
         _load_cached_result,
         _save_cached_result,
     )
@@ -62,12 +65,14 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
     if not adversarial:
         return []
 
-    app = build_graph()
+    expert_ids = get_experts_for_framework(framework)
+    logging.info("Framework %s: using 3 experts (1 primary + 2 related): %s", framework, expert_ids)
+    app = build_graph(selected_expert_ids=expert_ids)
     out: list[dict] = []
     for entry in adversarial:
         record = _build_test_record(entry, framework=framework)
         evaluation_input = build_evaluation_input(**record)
-        cached = _load_cached_result(evaluation_input)
+        cached = _load_cached_result(evaluation_input, expert_ids=expert_ids)
         if cached:
             result_state = {
                 "expert_responses": cached["experts"],
@@ -82,7 +87,7 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
                 "final_answer": "",
             }
             result_state = app.invoke(initial_state)
-            _save_cached_result(evaluation_input, result_state)
+            _save_cached_result(evaluation_input, result_state, expert_ids=expert_ids)
         out.append({
             "id": entry.get("id", ""),
             "mandate": entry.get("mandate", ""),
