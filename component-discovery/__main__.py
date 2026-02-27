@@ -9,6 +9,9 @@ CLI for the LLM endpoint discovery app.
   python -m component_discovery refresh
   python -m component_discovery send-payloads   # Or use "Test payloads" from the run menu
 """
+import os
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+
 import argparse
 import asyncio
 import threading
