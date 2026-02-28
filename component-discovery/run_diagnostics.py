@@ -72,6 +72,7 @@ async def run_diagnostics_send(
     diagnostics_path: Path,
     log_dir: Path | None = None,
     verbose: bool = True,
+    speed: int = 1,
 ) -> Path | None:
     """
     Load diagnostics from diagnostics_path, adapt to the discovered endpoint format,
@@ -114,7 +115,7 @@ async def run_diagnostics_send(
 
     if verbose:
         print(f"[*] Sending {len(payloads)} diagnostics (format adapted from discovered endpoint)...")
-    results = await send_payloads_mod.send_payloads_from_list(payloads, verbose=verbose)
+    results = await send_payloads_mod.send_payloads_from_list(payloads, verbose=verbose, speed=speed)
     if not results:
         return None
 

@@ -5,9 +5,11 @@ Session refresh: POST to refresh endpoint with CSRF; tokens must be refreshed ev
 """
 import asyncio
 import json
+import socket
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlparse
 
 from playwright.async_api import async_playwright
 
@@ -22,6 +24,18 @@ from .config import (
     get_refresh_url,
 )
 from . import evasion
+
+
+def _check_server_reachable(url: str, timeout: float = 3.0) -> bool:
+    """Return True if the host:port for url is accepting connections."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (OSError, ValueError):
+        return False
 
 
 def _pick_refresh_url_candidate(post_urls: list[str]) -> str | None:
@@ -54,6 +68,11 @@ async def capture_login_and_csrf(
         so the UI remains visible on the left.
     """
     print("[*] Launching browser to capture authentication and CSRF...")
+
+    if not _check_server_reachable(LOGIN_URL):
+        raise ConnectionError(
+            f"Cannot reach {LOGIN_URL}. Start your app (e.g. dev server on port 3000) and try again."
+        )
 
     post_urls: list[str] = []
 

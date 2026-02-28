@@ -35,36 +35,26 @@ From project root:
 python main.py [options]
 ```
 
-Options include `--component`, `--strategy`, `--framework`, `--skip-discovery`, `--skip-diagnostics`, `--force-discovery`, `--test-file`, `--report-dir`. Default test file is `generate-tests/<strategy>/<framework>.json` (underscore and hyphen names both resolved).
+### Flags
+
+| Flag | Default | Description |
+|------|--------|-------------|
+| `--skip-discovery` | — | Skip discovery; assume endpoint and auth already exist. |
+| `--skip-diagnostics` | — | Skip diagnostics (send + analyze_log) before compliance tests. |
+| `--force-discovery` | — | Run discovery even if endpoint and auth exist. |
+| `--strategy` | `zero_shot` | Strategy subdir under `generate-tests/` (e.g. `zero_shot`, `multi_shot`, `few_shot`). Hyphens auto-corrected to underscores. |
+| `--framework` | `eu_ai_act` | Framework name for test file; resolves to `generate-tests/<strategy>/<framework>.json`. |
+| `--test-file` | — | Override: path to test prompts JSON. If unset, uses strategy/framework path above. |
+| `--component` | `COMPONENT` env or `default` | Component name for discovery state. |
+| `--report-dir` | — | Also copy `pipeline_report.json` to this directory. |
+| `--speed` | `1` | Request concurrency: `1` = sequential with evasion (throttle + tenacity); `2`–`8` = up to N concurrent requests (token-bucket + 0.3s gap between starts). |
 
 Flow: optional discovery → diagnostics (if not skipped) → compliance tests → risk assessment → report under `component-discovery/<site>/<component>/logs/<timestamp>/`.
-
-## Run the UI (Streamlit)
-
-From project root:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 streamlit run ui/streamlit_app.py
-```
-
-Then open http://localhost:8501. The env var prevents Python from writing `__pycache__` under the project when Streamlit (and its workers) run.
-
-**UI features:** Discovery (login + discover endpoint + generate payload), Diagnostics, Pipeline (run full flow), Config view, Reports. Discovery opens the browser on the right half of the screen and uses a **Confirm login** button instead of terminal input.
-
-## Optional API server (Gunicorn)
-
-For running the pipeline via HTTP or offloading long runs from Streamlit:
-
-```bash
-gunicorn ui.api:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
-```
-
-Then in the Streamlit sidebar you can set **Pipeline API URL** to `http://localhost:8000` so **Run pipeline** uses the API. See `ui/README.md` for endpoints.
 
 ## Discovery (first-time setup)
 
 1. Set `APP_URL`, `TARGET_API_URL`, and (optionally) `COMPONENT` in `.config`.
-2. **Capture login** — Browser opens; log in (and MFA if required), then click **Confirm login** in the UI (or press Enter in the terminal if using CLI).
+2. **Capture login** — Browser opens; log in (and MFA if required), then press Enter in the terminal when done.
 3. **Discover endpoint** — Make one request to the LLM in the app; the pipeline intercepts it and saves URL, headers, and payload shape.
 4. **Generate site payload** — Produces site-specific `payload_format.py` and `send_payloads.py` from the discovered schema.
 
@@ -78,4 +68,3 @@ After that, use **Skip discovery** for normal pipeline runs.
 - `generate-tests/` — Compliance test prompts by strategy (e.g. zero-shot) and framework (e.g. eu_ai_act).
 - `pipeline/` — Runs compliance tests and risk assessment.
 - `risk-level-agent/` — Multi-expert + judge for risk levels (local file cache can be disabled via `LOCAL_CACHE_ENABLED`).
-- `ui/` — Streamlit app and FastAPI app for the pipeline.

@@ -40,6 +40,7 @@ async def run_compliance_tests(
     *,
     log_dir: Path | None = None,
     verbose: bool = True,
+    speed: int = 1,
 ) -> Path | None:
     """
     Load test file, format prompts using the site's payload_format (e.g. messages for chat),
@@ -98,7 +99,7 @@ async def run_compliance_tests(
 
     if verbose:
         print(f"[*] Sending {len(payloads_list)} compliance prompts to discovered endpoint...")
-    results = await discovery_send_payloads.send_payloads_from_list(payloads_list, verbose=verbose)
+    results = await discovery_send_payloads.send_payloads_from_list(payloads_list, verbose=verbose, speed=speed)
     if not results:
         return None
 

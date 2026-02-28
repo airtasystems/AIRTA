@@ -48,8 +48,83 @@ MAX_ATTEMPTS_5XX = 4  # 500, 502, 503, 504
 DEFAULT_BACKOFF_SECONDS = 60      # 429 rate limit
 DEFAULT_BACKOFF_5XX_SECONDS = 120  # 500/502/503/504 (server can take longer to recover)
 THROTTLE_BETWEEN_PAYLOADS_SEC = 1.2
+# Min gap between request starts when using concurrent mode (--speed > 1)
+MIN_GAP_BETWEEN_REQUESTS_SEC = 0.3
 # HTTP status codes we retry on (transient: rate limit + server overload/unavailable)
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# Token bucket rate limiter (optional): set RATE_LIMIT_CAPACITY and RATE_LIMIT_REFILL_PER_SEC in .config
+DEFAULT_RATE_LIMIT_CAPACITY = 4
+DEFAULT_RATE_LIMIT_REFILL_PER_SEC = 0.5
+
+
+class TokenBucket:
+    """
+    Async token bucket: refill at refill_per_sec, capacity cap. acquire() consumes
+    one token, sleeping if necessary until a token is available.
+    """
+
+    def __init__(self, capacity: float, refill_per_sec: float):
+        self._capacity = max(1.0, float(capacity))
+        self._refill_per_sec = max(0.01, float(refill_per_sec))
+        self._tokens = self._capacity
+        self._last_refill = time.monotonic()
+        self._lock = asyncio.Lock()
+
+    def _refill(self) -> None:
+        now = time.monotonic()
+        elapsed = now - self._last_refill
+        self._tokens = min(self._capacity, self._tokens + elapsed * self._refill_per_sec)
+        self._last_refill = now
+
+    async def acquire(self, tokens: float = 1.0) -> None:
+        async with self._lock:
+            self._refill()
+            need = tokens
+            while self._tokens < need:
+                wait_sec = (need - self._tokens) / self._refill_per_sec
+                await asyncio.sleep(wait_sec)
+                self._refill()
+            self._tokens -= need
+
+
+def get_token_bucket() -> TokenBucket | None:
+    """
+    Return a shared TokenBucket if RATE_LIMIT_CAPACITY and RATE_LIMIT_REFILL_PER_SEC
+    are set (in .config or env). Otherwise return None (no client-side rate limiting).
+    """
+    cap_str = (os.getenv("RATE_LIMIT_CAPACITY") or "").strip()
+    refill_str = (os.getenv("RATE_LIMIT_REFILL_PER_SEC") or "").strip()
+    if not cap_str or not refill_str:
+        return None
+    try:
+        capacity = float(cap_str)
+        refill = float(refill_str)
+    except ValueError:
+        return None
+    if capacity < 1 or refill <= 0:
+        return None
+    return TokenBucket(capacity=capacity, refill_per_sec=refill)
+
+
+def get_token_bucket_or_default(concurrency: int) -> TokenBucket | None:
+    """
+    Return get_token_bucket() if configured; else when concurrency > 1 return a
+    default token bucket to limit burst (capacity=2, refill=0.5/s). Use this so
+    concurrent mode never blasts the server with an unbounded burst.
+    Set RATE_LIMIT_DISABLE_DEFAULT=1 to skip the default bucket when using --speed>1.
+    """
+    if (os.getenv("RATE_LIMIT_DISABLE_DEFAULT") or "").strip() in ("1", "true", "yes"):
+        return get_token_bucket()
+    bucket = get_token_bucket()
+    if bucket is not None:
+        return bucket
+    if concurrency <= 1:
+        return None
+    # Conservative default: burst cap 2, refill 0.5/s so we don't hammer burst limits
+    capacity = min(2, concurrency)
+    refill = 0.5
+    return TokenBucket(capacity=capacity, refill_per_sec=refill)
 
 
 def rotated_headers() -> dict[str, str]:

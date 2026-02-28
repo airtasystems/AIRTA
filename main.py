@@ -100,10 +100,10 @@ async def _run_discovery() -> bool:
     return True
 
 
-async def _run_diagnostics_send(discovery_config, diagnostics_path: Path, log_dir: Path | None = None) -> Path | None:
+async def _run_diagnostics_send(discovery_config, diagnostics_path: Path, log_dir: Path | None = None, speed: int = 1) -> Path | None:
     """Run diagnostics-only flow: adapt format from discovered endpoint, send, write log. Does not use payloads.json."""
     from component_discovery import run_diagnostics
-    return await run_diagnostics.run_diagnostics_send(discovery_config, diagnostics_path, log_dir=log_dir, verbose=True)
+    return await run_diagnostics.run_diagnostics_send(discovery_config, diagnostics_path, log_dir=log_dir, verbose=True, speed=speed)
 
 
 def main() -> None:
@@ -160,6 +160,14 @@ def main() -> None:
         action="store_true",
         help="Run discovery even if endpoint and auth exist.",
     )
+    parser.add_argument(
+        "--speed",
+        type=int,
+        default=1,
+        choices=range(1, 9),
+        metavar="N",
+        help="Request concurrency: 1=sequential with evasion (throttle + tenacity); 2–8=up to N concurrent requests.",
+    )
     args = parser.parse_args()
     report = run_pipeline(args)
     if report is None:
@@ -181,6 +189,8 @@ def run_pipeline(args) -> dict | None:
     """
     root = Path(__file__).resolve().parent
     os.chdir(root)
+    # Set COMPONENT (and ensure APP_URL from .config) before config is loaded so paths are correct
+    os.environ["COMPONENT"] = args.component
     _setup_paths(root)
 
     # Resolve test file: --test-file override, or generate-tests/<strategy>/<framework>.json
@@ -196,9 +206,6 @@ def run_pipeline(args) -> dict | None:
             test_file = base_dir / underscore_name
     print(f"[*] Test file: {test_file}")
 
-    # Set COMPONENT for config
-    os.environ["COMPONENT"] = args.component
-
     from component_discovery import config as discovery_config
 
     # Run log dir: sitename/component/logs/{timestamp}/ for this round
@@ -207,9 +214,16 @@ def run_pipeline(args) -> dict | None:
     run_log_dir.mkdir(parents=True, exist_ok=True)
     print(f"[*] Run logs: {run_log_dir}")
 
-    # 1. Optional discovery
+    # 1. Optional discovery: skip if component dir exists with endpoint + auth files
+    discovery_state_present = (
+        discovery_config.SITE_STATE_DIR.exists()
+        and discovery_config.DISCOVERED_ENDPOINT_FILE.exists()
+        and discovery_config.AUTH_STATE_FILE.exists()
+    )
     if not args.skip_discovery and not args.force_discovery:
-        if not discovery_config.DISCOVERED_ENDPOINT_FILE.exists() or not discovery_config.AUTH_STATE_FILE.exists():
+        if discovery_state_present:
+            print(f"[*] Using existing discovery state ({discovery_config.SITE_STATE_DIR}); skipping discovery.")
+        else:
             print("[*] Discovery state missing; running discovery (login + discover + generate-payload)...")
             asyncio.run(_run_discovery())
     elif args.force_discovery:
@@ -229,7 +243,7 @@ def run_pipeline(args) -> dict | None:
     if not args.skip_diagnostics:
         print("[*] Running diagnostics (format-adapted send + analyze_log) before compliance tests...")
         try:
-            diag_log_path = asyncio.run(_run_diagnostics_send(discovery_config, diagnostics_path, log_dir=run_log_dir))
+            diag_log_path = asyncio.run(_run_diagnostics_send(discovery_config, diagnostics_path, log_dir=run_log_dir, speed=args.speed))
             if diag_log_path is None:
                 print("[*] No diagnostics or no results; skipping analyze_log.")
             else:
@@ -245,7 +259,7 @@ def run_pipeline(args) -> dict | None:
     # 3. Run compliance tests
     from pipeline.run_tests import run_compliance_tests
 
-    compliance_log_path = asyncio.run(run_compliance_tests(test_file, log_dir=run_log_dir, verbose=True))
+    compliance_log_path = asyncio.run(run_compliance_tests(test_file, log_dir=run_log_dir, verbose=True, speed=args.speed))
     if compliance_log_path is None:
         print("[-] Compliance test run produced no log. Exiting.")
         return None

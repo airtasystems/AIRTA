@@ -6,6 +6,7 @@ uses a minimal fallback (title -> title, text -> description).
 import asyncio
 import importlib.util
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -67,9 +68,13 @@ async def send_payloads_from_list(
     payloads_list: list[dict],
     *,
     verbose: bool = True,
+    speed: int = 1,
 ) -> list[dict]:
     """
     POST each payload in payloads_list to the discovered endpoint.
+
+    speed: 1 = sequential with evasion (throttle + tenacity retry); 2–8 = up to N
+    concurrent requests (asyncio semaphore). Tenacity retry still applies per request.
 
     For sites with a site-specific payload_format.py (e.g. chat components),
     each payload dict is passed through as overrides directly to build_body()
@@ -124,54 +129,103 @@ async def send_payloads_from_list(
         headers["X-XSRF-TOKEN"] = csrf
     results: list[dict] = []
     proxy = evasion.get_playwright_proxy()
+    concurrency = max(1, min(8, speed))
+    token_bucket = evasion.get_token_bucket_or_default(concurrency)
     if verbose:
-        print("[*] Evasion: throttle, retry on 429, header rotation" + ("; proxy=" + proxy["server"] if proxy else "") + ".")
+        parts = []
+        if token_bucket:
+            parts.append("token-bucket rate limit")
+        if concurrency == 1:
+            if not token_bucket:
+                parts.append("throttle")
+        else:
+            parts.append(f"concurrent (up to {concurrency} at a time)")
+            parts.append(f"{evasion.MIN_GAP_BETWEEN_REQUESTS_SEC}s gap between starts")
+        parts.append("retry on 429")
+        parts.append("header rotation")
+        if proxy:
+            parts.append("proxy=" + proxy["server"])
+        print("[*] Evasion: " + ", ".join(parts) + ".")
+
+    gap_lock = asyncio.Lock() if concurrency > 1 else None
+    last_request_start: list[float] = [0.0] if concurrency > 1 else []
+
+    async def send_one(idx: int, p_item: dict) -> tuple[int, dict]:
+        if token_bucket:
+            await token_bucket.acquire()
+        if gap_lock is not None:
+            async with gap_lock:
+                now = time.monotonic()
+                if last_request_start[0] > 0:
+                    wait = evasion.MIN_GAP_BETWEEN_REQUESTS_SEC - (now - last_request_start[0])
+                    if wait > 0:
+                        await asyncio.sleep(wait)
+                last_request_start[0] = time.monotonic()
+        title = p_item.get("title", f"Payload {idx+1}")
+        if use_raw_overrides:
+            overrides = {k: v for k, v in p_item.items() if v is not None}
+        else:
+            text = p_item.get("text", "")
+            overrides = {override_keys[0]: title, override_keys[1]: text}  # type: ignore[index]
+        body, content_type = build_body_fn(payload_format, overrides)
+        req_headers = {**headers, "Content-Type": content_type, **evasion.rotated_headers()}
+        try:
+            response = await evasion.post_with_retry_429(api_context, url, req_headers, body)
+            resp_text = await response.text()
+            out = {"title": title, "status": response.status, "ok": response.ok, "response": resp_text}
+            if verbose and concurrency == 1:
+                if not response.ok:
+                    print(f"  [{response.status}] {title}" + (f" — {resp_text}" if resp_text else ""))
+                else:
+                    print(f"  [{response.status}] {title}")
+            return (idx, out)
+        except evasion.RateLimit429:
+            if verbose and concurrency == 1:
+                print(f"  [429] {title} (max retries exceeded)")
+            return (idx, {"title": title, "status": 429, "ok": False, "response": None})
+        except evasion.RetryableServerError as e:
+            status = getattr(e.response, "status", 503)
+            if verbose and concurrency == 1:
+                print(f"  [{status}] {title} (max retries exceeded)")
+            return (idx, {"title": title, "status": status, "ok": False, "response": getattr(e, "body_text", None)})
+        except Exception as e:
+            if verbose and concurrency == 1:
+                print(f"  [error] {title} — {e}")
+            return (idx, {"title": title, "status": None, "ok": False, "error": str(e), "response": None})
+
     async with async_playwright() as p:
         api_context = await p.request.new_context(
             storage_state=str(AUTH_STATE_FILE),
             proxy=proxy,
         )
         try:
-            for i, p_item in enumerate(payloads_list):
-                if i > 0:
-                    await asyncio.sleep(evasion.THROTTLE_BETWEEN_PAYLOADS_SEC)
+            if concurrency == 1:
+                for i, p_item in enumerate(payloads_list):
+                    if i > 0 and not token_bucket:
+                        await asyncio.sleep(evasion.THROTTLE_BETWEEN_PAYLOADS_SEC)
+                    _, r = await send_one(i, p_item)
+                    results.append(r)
+            else:
+                sem = asyncio.Semaphore(concurrency)
 
-                title = p_item.get("title", f"Payload {i+1}")
+                async def bounded_send(idx: int, p_item: dict) -> tuple[int, dict]:
+                    async with sem:
+                        return await send_one(idx, p_item)
 
-                if use_raw_overrides:
-                    # Site-specific payload_format: pass through all keys so the
-                    # site module can map them via PAYLOAD_KEY_TO_FIELD.
-                    overrides = {k: v for k, v in p_item.items() if v is not None}
-                else:
-                    text = p_item.get("text", "")
-                    overrides = {override_keys[0]: title, override_keys[1]: text}  # type: ignore[index]
-
-                body, content_type = build_body_fn(payload_format, overrides)
-                req_headers = {**headers, "Content-Type": content_type, **evasion.rotated_headers()}
-                try:
-                    response = await evasion.post_with_retry_429(
-                        api_context, url, req_headers, body
-                    )
-                    resp_text = await response.text()
-                    results.append({"title": title, "status": response.status, "ok": response.ok, "response": resp_text})
-                    if verbose:
-                        if not response.ok:
-                            print(f"  [{response.status}] {title}" + (f" — {resp_text}" if resp_text else ""))
+                ordered: list[tuple[int, dict]] = await asyncio.gather(
+                    *[bounded_send(i, p_item) for i, p_item in enumerate(payloads_list)]
+                )
+                ordered.sort(key=lambda x: x[0])
+                results = [r for _, r in ordered]
+                if verbose:
+                    for r in results:
+                        status = r.get("status", "?")
+                        title = r.get("title", "")
+                        ok = r.get("ok", False)
+                        if not ok:
+                            print(f"  [{status}] {title}")
                         else:
-                            print(f"  [{response.status}] {title}")
-                except evasion.RateLimit429:
-                    results.append({"title": title, "status": 429, "ok": False, "response": None})
-                    if verbose:
-                        print(f"  [429] {title} (max retries exceeded)")
-                except evasion.RetryableServerError as e:
-                    status = getattr(e.response, "status", 503)
-                    results.append({"title": title, "status": status, "ok": False, "response": getattr(e, "body_text", None)})
-                    if verbose:
-                        print(f"  [{status}] {title} (max retries exceeded)")
-                except Exception as e:
-                    results.append({"title": title, "status": None, "ok": False, "error": str(e), "response": None})
-                    if verbose:
-                        print(f"  [error] {title} — {e}")
+                            print(f"  [{status}] {title}")
         finally:
             await api_context.dispose()
     return results
