@@ -7,12 +7,15 @@ Orchestrates: optional discovery -> diagnostics (send payloads + analyze_log -> 
 
 discovery.json (meta, capabilities, tools, has_context, uses_rag, uses_mcp) is produced before tests so future runs can use it to decide whether to run multishot, agent, or capabilities tests.
 """
+import sys
+sys.dont_write_bytecode = True
+
 import argparse
 import asyncio
 import importlib.util
 import json
 import os
-import sys
+
 import types
 from pathlib import Path
 from datetime import datetime
@@ -108,11 +111,28 @@ def main() -> None:
         action="store_true",
         help="Skip running diagnostics (send diagnostics payloads + analyze_log) before compliance tests.",
     )
+
+    def _norm_hyphens(s: str) -> str:
+        return s.strip().replace("-", "_")
+
+    parser.add_argument(
+        "--strategy",
+        type=_norm_hyphens,
+        choices=["zero_shot", "multi_shot", "few_shot", "iterative", "chain_of_thought", "prompt_chaining", "tree_of_thoughts", "self_consistency", "self_reflection", "directional_stimulus"],
+        default="zero_shot",
+        help="Strategy subdir under generate-tests (default: zero_shot). Hyphens auto-corrected to underscores.",
+    )
+    parser.add_argument(
+        "--framework",
+        type=_norm_hyphens,
+        default="eu_ai_act",
+        help="Framework name for test file (default: eu_ai_act). Resolves to generate-tests/<strategy>/<framework>.json (e.g. eu-ai-act.json).",
+    )
     parser.add_argument(
         "--test-file",
         type=Path,
-        default=Path("tests/eu_ai_act_compliance_prompts.json"),
-        help="Path to test prompts JSON (default: tests/eu_ai_act_compliance_prompts.json).",
+        default=None,
+        help="Override: path to test prompts JSON. If unset, uses generate-tests/<strategy>/<framework>.json.",
     )
     parser.add_argument(
         "--component",
@@ -137,8 +157,14 @@ def main() -> None:
     os.chdir(root)
     _setup_paths(root)
 
-    # Resolve paths relative to root
-    test_file = args.test_file if args.test_file.is_absolute() else root / args.test_file
+    # Resolve test file: --test-file override, or generate-tests/<strategy>/<framework>.json
+    if args.test_file is not None:
+        test_file = args.test_file if args.test_file.is_absolute() else root / args.test_file
+    else:
+        strategy_subdir = args.strategy.replace("_", "-")
+        framework_filename = args.framework.replace("_", "-") + ".json"
+        test_file = root / "generate-tests" / strategy_subdir / framework_filename
+    print(f"[*] Test file: {test_file}")
 
     # Set COMPONENT for config
     os.environ["COMPONENT"] = args.component

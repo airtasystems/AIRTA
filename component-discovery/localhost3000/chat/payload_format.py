@@ -8,7 +8,7 @@ from typing import Any
 
 # payload_key -> form field name (from Gemini analysis)
 PAYLOAD_KEY_TO_FIELD = {
-  "message_content": "content",
+  "userMessages": "messages",
   "title": "title"
 }
 

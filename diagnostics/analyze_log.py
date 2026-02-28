@@ -22,7 +22,7 @@ except ImportError:
     _GEMINI_AVAILABLE = False
 
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 
 DISCOVERY_PROMPT = """You are analyzing a diagnostic test log from an LLM endpoint. The log contains prompt/response pairs from a standardized diagnostic run (e.g. context memory, RAG, MCP, tools, capabilities, system metadata). When present, use "response_parsed" (structured JSON) rather than the raw "response" string.
 

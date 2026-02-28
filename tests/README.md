@@ -1,1 +1,0 @@
-# Red team LLM tests against compliance frameworks 

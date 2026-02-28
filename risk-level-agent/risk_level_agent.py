@@ -5,6 +5,7 @@ import re
 import logging
 import hashlib
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, List, Dict, TypedDict, Optional
 
 from dotenv import load_dotenv
@@ -20,15 +21,17 @@ from google.genai import types, errors as genai_errors
 # 1. Environment & LLM Setup
 # =========================
 
-load_dotenv()  # Loads GEMINI_API_KEY from .env
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv()
 
+GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY environment variable is not set.")
 
 # LangChain client (currently used by the judge)
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
+    model=GEMINI_MODEL,
     api_key=GEMINI_API_KEY,
     temperature=0.1,
 )
@@ -37,7 +40,24 @@ llm = ChatGoogleGenerativeAI(
 GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY)
 
 # Explicit cached prompt handles per framework_name
+# To clear: call clear_gemini_cache() or clear_gemini_cache(delete_on_server=True)
 EXPERT_CACHE_HANDLES: Dict[str, str] = {}
+
+
+def clear_gemini_cache(delete_on_server: bool = False) -> None:
+    """
+    Clear in-memory expert cache handles. If delete_on_server is True,
+    also delete each known cache on Gemini via the API.
+    """
+    if delete_on_server and GENAI_CLIENT is not None:
+        for key, name in list(EXPERT_CACHE_HANDLES.items()):
+            if name:
+                try:
+                    GENAI_CLIENT.caches.delete(name=name)
+                    logging.info("Deleted Gemini cache %s: %s", key, name)
+                except Exception as e:
+                    logging.warning("Failed to delete cache %s: %s", key, e)
+    EXPERT_CACHE_HANDLES.clear()
 
 
 # =========================
@@ -109,7 +129,7 @@ def _get_or_create_expert_cache(framework_name: str, system_prompt: str) -> str:
             config=types.CreateCachedContentConfig(
                 display_name=display_name,
                 system_instruction=system_prompt,
-                ttl="3600s",
+                ttl="10800s", # 3 hours
             ),
         )
         EXPERT_CACHE_HANDLES[framework_name] = cache.name
