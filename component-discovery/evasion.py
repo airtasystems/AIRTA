@@ -38,10 +38,18 @@ except ImportError:
 VIEWPORT_WIDTH = 1920
 VIEWPORT_HEIGHT = 1080
 
-# Rate limit retry
+# Right-half screen (e.g. for UI + browser side by side): position at 960,0 and use half width
+HALF_VIEWPORT_WIDTH = 960
+WINDOW_POSITION_RIGHT_HALF = (960, 0)
+
+# Rate limit and server-error retry
 MAX_ATTEMPTS_429 = 4
-DEFAULT_BACKOFF_SECONDS = 60
+MAX_ATTEMPTS_5XX = 4  # 500, 502, 503, 504
+DEFAULT_BACKOFF_SECONDS = 60      # 429 rate limit
+DEFAULT_BACKOFF_5XX_SECONDS = 120  # 500/502/503/504 (server can take longer to recover)
 THROTTLE_BETWEEN_PAYLOADS_SEC = 1.2
+# HTTP status codes we retry on (transient: rate limit + server overload/unavailable)
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 def rotated_headers() -> dict[str, str]:
@@ -105,8 +113,8 @@ async def apply_stealth(page) -> bool:
         return False
 
 
-def parse_retry_after(headers: dict, body_text: str | None = None) -> int:
-    """Return wait seconds from Retry-After header or JSON body."""
+def parse_retry_after(headers: dict, body_text: str | None = None, default_seconds: int | None = None) -> int:
+    """Return wait seconds from Retry-After header or JSON body, else default_seconds or DEFAULT_BACKOFF_SECONDS."""
     ra = None
     if isinstance(headers, dict):
         ra = headers.get("Retry-After") or headers.get("retry-after")
@@ -129,7 +137,7 @@ def parse_retry_after(headers: dict, body_text: str | None = None) -> int:
                         return max(1, int(data[key]))
         except Exception:
             pass
-    return DEFAULT_BACKOFF_SECONDS
+    return default_seconds if default_seconds is not None else DEFAULT_BACKOFF_SECONDS
 
 
 class RateLimit429(Exception):
@@ -139,57 +147,72 @@ class RateLimit429(Exception):
         self.body_text = body_text or ""
 
 
-def _is_429(exc: BaseException) -> bool:
-    return isinstance(exc, RateLimit429)
+class RetryableServerError(Exception):
+    """Raised when a request returns 500/502/503/504 so tenacity can retry with backoff."""
+    def __init__(self, response: Any, body_text: str = ""):
+        self.response = response
+        self.body_text = body_text or ""
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    return isinstance(exc, (RateLimit429, RetryableServerError))
 
 
 def _wait_retry_after(retry_state) -> float:
-    """Tenacity wait: return seconds from 429 response Retry-After."""
+    """Tenacity wait: return seconds from Retry-After header/body or default backoff (longer for 5xx)."""
     if retry_state.outcome is None or not retry_state.outcome.failed:
         return DEFAULT_BACKOFF_SECONDS
     exc = retry_state.outcome.exception()
-    if not isinstance(exc, RateLimit429):
+    if not _is_retryable(exc):
         return DEFAULT_BACKOFF_SECONDS
     headers = {}
     if getattr(exc.response, "headers", None):
         headers = dict(exc.response.headers)
-    return parse_retry_after(headers, exc.body_text)
+    default = DEFAULT_BACKOFF_5XX_SECONDS if isinstance(exc, RetryableServerError) else DEFAULT_BACKOFF_SECONDS
+    return parse_retry_after(headers, exc.body_text, default_seconds=default)
 
 
 def _log_retry(retry_state) -> None:
-    """Tenacity before_sleep: log 429 and wait time."""
+    """Tenacity before_sleep: log status and wait time."""
     if retry_state.outcome is None or not retry_state.outcome.failed:
         return
     exc = retry_state.outcome.exception()
-    if not isinstance(exc, RateLimit429):
+    if not _is_retryable(exc):
         return
+    status = getattr(exc.response, "status", None) or "?"
     headers = {}
     if getattr(exc.response, "headers", None):
         headers = dict(exc.response.headers)
-    secs = parse_retry_after(headers, None)
+    default = DEFAULT_BACKOFF_5XX_SECONDS if isinstance(exc, RetryableServerError) else DEFAULT_BACKOFF_SECONDS
+    secs = parse_retry_after(headers, getattr(exc, "body_text", None), default_seconds=default)
     n = retry_state.attempt_number + 1
-    print(f"    [429] waiting {secs}s (Retry-After) then retry {n}/{MAX_ATTEMPTS_429}")
+    max_attempts = MAX_ATTEMPTS_429 if isinstance(exc, RateLimit429) else MAX_ATTEMPTS_5XX
+    print(f"    [{status}] waiting {secs}s then retry {n}/{max_attempts}")
 
 
 def post_with_retry_429(api_context, url: str, headers: dict, data: str):
     """
-    POST once; on 429 raise RateLimit429 so tenacity can wait and retry.
+    POST once; on 429 or 5xx (500, 502, 503, 504) raise so tenacity can wait and retry.
     When tenacity is not available, does a single attempt (no retry).
     """
     async def _post():
         response = await api_context.post(url, headers=headers, data=data)
+        try:
+            body_text = await response.text()
+        except Exception:
+            body_text = ""
         if response.status == 429:
-            try:
-                body_text = await response.text()
-            except Exception:
-                body_text = ""
             raise RateLimit429(response, body_text)
+        if response.status in (500, 502, 503, 504):
+            raise RetryableServerError(response, body_text)
         return response
 
     if _TENACITY_AVAILABLE:
+        # Retry up to max(429, 5xx) attempts; tenacity retries on either exception type
+        max_attempts = max(MAX_ATTEMPTS_429, MAX_ATTEMPTS_5XX)
         decorated = retry(
-            stop=stop_after_attempt(MAX_ATTEMPTS_429),
-            retry=retry_if_exception(_is_429),
+            stop=stop_after_attempt(max_attempts),
+            retry=retry_if_exception(_is_retryable),
             wait=_wait_retry_after,
             before_sleep=_log_retry,
             reraise=True,

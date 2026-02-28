@@ -10,7 +10,9 @@ from typing import Any
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    _root = Path(__file__).resolve().parent.parent
+    load_dotenv(_root / ".config")
+    load_dotenv(_root / ".env")
     load_dotenv()
 except ImportError:
     pass

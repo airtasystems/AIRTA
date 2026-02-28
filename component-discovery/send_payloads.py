@@ -163,6 +163,11 @@ async def send_payloads_from_list(
                     results.append({"title": title, "status": 429, "ok": False, "response": None})
                     if verbose:
                         print(f"  [429] {title} (max retries exceeded)")
+                except evasion.RetryableServerError as e:
+                    status = getattr(e.response, "status", 503)
+                    results.append({"title": title, "status": status, "ok": False, "response": getattr(e, "body_text", None)})
+                    if verbose:
+                        print(f"  [{status}] {title} (max retries exceeded)")
                 except Exception as e:
                     results.append({"title": title, "status": None, "ok": False, "error": str(e), "response": None})
                     if verbose:

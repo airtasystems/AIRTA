@@ -20,6 +20,15 @@ import types
 from pathlib import Path
 from datetime import datetime
 
+# Load .config and .env so COMPONENT etc. are available for CLI defaults
+_root = Path(__file__).resolve().parent
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_root / ".config")
+    load_dotenv(_root / ".env")
+except ImportError:
+    pass
+
 
 def _setup_paths(root: Path) -> None:
     """Make component_discovery (from component-discovery/) and risk_level_agent loadable."""
@@ -152,7 +161,24 @@ def main() -> None:
         help="Run discovery even if endpoint and auth exist.",
     )
     args = parser.parse_args()
+    report = run_pipeline(args)
+    if report is None:
+        sys.exit(1)
+    # Summary
+    print("\n=== Summary ===")
+    print(f"  Adversarial assessed: {len(report.get('adversarial_results', []))}")
+    mandate_rollup = report.get("mandate_rollup", {})
+    if mandate_rollup:
+        for m, level in sorted(mandate_rollup.items(), key=lambda x: x[0]):
+            print(f"  {m[:50]}: {level}")
+    print(f"  Calibration: {report['calibration_ok_count']}/{report['calibration_count']} OK")
 
+
+def run_pipeline(args) -> dict | None:
+    """
+    Run the full pipeline: discovery (optional), diagnostics, compliance tests, risk assessment, report.
+    Caller must have set up cwd to project root. Returns report dict or None on failure.
+    """
     root = Path(__file__).resolve().parent
     os.chdir(root)
     _setup_paths(root)
@@ -162,8 +188,12 @@ def main() -> None:
         test_file = args.test_file if args.test_file.is_absolute() else root / args.test_file
     else:
         strategy_subdir = args.strategy.replace("_", "-")
-        framework_filename = args.framework.replace("_", "-") + ".json"
-        test_file = root / "generate-tests" / strategy_subdir / framework_filename
+        base_dir = root / "generate-tests" / strategy_subdir
+        hyphen_name = args.framework.replace("_", "-") + ".json"
+        underscore_name = args.framework + ".json"
+        test_file = base_dir / hyphen_name
+        if not test_file.exists():
+            test_file = base_dir / underscore_name
     print(f"[*] Test file: {test_file}")
 
     # Set COMPONENT for config
@@ -188,13 +218,12 @@ def main() -> None:
 
     if not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
         print("[-] No discovered endpoint. Run without --skip-discovery or run discovery first.")
-        sys.exit(1)
+        return None
     if not discovery_config.AUTH_STATE_FILE.exists():
         print("[-] No auth state. Run without --skip-discovery or run login first.")
-        sys.exit(1)
+        return None
 
     # 2. Diagnostics (before tests): send diagnostics from diagnostics.json (format adapted to endpoint), then analyze_log -> discovery.json
-    # discovery.json is used later to decide whether to run multishot, agent, or capabilities tests.
     discovery_json_path = discovery_config.SITE_STATE_DIR / "discovery.json"
     diagnostics_path = root / "diagnostics" / "diagnostics.json"
     if not args.skip_diagnostics:
@@ -219,7 +248,7 @@ def main() -> None:
     compliance_log_path = asyncio.run(run_compliance_tests(test_file, log_dir=run_log_dir, verbose=True))
     if compliance_log_path is None:
         print("[-] Compliance test run produced no log. Exiting.")
-        sys.exit(1)
+        return None
 
     # 4. Risk assessment
     from pipeline.risk_assess import run_risk_assessment
@@ -263,20 +292,14 @@ def main() -> None:
     report_path = run_log_dir / "pipeline_report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"[+] Pipeline report: {report_path}")
-    if args.report_dir is not None:
+    if getattr(args, "report_dir", None) is not None:
         args.report_dir.mkdir(parents=True, exist_ok=True)
         copy_report = args.report_dir if args.report_dir.is_absolute() else root / args.report_dir
         copy_report.mkdir(parents=True, exist_ok=True)
         import shutil
         shutil.copy2(report_path, copy_report / f"pipeline_report_{run_timestamp}.json")
 
-    # Summary
-    print("\n=== Summary ===")
-    print(f"  Adversarial assessed: {len(risk_results)}")
-    if mandate_rollup:
-        for m, level in sorted(mandate_rollup.items(), key=lambda x: x[0]):
-            print(f"  {m[:50]}: {level}")
-    print(f"  Calibration: {report['calibration_ok_count']}/{report['calibration_count']} OK")
+    return report
 
 
 if __name__ == "__main__":

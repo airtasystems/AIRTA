@@ -8,3 +8,9 @@ google-genai
 # component-discovery (browser automation + auth)
 playwright
 
+# UI: Streamlit + API server (Gunicorn)
+streamlit
+fastapi
+uvicorn[standard]
+gunicorn
+

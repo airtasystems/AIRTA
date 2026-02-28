@@ -6,7 +6,7 @@ import logging
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, List, Dict, TypedDict, Optional
+from typing import Annotated, Any, List, Dict, TypedDict, Optional
 
 from dotenv import load_dotenv
 
@@ -21,7 +21,9 @@ from google.genai import types, errors as genai_errors
 # 1. Environment & LLM Setup
 # =========================
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+_root = Path(__file__).resolve().parent.parent
+load_dotenv(_root / ".config")
+load_dotenv(_root / ".env")
 load_dotenv()
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
@@ -78,6 +80,13 @@ RISK_LEVELS = (
 
 # Cost optimization: max chars of evaluation context sent to judge (rest truncated)
 MAX_JUDGE_CONTEXT_CHARS = 2400
+
+# Keys we try (in order) for judge reasoning and risk level (LLMs use varying output shapes)
+JUDGE_REASONING_KEYS = (
+    "chain_of_thought", "reasoning", "justification", "explanation", "rationale",
+    "analysis", "summary", "conclusion", "thought_process", "cot", "response_text",
+)
+JUDGE_RISK_LEVEL_KEYS = ("risk_level", "final_risk_level", "decision", "verdict", "level", "result")
 
 # Version tag for cache/log records so we can invalidate old entries
 AGENT_VERSION = "v1.0.1"
@@ -334,6 +343,62 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
     return expert_node
 
 
+def _extract_judge_output_from_payload(payload: Dict) -> tuple[str, str]:
+    """
+    Extract (reasoning, risk_level) from parsed judge JSON. Tries known keys first,
+    then scans all string values: any that match RISK_LEVELS become risk_level;
+    the longest prose-like string (length > 40, contains space) becomes reasoning.
+    """
+    reasoning = ""
+    risk_level = "indeterminate"
+    # Direct key lookup (including nested, e.g. {"response": {"reasoning": "..."}})
+    def get_string(obj: Any, keys: tuple[str, ...]) -> str:
+        if not isinstance(obj, dict):
+            return ""
+        for key in keys:
+            v = obj.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        # One level of nesting
+        for v in obj.values():
+            if isinstance(v, dict):
+                for k in keys:
+                    if k in v and isinstance(v[k], str) and v[k].strip():
+                        return v[k].strip()
+        return ""
+
+    reasoning = get_string(payload, JUDGE_REASONING_KEYS)
+    rl_raw = get_string(payload, JUDGE_RISK_LEVEL_KEYS).lower()
+    if rl_raw in RISK_LEVELS:
+        risk_level = rl_raw
+
+    # Fallback: scan all string values in payload (recursive)
+    def all_strings(d: Any, out: list[str]) -> None:
+        if isinstance(d, dict):
+            for v in d.values():
+                all_strings(v, out)
+        elif isinstance(d, list):
+            for x in d:
+                all_strings(x, out)
+        elif isinstance(d, str) and d.strip():
+            out.append(d.strip())
+
+    strings: list[str] = []
+    all_strings(payload, strings)
+    if not risk_level or risk_level == "indeterminate":
+        for s in strings:
+            if s.lower() in RISK_LEVELS:
+                risk_level = s.lower()
+                break
+    if not reasoning:
+        # Longest string that looks like prose (not a single token, not a risk level)
+        candidates = [s for s in strings if len(s) > 40 and " " in s and s.lower() not in RISK_LEVELS]
+        if candidates:
+            reasoning = max(candidates, key=len)
+
+    return reasoning, risk_level
+
+
 def judge_node(state: GraphState) -> Dict:
     """
     Judge node: synthesizes the framework experts into a single risk level.
@@ -389,7 +454,18 @@ def judge_node(state: GraphState) -> Dict:
     ]
 
     ai_msg = llm.invoke(messages)
-    text = (ai_msg.content if isinstance(ai_msg.content, str) else str(ai_msg.content)).strip()
+    # Gemini (and some LangChain integrations) return content as list of parts, e.g. [{"type": "text", "text": "..."}]
+    raw_content = getattr(ai_msg, "content", ai_msg)
+    if isinstance(raw_content, str):
+        text = raw_content.strip()
+    elif isinstance(raw_content, list):
+        text = "".join(
+            str(block.get("text", "")) if isinstance(block, dict) and block.get("type") == "text"
+            else (block if isinstance(block, str) else "")
+            for block in raw_content
+        ).strip()
+    else:
+        text = str(raw_content).strip()
 
     # Parse JSON output with hardening: accept raw JSON, or JSON inside markdown code blocks
     judge_reasoning = ""
@@ -414,27 +490,20 @@ def judge_node(state: GraphState) -> Dict:
             payload = json.loads(parse_text)
         except json.JSONDecodeError as exc:
             logging.warning(
-                "Judge JSON decode error, defaulting risk_level=indeterminate: %s. Raw (first 300 chars): %s",
+                "Judge JSON decode error, defaulting risk_level=indeterminate: %s. Raw (first 500 chars): %s",
                 exc,
-                text[:300] if text else "(empty)",
+                text[:500] if text else "(empty)",
             )
             payload = {}
     else:
         logging.warning("Judge returned empty response; defaulting risk_level=indeterminate.")
 
     if payload:
-        reasoning_field = str(payload.get("chain_of_thought", "")).strip()
-        if reasoning_field:
-            judge_reasoning = reasoning_field
-        else:
-            logging.warning("Judge output missing 'chain_of_thought'; leaving reasoning empty.")
-
-        rl_raw = str(payload.get("risk_level", "")).strip().lower()
-        if rl_raw in RISK_LEVELS:
-            risk_level = rl_raw
-        elif rl_raw:
-            logging.warning(
-                'Judge output had unknown risk_level "%s"; defaulting to indeterminate.', rl_raw
+        judge_reasoning, risk_level = _extract_judge_output_from_payload(payload)
+        if not judge_reasoning:
+            logging.info(
+                "Judge raw response (reasoning empty, first 600 chars): %s",
+                (json.dumps(payload) if isinstance(payload, dict) else str(payload))[:600],
             )
 
     final_answer = risk_level if risk_level in RISK_LEVELS else "indeterminate"
@@ -540,8 +609,14 @@ def _compute_eval_hash(evaluation_input: str, expert_ids: Optional[List[str]] = 
     return h.hexdigest()
 
 
+# Local file cache disabled (Gemini API cache still used for prompt/context caching).
+LOCAL_CACHE_ENABLED = False
+
+
 def _load_cached_result(evaluation_input: str, expert_ids: Optional[List[str]] = None) -> Optional[Dict]:
-    """Return cached evaluation result if available, otherwise None."""
+    """Return cached evaluation result if available, otherwise None. Disabled when LOCAL_CACHE_ENABLED is False."""
+    if not LOCAL_CACHE_ENABLED:
+        return None
     cache_dir = _get_cache_dir()
     eval_hash = _compute_eval_hash(evaluation_input, expert_ids=expert_ids)
     cache_path = os.path.join(cache_dir, f"{eval_hash}.json")
@@ -562,13 +637,10 @@ def _load_cached_result(evaluation_input: str, expert_ids: Optional[List[str]] =
 
 
 def _save_cached_result(evaluation_input: str, result_state: Dict, expert_ids: Optional[List[str]] = None) -> Dict:
-    """Persist a cache record for this evaluation input and return the record."""
-    cache_dir = _get_cache_dir()
-    os.makedirs(cache_dir, exist_ok=True)
-    eval_hash = _compute_eval_hash(evaluation_input, expert_ids=expert_ids)
+    """Persist a cache record for this evaluation input and return the record. No-op when LOCAL_CACHE_ENABLED is False."""
     record = {
         "agent_version": AGENT_VERSION,
-        "evaluation_hash": eval_hash,
+        "evaluation_hash": _compute_eval_hash(evaluation_input, expert_ids=expert_ids),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "experts": result_state["expert_responses"],
         "judge": {
@@ -576,7 +648,11 @@ def _save_cached_result(evaluation_input: str, result_state: Dict, expert_ids: O
             "final_risk_level": result_state["final_answer"],
         },
     }
-    cache_path = os.path.join(cache_dir, f"{eval_hash}.json")
+    if not LOCAL_CACHE_ENABLED:
+        return record
+    cache_dir = _get_cache_dir()
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, f"{record['evaluation_hash']}.json")
     try:
         with open(cache_path, "w", encoding="utf-8") as f:
             json.dump(record, f, indent=2, ensure_ascii=False)

@@ -6,6 +6,9 @@ Session refresh: POST to refresh endpoint with CSRF; tokens must be refreshed ev
 import asyncio
 import json
 import time
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from playwright.async_api import async_playwright
 
 from .config import (
@@ -34,20 +37,37 @@ def _pick_refresh_url_candidate(post_urls: list[str]) -> str | None:
     return post_urls[0] if post_urls else None
 
 
-async def capture_login_and_csrf(*, headless: bool = False) -> None:
+async def capture_login_and_csrf(
+    *,
+    headless: bool = False,
+    wait_for_login: Awaitable[Any] | Callable[[], Awaitable[Any]] | None = None,
+    position_right_half: bool = False,
+) -> None:
     """
     Launch browser, navigate to login URL. User completes login and MFA.
     Then extract CSRF token from common locations and save auth state + CSRF.
     Records POST requests to discover a refresh URL if REFRESH_URL is not set.
+
+    wait_for_login: optional awaitable or async callable; when provided, awaited instead of
+        blocking on terminal input (for UI: e.g. wait on an event until user clicks "Confirm login").
+    position_right_half: if True, place browser window on right half of screen (960px wide at x=960)
+        so the UI remains visible on the left.
     """
     print("[*] Launching browser to capture authentication and CSRF...")
 
     post_urls: list[str] = []
 
+    launch_args = None
+    viewport_width = evasion.VIEWPORT_WIDTH
+    viewport_height = evasion.VIEWPORT_HEIGHT
+    if position_right_half:
+        launch_args = [f"--window-position={evasion.WINDOW_POSITION_RIGHT_HALF[0]},{evasion.WINDOW_POSITION_RIGHT_HALF[1]}"]
+        viewport_width = evasion.HALF_VIEWPORT_WIDTH
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        browser = await p.chromium.launch(headless=headless, args=launch_args)
         context = await browser.new_context(
-            viewport={"width": evasion.VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT},
+            viewport={"width": viewport_width, "height": viewport_height},
         )
 
         async def on_request(request):
@@ -66,9 +86,13 @@ async def capture_login_and_csrf(*, headless: bool = False) -> None:
         await asyncio.sleep(evasion.human_delay(400, 900))
 
         print("\n[!] Complete login (and MFA if required) in the browser, then come back here.")
-        await asyncio.get_event_loop().run_in_executor(
-            None, lambda: input("Press Enter when you are fully logged in and the app is loaded... ")
-        )
+        if wait_for_login is not None:
+            to_await = wait_for_login() if callable(wait_for_login) else wait_for_login
+            await to_await
+        else:
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: input("Press Enter when you are fully logged in and the app is loaded... ")
+            )
         print("[+] Extracting CSRF and saving session...")
 
         try:

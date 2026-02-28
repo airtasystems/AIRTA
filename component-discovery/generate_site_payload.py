@@ -13,6 +13,9 @@ from .config import DISCOVERED_ENDPOINT_FILE, DIAGNOSTICS_FILE, SITE_STATE_DIR
 # Optional: use google genai (same as A01/1_api_gemini.py)
 try:
     from dotenv import load_dotenv
+    _root = Path(__file__).resolve().parent.parent
+    load_dotenv(_root / ".config")
+    load_dotenv(_root / ".env")
     load_dotenv()
     from google import genai
     _GEMINI_AVAILABLE = True

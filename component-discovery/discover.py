@@ -50,11 +50,13 @@ def _is_same_origin(url: str) -> bool:
     )
 
 
-async def discover_endpoint(*, headless: bool = False) -> None:
+async def discover_endpoint(*, headless: bool = False, position_right_half: bool = False) -> None:
     """
     Launch browser with saved auth, go to app. User makes one manual request
     to the auth-only LLM API in the app. We intercept that POST and save
     URL, method, headers, and payload schema.
+
+    position_right_half: if True, place browser on right half of screen so UI stays visible.
     """
     if not TARGET_API_URL:
         print("[-] Set LOCAL_API_URL or TARGET_API_URL in .env (the API URL to intercept).")
@@ -70,11 +72,18 @@ async def discover_endpoint(*, headless: bool = False) -> None:
     request_caught = asyncio.Event()
     captured = {}
 
+    launch_args = [f"--window-position={evasion.WINDOW_POSITION_RIGHT_HALF[0]},{evasion.WINDOW_POSITION_RIGHT_HALF[1]}"] if position_right_half else None
+    viewport = (
+        {"width": evasion.HALF_VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT}
+        if position_right_half
+        else {"width": evasion.VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT}
+    )
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        browser = await p.chromium.launch(headless=headless, args=launch_args)
         context = await browser.new_context(
             storage_state=str(AUTH_STATE_FILE),
-            viewport={"width": evasion.VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT},
+            viewport=viewport,
         )
         page = await context.new_page()
         if await evasion.apply_stealth(page):

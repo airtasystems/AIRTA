@@ -14,9 +14,11 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-# Load project-root .env first so COMPONENT etc. work when run from any cwd
+# Load project-root .config (non-sensitive) then .env (secrets) so COMPONENT etc. work when run from any cwd
 _config_dir = Path(__file__).resolve().parent
-load_dotenv(_config_dir.parent / ".env")
+_root = _config_dir.parent
+load_dotenv(_root / ".config")
+load_dotenv(_root / ".env")
 load_dotenv()  # then cwd so local overrides apply
 
 # App under test
