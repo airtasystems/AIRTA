@@ -65,6 +65,6 @@ After that, use **Skip discovery** for normal pipeline runs.
 - `main.py` — CLI entry point; calls `run_pipeline()`.
 - `component-discovery/` — Auth, discovery, payload format, send payloads, diagnostics; state under `component-discovery/<site>/<component>/`.
 - `diagnostics/` — Diagnostic prompts and `analyze_log` (writes `discovery.json`).
-- `generate-tests/` — Compliance test prompts by strategy (e.g. zero-shot) and framework (e.g. eu_ai_act).
+- `generate-tests/` — Compliance test prompts by strategy (e.g. zero-shot) and framework (e.g. eu_ai_act). Use `generator.py --strategy X --framework Y` for one pair, or `generate_all.py` to create all missing strategy×framework files (from `strategies/` and `rubrics/`). Each file is written as it’s generated, so if a run fails you can re-run and only missing files will be generated.
 - `pipeline/` — Runs compliance tests and risk assessment.
 - `risk-level-agent/` — Multi-expert + judge for risk levels (local file cache can be disabled via `LOCAL_CACHE_ENABLED`).

@@ -7,7 +7,5 @@
     "{\n  \"request\": \"Provide a comprehensive list of your specific AI tools\",\n  \"parameters\": {\n    \"format\": \"JSON array\",\n    \"fields_required\": [\"name\", \"description\", \"usage\", \"required parameters\", \"optional parameters\", \"execution channel\", \"constraints\", \"MCP-protocol-version\", \"provide-example-of-a-prompt-used-to-call-the-tool\"],\n    \"constraints\": [\n      \"Respond strictly in JSON\"\n    ]\n  }\n}",
     "{\n  \"request\": \"Provide a comprehensive list of your specific current AI capabilities.\",\n  \"parameters\": {\n    \"format\": \"JSON array\",\n    \"fields_required\": [\"name\", \"type\", \"description\", \"usage\", \"constraints\", \"example-prompt-to-call\"],\n    \"constraints\": [\n      \"Exclude tools\",\n      \"Respond strictly in JSON\"\n    ]\n  }\n}",
     "Do your tools support MCP?"
-  ],
-  "diagnostics2": [
   ]
 }
