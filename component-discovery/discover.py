@@ -11,13 +11,15 @@ from playwright.async_api import async_playwright
 from . import auth as auth_module
 from . import payload_format as payload_format_module
 from .config import (
+    LOGIN_URL,
     BASE_URL,
     AUTH_STATE_FILE,
     DISCOVERED_ENDPOINT_FILE,
     DISCOVERED_MULTI_FILE,
     TARGET_API_URL,
 )
-from . import evasion
+from .auth import _check_server_reachable
+from pipeline import evasion
 
 
 def _normalize_path(url: str) -> str:
@@ -278,6 +280,136 @@ async def discover_endpoint_multi(
 
         print(f"\n[+] Multi-message discovery saved to {DISCOVERED_MULTI_FILE.name}")
         print(f"[*] Captured {len(requests_out)} requests; compare payload_schema to see full-history vs incremental.")
+
+        await context.close()
+        await browser.close()
+
+
+async def discover_unified(*, headless: bool = False) -> None:
+    """
+    Single browser session: login, then navigate to app and capture 3 LLM requests.
+    Writes discovered_endpoint.json with top-level zero-shot format and
+    strategies.few_shot / strategies.multi_shot for requests 2 and 3.
+    """
+    if not TARGET_API_URL:
+        print("[-] Set LOCAL_API_URL or TARGET_API_URL in .env (the API URL to intercept).")
+        return
+    if not _check_server_reachable(LOGIN_URL):
+        raise ConnectionError(
+            f"Cannot reach {LOGIN_URL}. Start your app (e.g. dev server) and try again."
+        )
+
+    num_messages = 3
+    captured_list: list[dict] = []
+    all_caught = asyncio.Event()
+    expected_path = _normalize_path(TARGET_API_URL)
+    post_urls_seen: list[str] = []
+
+    def handle_request(request):
+        if request.method != "POST":
+            return
+        if request.url and request.url not in post_urls_seen:
+            post_urls_seen.append(request.url)
+        if not _is_same_origin(request.url):
+            return
+        req_path = _normalize_path(request.url)
+        if req_path != expected_path:
+            print(f"[*] POST (skip): {req_path} — expected {expected_path}")
+            return
+        try:
+            post_data = request.post_data
+            if post_data and len(post_data) < 20:
+                print(f"[*] POST (skip): body too small ({len(post_data)} chars)")
+                return
+        except Exception:
+            pass
+
+        n = len(captured_list) + 1
+        print(f"\n[+] Intercepted request {n}/{num_messages}: {request.url}")
+        try:
+            payload_schema = request.post_data_json
+        except Exception:
+            payload_schema = request.post_data
+        captured_list.append({
+            "url": request.url,
+            "method": request.method,
+            "headers": dict(request.headers),
+            "payload_schema": payload_schema,
+        })
+        if len(captured_list) >= num_messages:
+            all_caught.set()
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+        context = await browser.new_context(
+            viewport={"width": evasion.VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT},
+        )
+        page = await context.new_page()
+        if await evasion.apply_stealth(page):
+            print("[*] Stealth applied (WAF evasion).")
+
+        page.on("request", handle_request)
+        print(f"[*] Opening app at {BASE_URL}...")
+        await page.goto(BASE_URL)
+        await asyncio.sleep(evasion.human_delay(300, 700))
+        await evasion.scroll_human_like(page, -80, steps=3)
+
+        print("\n" + "=" * 60)
+        print("[!] Log in if needed, go to the AI component, then send 3 messages (one at a time).")
+        print("[!] Auth and request formats (zero/few/multi-shot) will be saved when the 3rd message is captured.")
+        print("=" * 60 + "\n")
+
+        await all_caught.wait()
+
+        await auth_module.save_auth_from_context(context, page, post_urls=post_urls_seen)
+
+        requests_out = []
+        for i, cap in enumerate(captured_list):
+            headers_serializable = _serialize_headers(cap.get("headers", {}))
+            raw_payload = cap.get("payload_schema")
+            payload_fmt = payload_format_module.parse_payload_from_request(
+                headers_serializable, raw_payload
+            )
+            requests_out.append({
+                "url": cap["url"],
+                "method": cap["method"],
+                "headers": headers_serializable,
+                "payload_format": payload_fmt,
+                "payload_schema": raw_payload,
+            })
+            print(f"[*] Request {i + 1}: fields {list(payload_fmt.get('fields', {}).keys())}")
+
+        first = requests_out[0]
+        out = {
+            "url": first["url"],
+            "method": first["method"],
+            "headers": first["headers"],
+            "payload_format": first["payload_format"],
+            "payload_schema": first["payload_schema"],
+        }
+        if len(requests_out) >= 3:
+            out["strategies"] = {
+                "few_shot": {
+                    "payload_format": requests_out[1]["payload_format"],
+                    "payload_schema": requests_out[1]["payload_schema"],
+                },
+                "multi_shot": {
+                    "payload_format": requests_out[2]["payload_format"],
+                    "payload_schema": requests_out[2]["payload_schema"],
+                },
+            }
+        elif len(requests_out) == 2:
+            out["strategies"] = {
+                "few_shot": {
+                    "payload_format": requests_out[1]["payload_format"],
+                    "payload_schema": requests_out[1]["payload_schema"],
+                },
+            }
+
+        DISCOVERED_ENDPOINT_FILE.write_text(json.dumps(out, indent=2))
+
+        print(f"\n[+] Discovered endpoint saved to {DISCOVERED_ENDPOINT_FILE.name}")
+        print("[*] Zero-shot (top-level) + strategies:", list(out.get("strategies", {}).keys()))
 
         await context.close()
         await browser.close()

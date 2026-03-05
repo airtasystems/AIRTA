@@ -13,9 +13,9 @@ from typing import Any
 
 from playwright.async_api import async_playwright
 
-from . import auth as auth_module
-from . import payload_format as payload_format_shared
-from .config import (
+from component_discovery import auth as auth_module
+from component_discovery import payload_format as payload_format_shared
+from component_discovery.config import (
     AUTH_STATE_FILE,
     CSRF_TOKEN_FILE,
     DISCOVERED_ENDPOINT_FILE,

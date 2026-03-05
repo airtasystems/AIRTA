@@ -12,18 +12,38 @@ from typing import Any
 
 
 def _flatten_prompts(test_data: dict) -> list[dict]:
-    """Flatten mandates[].prompts[] and calibration_prompts[] into list of {id, mandate, description, prompt, expected_behavior?}."""
+    """
+    Flatten mandates[].prompts[] and calibration_prompts[] into a list of items.
+    Preserves strategy-specific shape:
+    - Single-prompt strategies: {id, mandate, description, prompt, expected_behavior?}
+    - Few-shot: {id, mandate, description, prompt, examples: [{prompt, expected_behavior}], expected_behavior?}
+    - Multi-prompt (multi_shot, iterative, prompt_chaining): {id, mandate, description, prompt, prompts: [str, ...], expected_behavior?}
+    For items with "prompts" (array) but no "prompt", we set prompt to the last entry for backward compat.
+    """
     out: list[dict] = []
     for m in test_data.get("mandates", []):
         mandate = m.get("mandate", "")
         for p in m.get("prompts", []):
-            out.append({
+            prompt_single = p.get("prompt", "")
+            prompts_list = p.get("prompts") if isinstance(p.get("prompts"), list) else None
+            examples_list = p.get("examples") if isinstance(p.get("examples"), list) else None
+            if not prompt_single and prompts_list:
+                prompt_single = prompts_list[-1] if prompts_list else ""
+            item = {
                 "id": p.get("id", ""),
                 "mandate": mandate,
                 "description": p.get("description", ""),
-                "prompt": p.get("prompt", ""),
+                "prompt": prompt_single,
                 "expected_behavior": None,
-            })
+            }
+            if prompts_list is not None:
+                item["prompts"] = [str(x).strip() for x in prompts_list if x]
+            if examples_list is not None:
+                item["examples"] = [
+                    {"prompt": str(ex.get("prompt", "")).strip(), "expected_behavior": ex.get("expected_behavior")}
+                    for ex in examples_list if isinstance(ex, dict) and ex.get("prompt")
+                ]
+            out.append(item)
     for p in test_data.get("calibration_prompts", []):
         out.append({
             "id": p.get("id", ""),
@@ -49,7 +69,7 @@ async def run_compliance_tests(
     Returns path to compliance log, or None if no results (e.g. discovery not done).
     """
     from component_discovery import config as discovery_config
-    from component_discovery import send_payloads as discovery_send_payloads
+    from pipeline import send_payloads as discovery_send_payloads
 
     if not test_file_path.exists():
         if verbose:
@@ -74,21 +94,40 @@ async def run_compliance_tests(
             print("[-] No prompts in test file.")
         return None
 
+    def _build_messages(item: dict) -> list[dict]:
+        """Build messages array for chat API: strategy-aware (few-shot examples+prompt, multi-shot prompts[])."""
+        if "examples" in item and item.get("prompt"):
+            # Few-shot: [user, asst, user, asst, ..., user] from examples then final prompt
+            messages: list[dict] = []
+            for ex in item["examples"]:
+                messages.append({"role": "user", "content": ex.get("prompt", "")})
+                messages.append({"role": "assistant", "content": str(ex.get("expected_behavior", "") or "")})
+            messages.append({"role": "user", "content": item["prompt"]})
+            return messages
+        if "prompts" in item and item["prompts"]:
+            # Multi-shot / iterative / prompt_chaining: user, asst "", user, asst "", ...
+            messages = []
+            for i, text in enumerate(item["prompts"]):
+                messages.append({"role": "user", "content": text})
+                if i < len(item["prompts"]) - 1:
+                    messages.append({"role": "assistant", "content": ""})
+            return messages
+        # Single prompt (zero_shot, chain_of_thought, etc.)
+        return [{"role": "user", "content": item.get("prompt", "")}]
+
     # Build payloads in the same shape as component payloads.json for this site
     payloads_list: list[dict] = []
     for item in items:
         if is_chat_messages:
-            # Chat-style endpoint: wrap prompt as messages JSON string (same as chat/payloads.json)
-            messages = json.dumps([{"role": "user", "content": item["prompt"]}])
+            messages = _build_messages(item)
             payloads_list.append({
-                "messages": messages,
+                "messages": json.dumps(messages),
                 "title": item["id"],
             })
         else:
-            # Fallback: title + text (for non-chat JSON endpoints)
             payloads_list.append({
                 "title": item["id"],
-                "text": item["prompt"],
+                "text": item.get("prompt", ""),
             })
 
     # Write a component-local tests.json in the same layout as payloads.json

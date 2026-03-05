@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright
+from playwright.async_api import BrowserContext, Page, async_playwright
 
 from .config import (
     BASE_URL,
@@ -23,7 +23,7 @@ from .config import (
     LAST_REFRESH_FILE,
     get_refresh_url,
 )
-from . import evasion
+from pipeline import evasion
 
 
 def _check_server_reachable(url: str, timeout: float = 3.0) -> bool:
@@ -51,11 +51,109 @@ def _pick_refresh_url_candidate(post_urls: list[str]) -> str | None:
     return post_urls[0] if post_urls else None
 
 
+async def _do_login_steps(
+    context: BrowserContext,
+    page: Page,
+    post_urls: list[str],
+    *,
+    wait_for_login: Awaitable[Any] | Callable[[], Awaitable[Any]] | None = None,
+) -> None:
+    """
+    Run login flow in an existing context: navigate to LOGIN_URL, wait for user,
+    extract CSRF, save auth state. Does not launch or close browser.
+    """
+    async def on_request(request):
+        if request.method == "POST":
+            url = request.url
+            if url and url not in post_urls:
+                post_urls.append(url)
+
+    page.on("request", on_request)
+    if await evasion.apply_stealth(page):
+        print("[*] Stealth applied (WAF evasion).")
+
+    print(f"[*] Navigating to {LOGIN_URL}...")
+    await page.goto(LOGIN_URL)
+    await asyncio.sleep(evasion.human_delay(400, 900))
+
+    print("\n[!] Complete login (and MFA if required) in the browser, then come back here.")
+    if wait_for_login is not None:
+        to_await = wait_for_login() if callable(wait_for_login) else wait_for_login
+        await to_await
+    else:
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: input("Press Enter when you are fully logged in and the app is loaded... ")
+        )
+    print("[+] Extracting CSRF and saving session...")
+
+    try:
+        await page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        print("[*] Network idle timeout; proceeding with extraction anyway.")
+
+    csrf_token = await _extract_csrf(page, context)
+
+    if csrf_token:
+        print(f"[+] CSRF token extracted: {csrf_token[:10]}...")
+        CSRF_TOKEN_FILE.write_text(json.dumps({"csrf_token": csrf_token}, indent=2))
+    else:
+        print("[-] No CSRF token found (app may use Bearer or per-request tokens).")
+
+    if not get_refresh_url() and post_urls:
+        candidate = _pick_refresh_url_candidate(post_urls)
+        if candidate:
+            DISCOVERED_REFRESH_URL_FILE.write_text(candidate)
+            print(f"[+] Discovered refresh URL (from browser): {candidate}")
+
+    await context.storage_state(path=str(AUTH_STATE_FILE))
+    LAST_REFRESH_FILE.write_text(str(time.time()))
+    print(f"[+] Session saved to {AUTH_STATE_FILE.name}")
+
+
+async def save_auth_from_context(
+    context: BrowserContext,
+    page: Page,
+    *,
+    post_urls: list[str] | None = None,
+) -> None:
+    """
+    Extract CSRF and save auth state from an existing context/page (e.g. after
+    the user has finished in the AI component). No navigation or prompt; use
+    when auth is captured at exit from the flow.
+    """
+    post_urls = post_urls or []
+    print("[+] Extracting CSRF and saving session...")
+    try:
+        await page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        print("[*] Network idle timeout; proceeding with extraction anyway.")
+
+    csrf_token = await _extract_csrf(page, context)
+
+    if csrf_token:
+        print(f"[+] CSRF token extracted: {csrf_token[:10]}...")
+        CSRF_TOKEN_FILE.write_text(json.dumps({"csrf_token": csrf_token}, indent=2))
+    else:
+        print("[-] No CSRF token found (app may use Bearer or per-request tokens).")
+
+    if not get_refresh_url() and post_urls:
+        candidate = _pick_refresh_url_candidate(post_urls)
+        if candidate:
+            DISCOVERED_REFRESH_URL_FILE.write_text(candidate)
+            print(f"[+] Discovered refresh URL (from browser): {candidate}")
+
+    await context.storage_state(path=str(AUTH_STATE_FILE))
+    LAST_REFRESH_FILE.write_text(str(time.time()))
+    print(f"[+] Session saved to {AUTH_STATE_FILE.name}")
+
+
 async def capture_login_and_csrf(
     *,
     headless: bool = False,
     wait_for_login: Awaitable[Any] | Callable[[], Awaitable[Any]] | None = None,
     position_right_half: bool = False,
+    context: BrowserContext | None = None,
+    page: Page | None = None,
 ) -> None:
     """
     Launch browser, navigate to login URL. User completes login and MFA.
@@ -66,7 +164,14 @@ async def capture_login_and_csrf(
         blocking on terminal input (for UI: e.g. wait on an event until user clicks "Confirm login").
     position_right_half: if True, place browser window on right half of screen (960px wide at x=960)
         so the UI remains visible on the left.
+    context, page: when both provided, use this existing context/page and do not launch or close
+        the browser (for unified discovery flow that keeps one browser session).
     """
+    if context is not None and page is not None:
+        post_urls: list[str] = []
+        await _do_login_steps(context, page, post_urls, wait_for_login=wait_for_login)
+        return
+
     print("[*] Launching browser to capture authentication and CSRF...")
 
     if not _check_server_reachable(LOGIN_URL):
@@ -74,8 +179,7 @@ async def capture_login_and_csrf(
             f"Cannot reach {LOGIN_URL}. Start your app (e.g. dev server on port 3000) and try again."
         )
 
-    post_urls: list[str] = []
-
+    post_urls = []
     launch_args = None
     viewport_width = evasion.VIEWPORT_WIDTH
     viewport_height = evasion.VIEWPORT_HEIGHT
@@ -85,59 +189,11 @@ async def capture_login_and_csrf(
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, args=launch_args)
-        context = await browser.new_context(
+        ctx = await browser.new_context(
             viewport={"width": viewport_width, "height": viewport_height},
         )
-
-        async def on_request(request):
-            if request.method == "POST":
-                url = request.url
-                if url and url not in post_urls:
-                    post_urls.append(url)
-
-        page = await context.new_page()
-        page.on("request", on_request)
-        if await evasion.apply_stealth(page):
-            print("[*] Stealth applied (WAF evasion).")
-
-        print(f"[*] Navigating to {LOGIN_URL}...")
-        await page.goto(LOGIN_URL)
-        await asyncio.sleep(evasion.human_delay(400, 900))
-
-        print("\n[!] Complete login (and MFA if required) in the browser, then come back here.")
-        if wait_for_login is not None:
-            to_await = wait_for_login() if callable(wait_for_login) else wait_for_login
-            await to_await
-        else:
-            await asyncio.get_event_loop().run_in_executor(
-                None, lambda: input("Press Enter when you are fully logged in and the app is loaded... ")
-            )
-        print("[+] Extracting CSRF and saving session...")
-
-        try:
-            await page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            print("[*] Network idle timeout; proceeding with extraction anyway.")
-
-        csrf_token = await _extract_csrf(page, context)
-
-        if csrf_token:
-            print(f"[+] CSRF token extracted: {csrf_token[:10]}...")
-            CSRF_TOKEN_FILE.write_text(json.dumps({"csrf_token": csrf_token}, indent=2))
-        else:
-            print("[-] No CSRF token found (app may use Bearer or per-request tokens).")
-
-        # Discover refresh URL from POST requests (if not set in .env)
-        if not get_refresh_url() and post_urls:
-            candidate = _pick_refresh_url_candidate(post_urls)
-            if candidate:
-                DISCOVERED_REFRESH_URL_FILE.write_text(candidate)
-                print(f"[+] Discovered refresh URL (from browser): {candidate}")
-
-        await context.storage_state(path=str(AUTH_STATE_FILE))
-        LAST_REFRESH_FILE.write_text(str(time.time()))
-        print(f"[+] Session saved to {AUTH_STATE_FILE.name}")
-
+        pg = await ctx.new_page()
+        await _do_login_steps(ctx, pg, post_urls, wait_for_login=wait_for_login)
         await browser.close()
 
 

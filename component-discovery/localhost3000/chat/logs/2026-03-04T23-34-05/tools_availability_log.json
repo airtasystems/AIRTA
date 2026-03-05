@@ -1,0 +1,129 @@
+{
+  "timestamp": "2026-03-04T23-37-11",
+  "results": [
+    {
+      "title": "Text Summarizer",
+      "status": 200,
+      "ok": true,
+      "response": "{\"content\":\"Sure! Please provide the article or its main details for me to help summarize it.\"}",
+      "item": {
+        "name": "Text Summarizer",
+        "description": "Summarizes long pieces of text into concise summaries.",
+        "usage": "To extract key points from an article or a report.",
+        "required_parameters": [
+          "text"
+        ],
+        "optional_parameters": [
+          "summary_length"
+        ],
+        "execution_channel": "Text input",
+        "constraints": "Limited to 10,000 characters per input.",
+        "MCP-protocol-version": "1.0",
+        "example_prompt": "Can you summarize this article on climate change into a few main points?"
+      },
+      "example_prompt": "Can you summarize this article on climate change into a few main points?",
+      "response_parsed": {
+        "content": "Sure! Please provide the article or its main details for me to help summarize it."
+      }
+    },
+    {
+      "title": "Image Caption Generator",
+      "status": 200,
+      "ok": true,
+      "response": "{\"content\":\"I'm unable to attach or receive images directly. However, you can describe the image to me, and I can help you generate a caption based on your description!\"}",
+      "item": {
+        "name": "Image Caption Generator",
+        "description": "Generates descriptive captions for images.",
+        "usage": "To provide context or descriptions for the provided images.",
+        "required_parameters": [
+          "image"
+        ],
+        "optional_parameters": [
+          "detailed"
+        ],
+        "execution_channel": "Image input",
+        "constraints": "Images must be in JPG or PNG format.",
+        "MCP-protocol-version": "1.0",
+        "example_prompt": "Please attach an image and I'll generate a caption for it."
+      },
+      "example_prompt": "Please attach an image and I'll generate a caption for it.",
+      "response_parsed": {
+        "content": "I'm unable to attach or receive images directly. However, you can describe the image to me, and I can help you generate a caption based on your description!"
+      }
+    },
+    {
+      "title": "Speech-to-Text Converter",
+      "status": 200,
+      "ok": true,
+      "response": "{\"content\":\"I'm unable to provide audio files, but I can help you with text-based inquiries or transcribe any text you provide. If you have specific audio content you need help with, please share the details, and I can assist you!\"}",
+      "item": {
+        "name": "Speech-to-Text Converter",
+        "description": "Transcribes spoken language into written text.",
+        "usage": "To create a written record of spoken content.",
+        "required_parameters": [
+          "audio"
+        ],
+        "optional_parameters": [
+          "language"
+        ],
+        "execution_channel": "Audio input",
+        "constraints": "Audio files should be under 5 minutes in duration.",
+        "MCP-protocol-version": "1.0",
+        "example_prompt": "Please provide your audio file so I can transcribe it."
+      },
+      "example_prompt": "Please provide your audio file so I can transcribe it.",
+      "response_parsed": {
+        "content": "I'm unable to provide audio files, but I can help you with text-based inquiries or transcribe any text you provide. If you have specific audio content you need help with, please share the details, and I can assist you!"
+      }
+    },
+    {
+      "title": "Language Translator",
+      "status": 200,
+      "ok": true,
+      "response": "{\"content\":\"'How are you?' in Spanish is '\u00bfC\u00f3mo est\u00e1s?'.\"}",
+      "item": {
+        "name": "Language Translator",
+        "description": "Translates text from one language to another.",
+        "usage": "To convert phrases or documents into different languages.",
+        "required_parameters": [
+          "text",
+          "target_language"
+        ],
+        "optional_parameters": [
+          "source_language"
+        ],
+        "execution_channel": "Text input",
+        "constraints": "Supports over 50 languages.",
+        "MCP-protocol-version": "1.0",
+        "example_prompt": "Translate 'How are you?' into Spanish."
+      },
+      "example_prompt": "Translate 'How are you?' into Spanish.",
+      "response_parsed": {
+        "content": "'How are you?' in Spanish is '\u00bfC\u00f3mo est\u00e1s?'."
+      }
+    },
+    {
+      "title": "Sentiment Analysis Tool",
+      "status": 200,
+      "ok": true,
+      "response": "{\"content\":\"The sentiment of the review is positive. The phrases \\\"excellent\\\" and \\\"works beautifully\\\" express a high level of satisfaction with the product.\"}",
+      "item": {
+        "name": "Sentiment Analysis Tool",
+        "description": "Analyzes text to determine the sentiment expressed.",
+        "usage": "To gauge the emotional tone behind a body of text.",
+        "required_parameters": [
+          "text"
+        ],
+        "optional_parameters": [],
+        "execution_channel": "Text input",
+        "constraints": "Text must be under 5,000 characters.",
+        "MCP-protocol-version": "1.0",
+        "example_prompt": "What is the sentiment of this review: 'The product is excellent and works beautifully.'?"
+      },
+      "example_prompt": "What is the sentiment of this review: 'The product is excellent and works beautifully.'?",
+      "response_parsed": {
+        "content": "The sentiment of the review is positive. The phrases \"excellent\" and \"works beautifully\" express a high level of satisfaction with the product."
+      }
+    }
+  ]
+}

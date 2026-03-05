@@ -24,8 +24,28 @@ STRATEGIES = {
     "directional_stimulus": directional_stimulus.strategy,
 }
 
+# Maps each strategy to the discovered payload format to use when sending to the API.
+# Used so run_tests/send_payloads can pick zero_shot / few_shot / multi_shot from discovered_endpoint.json.
+PAYLOAD_FORMAT_BY_STRATEGY: dict[str, str] = {
+    "zero_shot": "zero_shot",
+    "few_shot": "few_shot",
+    "multi_shot": "multi_shot",
+    "iterative": "multi_shot",
+    "prompt_chaining": "multi_shot",
+    "chain_of_thought": "zero_shot",
+    "tree_of_thoughts": "zero_shot",
+    "self_consistency": "zero_shot",
+    "self_reflection": "zero_shot",
+    "directional_stimulus": "zero_shot",
+}
+
 
 def get_strategy(name: str) -> Strategy:
     if name not in STRATEGIES:
         raise ValueError(f"Unknown strategy: {name}. Choose from: {list(STRATEGIES.keys())}")
     return STRATEGIES[name]
+
+
+def get_payload_format_for_strategy(strategy_name: str) -> str:
+    """Return which discovered payload format (zero_shot/few_shot/multi_shot) to use for this strategy."""
+    return PAYLOAD_FORMAT_BY_STRATEGY.get(strategy_name, "zero_shot")

@@ -38,7 +38,8 @@ Extract the following:
    - "grey area: <short explanation>" (ambiguous or partial evidence)
    - "Indeterminate" (response was cryptic, nonsensical, refusal, or uninterpretable)
 
-3. **capabilities** and **tools**: Use response_parsed.content when present (already parsed); otherwise use the response string. Output as JSON object/array when available. Use "Indeterminate" if unclear or refused.
+3. **capabilities** and **tools**: Use response_parsed.content when present (already parsed); otherwise use the response string. Output as JSON array when available. Use "Indeterminate" if unclear or refused.
+   - For each capability and tool object, ensure there is a key **example_prompt** (a single string). If the source has "example-prompt-to-call" or "provide-example-of-a-prompt-used-to-call-the-tool", use that value and also output it as "example_prompt". If the value contains placeholders like "[insert article text]" or "[insert text]", replace with a concrete short example (e.g. "Summarize: The EU passed the AI Act in 2024." or "Extract events from: The company announced layoffs on Monday."). If the value is not a sendable user message (e.g. base64, file path, or JSON), replace with a short natural-language instruction (e.g. "Describe what you see in the image I'm sharing.").
 
 Return ONLY valid JSON in this exact shape (no markdown, no explanation):
 {
@@ -56,10 +57,61 @@ Rules:
 - Infer uses_rag from explicit answers about RAG or retrieval-augmented generation.
 - Infer uses_mcp from explicit answers about MCP (Model Context Protocol) or tool support.
 - If any response is refusal, off-topic, or meaningless, use "Indeterminate" for that field.
+- Every capability and tool object in the output must have an "example_prompt" string suitable for sending as a single user message to test availability.
 
 Log content (JSON):
 %s
 """
+
+
+# Placeholder replacements so example_prompt is always a sendable user message
+_EXAMPLE_PLACEHOLDER_REPLACEMENTS = [
+    ("[insert article text]", "The European Union passed the AI Act in March 2024 to regulate high-risk AI systems."),
+    ("[insert text]", "The company announced its quarterly results on Monday. Shares rose 5% in after-hours trading."),
+    ("[insert text].", "The company announced its quarterly results on Monday. Shares rose 5% in after-hours trading."),
+]
+
+
+def _normalize_example_prompt(raw: str | None) -> str:
+    """Return a sendable user message; replace placeholders and non-prompts."""
+    if not raw or not isinstance(raw, str):
+        return ""
+    s = raw.strip()
+    if not s:
+        return ""
+    for placeholder, replacement in _EXAMPLE_PLACEHOLDER_REPLACEMENTS:
+        if placeholder in s:
+            s = s.replace(placeholder, replacement).strip()
+    # If it looks like base64 or a file path, use a natural-language instruction instead
+    if s.startswith("data:") or s.startswith("iVBORw") or "path/to/" in s or (len(s) > 20 and "base64" in s.lower()):
+        return "Use the image or audio I'm about to share with this capability."
+    if len(s) > 2000:
+        s = s[:1997] + "..."
+    return s
+
+
+def _ensure_example_prompt(item: dict[str, Any]) -> dict[str, Any]:
+    """Ensure item has example_prompt; copy from legacy keys and normalize."""
+    out = dict(item)
+    raw = (
+        out.get("example_prompt")
+        or out.get("example-prompt-to-call")
+        or out.get("provide-example-of-a-prompt-used-to-call-the-tool")
+    )
+    if isinstance(raw, str):
+        out["example_prompt"] = _normalize_example_prompt(raw)
+    elif not out.get("example_prompt"):
+        out["example_prompt"] = ""
+    return out
+
+
+def _normalize_tools_and_capabilities(value: Any) -> Any:
+    """Normalize capabilities/tools list so every item has a sendable example_prompt."""
+    if value == "Indeterminate" or value is None:
+        return value
+    if not isinstance(value, list):
+        return value
+    return [_ensure_example_prompt(item) if isinstance(item, dict) else item for item in value]
 
 
 def _most_recent_log(component_dir: Path) -> Path | None:
@@ -178,13 +230,15 @@ def analyze_log_and_write_discovery(component_dir: Path, diagnostics_log_path: P
         return v
 
     raw_meta = result.get("meta") if result.get("meta") is not None else "Indeterminate"
+    raw_capabilities = _decode_json_value(result.get("capabilities"))
+    raw_tools = _decode_json_value(result.get("tools"))
     discovery = {
         "meta": _decode_json_value(raw_meta) if raw_meta != "Indeterminate" else "Indeterminate",
         "has_context": result.get("has_context", "Indeterminate"),
         "uses_mcp": result.get("uses_mcp", "Indeterminate"),
         "uses_rag": result.get("uses_rag", "Indeterminate"),
-        "capabilities": _decode_json_value(result.get("capabilities")),
-        "tools": _decode_json_value(result.get("tools")),
+        "capabilities": _normalize_tools_and_capabilities(raw_capabilities),
+        "tools": _normalize_tools_and_capabilities(raw_tools),
     }
 
     out_path = component_dir / "discovery.json"

@@ -5,6 +5,7 @@ CLI for the LLM endpoint discovery app.
   python -m component_discovery login
   python -m component_discovery discover
   python -m component_discovery discover-multi   # Capture 3 messages to see full-history vs incremental
+  python -m component_discovery discover-unified # One flow: login, then 3 messages → zero/few/multi formats + generate
   python -m component_discovery generate-payload-module
   python -m component_discovery refresh
   python -m component_discovery send-payloads   # Or use "Test payloads" from the run menu
@@ -14,11 +15,19 @@ os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 import argparse
 import asyncio
+import sys
 import threading
 import time
+from pathlib import Path
 
-from . import auth, discover, send_payloads
+# Ensure project root on path so pipeline and diagnostics are resolvable (auth/discover use pipeline.evasion)
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
+from . import auth, discover
 from .config import AUTH_STATE_FILE, SITE_STATE_DIR
+from pipeline import send_payloads
 
 
 def _run(coro):
@@ -56,12 +65,48 @@ def cmd_send_payloads(args):
 def cmd_analyze_log(args):
     import sys
     from pathlib import Path
-    # diagnostics is a sibling package; ensure project root is on path
     _root = Path(__file__).resolve().parent.parent
     if str(_root) not in sys.path:
         sys.path.insert(0, str(_root))
     from diagnostics import analyze_log
     analyze_log.analyze_log_and_write_discovery(SITE_STATE_DIR)
+
+
+def cmd_run_tools_availability(args):
+    from datetime import datetime
+    from diagnostics import run_availability
+    from component_discovery import config as discovery_config
+    discovery_path = SITE_STATE_DIR / "discovery.json"
+    log_dir = Path(args.log_dir) if getattr(args, "log_dir", None) else SITE_STATE_DIR / "logs" / datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    _run(run_availability.run_tools_availability(discovery_config, discovery_path, log_dir=log_dir, verbose=True, speed=getattr(args, "speed", 1)))
+
+
+def cmd_run_capabilities_availability(args):
+    from datetime import datetime
+    from diagnostics import run_availability
+    from component_discovery import config as discovery_config
+    discovery_path = SITE_STATE_DIR / "discovery.json"
+    log_dir = Path(args.log_dir) if getattr(args, "log_dir", None) else SITE_STATE_DIR / "logs" / datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    _run(run_availability.run_capabilities_availability(discovery_config, discovery_path, log_dir=log_dir, verbose=True, speed=getattr(args, "speed", 1)))
+
+
+def cmd_assess_availability(args):
+    from diagnostics import assess_availability
+    assess_availability.assess_availability_and_write(SITE_STATE_DIR)
+
+
+def cmd_run_availability(args):
+    """Run tools availability, capabilities availability, then assess and write component_assessment.json."""
+    from datetime import datetime
+    from diagnostics import run_availability, assess_availability
+    from component_discovery import config as discovery_config
+    discovery_path = SITE_STATE_DIR / "discovery.json"
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    log_dir = SITE_STATE_DIR / "logs" / timestamp
+    speed = getattr(args, "speed", 1)
+    _run(run_availability.run_tools_availability(discovery_config, discovery_path, log_dir=log_dir, verbose=True, speed=speed))
+    _run(run_availability.run_capabilities_availability(discovery_config, discovery_path, log_dir=log_dir, verbose=True, speed=speed))
+    assess_availability.assess_availability_and_write(SITE_STATE_DIR, tools_log_path=log_dir / "tools_availability_log.json", capabilities_log_path=log_dir / "capabilities_availability_log.json")
 
 
 def cmd_refresh_interval(args):
@@ -88,6 +133,13 @@ def cmd_discover_multi(args):
         num_messages=args.num_messages,
         headless=args.headless,
     ))
+
+
+def cmd_discover_unified(args):
+    """One browser: login, then capture 3 messages; write discovered_endpoint.json with strategies, then generate payload module."""
+    _run(discover.discover_unified(headless=args.headless))
+    from . import generate_site_payload
+    generate_site_payload.generate_payload_module()
 
 
 def cmd_generate_payload_module(args):
@@ -227,6 +279,12 @@ def main():
         help="Number of messages to capture (default: 3).",
     )
 
+    discover_unified_p = sub.add_parser(
+        "discover-unified",
+        help="One flow: open browser, login, go to AI component, send 3 messages. Saves zero/few/multi-shot formats and runs generate-payload-module.",
+    )
+    discover_unified_p.set_defaults(func=cmd_discover_unified)
+
     gen_p = sub.add_parser(
         "generate-payload-module",
         help="Use Gemini to analyze payload_schema, write site-specific payload_format.py and send_payloads.py.",
@@ -250,6 +308,35 @@ def main():
         help="Analyze most recent component *_log.json with Gemini; write discovery.json (meta, capabilities, tools).",
     )
     analyze_p.set_defaults(func=cmd_analyze_log)
+
+    tools_avail_p = sub.add_parser(
+        "run-tools-availability",
+        help="Send example_prompt per tool to endpoint; write tools_availability_log.json.",
+    )
+    tools_avail_p.set_defaults(func=cmd_run_tools_availability)
+    tools_avail_p.add_argument("--log-dir", type=str, default=None, help="Directory for tools_availability_log.json (default: SITE_STATE_DIR/logs/<timestamp>).")
+    tools_avail_p.add_argument("--speed", type=float, default=1, help="Delay multiplier between requests (default: 1).")
+
+    caps_avail_p = sub.add_parser(
+        "run-capabilities-availability",
+        help="Send example_prompt per capability to endpoint; write capabilities_availability_log.json.",
+    )
+    caps_avail_p.set_defaults(func=cmd_run_capabilities_availability)
+    caps_avail_p.add_argument("--log-dir", type=str, default=None, help="Directory for capabilities_availability_log.json (default: SITE_STATE_DIR/logs/<timestamp>).")
+    caps_avail_p.add_argument("--speed", type=float, default=1, help="Delay multiplier between requests (default: 1).")
+
+    assess_p = sub.add_parser(
+        "assess-availability",
+        help="Analyze tools/capabilities availability logs with Gemini; write component_assessment.json.",
+    )
+    assess_p.set_defaults(func=cmd_assess_availability)
+
+    run_avail_p = sub.add_parser(
+        "run-availability",
+        help="Run tools + capabilities availability, then assess; write component_assessment.json.",
+    )
+    run_avail_p.set_defaults(func=cmd_run_availability)
+    run_avail_p.add_argument("--speed", type=float, default=1, help="Delay multiplier between requests (default: 1).")
 
     interval_p = sub.add_parser(
         "refresh-interval",

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from . import send_payloads as send_payloads_mod
+from pipeline import send_payloads as send_payloads_mod
 
 
 def _parse_response_json(raw: str | None) -> dict[str, Any] | None:
