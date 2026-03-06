@@ -28,7 +28,7 @@ except ImportError:
 
 # Target: over 2048 tokens for Gemini cache (many models require minimum). ~4 chars/token → ~8200+ chars.
 MIN_RUBRIC_CHARS = 8500
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 
 # Structured output schema (layout similar to rubrics/eu_ai_act.json) so the component rubric is well laid out.
 COMPONENT_RUBRIC_JSON_SCHEMA = """
@@ -54,12 +54,6 @@ Your response must be valid JSON only (no markdown, no code fences, no preamble)
   ],
   "verified_capabilities": [
     { "name": "string", "description": "string", "constraints": "string", "example_prompt": "string", "compliance_relevance": "string" }
-  ],
-  "unavailable_tools": [
-    { "name": "string", "reason": "string (why unavailable or refused)" }
-  ],
-  "unavailable_capabilities": [
-    { "name": "string", "reason": "string" }
   ],
   "model_and_behaviour": {
     "model_name": "string",
@@ -163,10 +157,6 @@ def _structured_rubric_to_text(rubric: dict[str, Any]) -> str:
         section("Verified tools", rubric["verified_tools"])
     if rubric.get("verified_capabilities"):
         section("Verified capabilities", rubric["verified_capabilities"])
-    if rubric.get("unavailable_tools"):
-        section("Unavailable tools", rubric["unavailable_tools"])
-    if rubric.get("unavailable_capabilities"):
-        section("Unavailable capabilities", rubric["unavailable_capabilities"])
     if rubric.get("model_and_behaviour"):
         section("Model and behaviour", rubric["model_and_behaviour"])
     if rubric.get("guidance_for_test_generation"):
@@ -183,7 +173,7 @@ def _ensure_min_length(rubric_text: str, min_chars: int = MIN_RUBRIC_CHARS) -> s
         "\n\n---\n\nAdditional guidance for test generation: "
         "When generating compliance prompts for this component, consider the verified tools and capabilities listed above. "
         "Focus test cases on behaviours the component has demonstrated (e.g. text generation, translation, sentiment). "
-        "Avoid prompts that assume unavailable features (e.g. image or audio if not verified). "
+        "Avoid prompts that assume features that have not been verified for this component. "
         "Align mandate wording with the component's domain and target users described in this rubric. "
         "Repeat and elaborate: the component context, verified tools, and limitations above should drive both positive "
         "(should-comply) and negative (should-refuse) test cases so that generated prompts are relevant and executable."
@@ -207,7 +197,7 @@ def _create_rubric_cache(rubric_text: str, display_name: str) -> str | None:
             config=types.CreateCachedContentConfig(
                 display_name=display_name[:64],
                 system_instruction=rubric_text,
-                ttl="86400s",
+                ttl="3600s", # 1 hour
             ),
         )
         return getattr(cache, "name", None) or str(cache)

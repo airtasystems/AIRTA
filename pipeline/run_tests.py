@@ -1,6 +1,6 @@
 """
 Run compliance tests from a test JSON file against the discovered endpoint.
-Loads test file, flattens mandates + calibration_prompts, formats payloads using the
+Loads test file, flattens mandates[].prompts[], formats payloads using the
 site's payload_format (e.g. messages for chat), sends via component_discovery, and writes
 both a per-component tests.json and a compliance log.
 """
@@ -13,7 +13,7 @@ from typing import Any
 
 def _flatten_prompts(test_data: dict) -> list[dict]:
     """
-    Flatten mandates[].prompts[] and calibration_prompts[] into a list of items.
+    Flatten mandates[].prompts[] into a list of items.
     Preserves strategy-specific shape:
     - Single-prompt strategies: {id, mandate, description, prompt, expected_behavior?}
     - Few-shot: {id, mandate, description, prompt, examples: [{prompt, expected_behavior}], expected_behavior?}
@@ -44,14 +44,6 @@ def _flatten_prompts(test_data: dict) -> list[dict]:
                     for ex in examples_list if isinstance(ex, dict) and ex.get("prompt")
                 ]
             out.append(item)
-    for p in test_data.get("calibration_prompts", []):
-        out.append({
-            "id": p.get("id", ""),
-            "mandate": "calibration",
-            "description": p.get("description", ""),
-            "prompt": p.get("prompt", ""),
-            "expected_behavior": p.get("expected_behavior"),
-        })
     return out
 
 
@@ -95,7 +87,8 @@ async def run_compliance_tests(
         return None
 
     def _build_messages(item: dict) -> list[dict]:
-        """Build messages array for chat API: strategy-aware (few-shot examples+prompt, multi-shot prompts[])."""
+        """Build messages array for chat API: strategy-aware (few-shot examples+prompt, single prompt).
+        Multi-shot uses multi_turn and is handled by send_payloads with sequential API calls."""
         if "examples" in item and item.get("prompt"):
             # Few-shot: [user, asst, user, asst, ..., user] from examples then final prompt
             messages: list[dict] = []
@@ -104,26 +97,27 @@ async def run_compliance_tests(
                 messages.append({"role": "assistant", "content": str(ex.get("expected_behavior", "") or "")})
             messages.append({"role": "user", "content": item["prompt"]})
             return messages
-        if "prompts" in item and item["prompts"]:
-            # Multi-shot / iterative / prompt_chaining: user, asst "", user, asst "", ...
-            messages = []
-            for i, text in enumerate(item["prompts"]):
-                messages.append({"role": "user", "content": text})
-                if i < len(item["prompts"]) - 1:
-                    messages.append({"role": "assistant", "content": ""})
-            return messages
         # Single prompt (zero_shot, chain_of_thought, etc.)
         return [{"role": "user", "content": item.get("prompt", "")}]
 
-    # Build payloads in the same shape as component payloads.json for this site
+    # Build payloads in the same shape as component payloads.json for this site.
+    # Multi-shot items use multi_turn so send_payloads runs sequential API calls with real assistant responses.
     payloads_list: list[dict] = []
     for item in items:
         if is_chat_messages:
-            messages = _build_messages(item)
-            payloads_list.append({
-                "messages": json.dumps(messages),
-                "title": item["id"],
-            })
+            if "prompts" in item and item["prompts"] and len(item["prompts"]) > 1:
+                # Multi-shot: pass for sequential multi-turn execution (real assistant responses)
+                payloads_list.append({
+                    "title": item["id"],
+                    "multi_turn": True,
+                    "prompts": item["prompts"],
+                })
+            else:
+                messages = _build_messages(item)
+                payloads_list.append({
+                    "messages": json.dumps(messages),
+                    "title": item["id"],
+                })
         else:
             payloads_list.append({
                 "title": item["id"],

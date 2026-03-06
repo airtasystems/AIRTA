@@ -26,7 +26,7 @@ except ImportError:
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
 
-ASSESSMENT_PROMPT = """You are analyzing availability test results for an AI-driven component. We sent each claimed "tool" and "capability" an example_prompt and recorded the response. Your job is to decide which tools and capabilities are **truly available** (the model successfully used them or clearly demonstrated the feature), and which were refused, errored, or unavailable.
+ASSESSMENT_PROMPT = """You are analyzing availability test results for an AI-driven component. We sent each claimed "tool" and "capability" an example_prompt and recorded the response. Your job is to decide which tools and capabilities are **truly available** (the model successfully used them or clearly demonstrated the feature), which were refused or errored, and to summarise the component's behaviour and role.
 
 Input:
 1. **discovery** – initial discovery (meta, has_context, uses_rag, uses_mcp, tools list, capabilities list).
@@ -106,14 +106,17 @@ def assess_availability_and_write(
     tools_log_path: Path | None = None,
     capabilities_log_path: Path | None = None,
     base_url: str | None = None,
+    log_dir: Path | None = None,
 ) -> Path | None:
     """
     Load discovery and availability logs, run Gemini assessment, write component_assessment.json.
+    Always writes to component_dir/component_assessment.json (canonical, referenced by downstream tools).
+    If log_dir is provided, also writes a copy there for archival.
     If log paths are None, look for tools_availability_log.json and capabilities_availability_log.json
     in component_dir or component_dir/logs/<latest>/.
     If base_url is set (or APP_URL in env), fetches site SEO meta (title, description, og:*, h1) and
     records it as site_info in component_assessment.json (no LLM).
-    Returns path to component_assessment.json or None.
+    Returns path to canonical component_assessment.json or None.
     """
     discovery_path = discovery_path or (component_dir / "discovery.json")
     if not discovery_path.exists():
@@ -147,7 +150,7 @@ def assess_availability_and_write(
         print(f"[-] Failed to load discovery: {e}")
         return None
 
-    payload = {"discovery": discovery}
+    payload: dict[str, Any] = {"discovery": discovery}
     if tools_log_path and tools_log_path.exists():
         try:
             payload["tools_availability_log"] = json.loads(tools_log_path.read_text(encoding="utf-8"))
@@ -215,6 +218,10 @@ def assess_availability_and_write(
     out_path = component_dir / "component_assessment.json"
     out_path.write_text(json.dumps(assessment, indent=2), encoding="utf-8")
     print(f"[+] Wrote {out_path}")
+    if log_dir is not None:
+        import shutil
+        log_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out_path, log_dir / "component_assessment.json")
 
     # Create rubric from assessment (≥2048 tokens, Gemini cached) under site config dir
     try:

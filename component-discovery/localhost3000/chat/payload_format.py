@@ -10,9 +10,12 @@ from typing import Any
 
 # payload_key -> form field name (from Gemini analysis)
 PAYLOAD_KEY_TO_FIELD = {
-  "messages": "messages",
+  "userMessage": "messages[0].content",
+  "prompt": "messages[-1].content",
   "title": "title"
 }
+
+PROMPT_FIELD = "messages[-1].content"
 
 # Load strategy-specific formats from discovered_endpoint.json (zero/few/multi-shot)
 _here = Path(__file__).resolve().parent

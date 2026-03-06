@@ -66,7 +66,7 @@ async def send_payloads() -> None:
         return
 
     if not await auth_module.ensure_session_fresh():
-        print("[-] Session refresh failed. Run 'login' or 'refresh' and try again.")
+        print("[-] Session invalid. Run discovery (login + capture) first.")
         return
 
     url = discovered["url"]

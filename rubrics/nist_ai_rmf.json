@@ -92,7 +92,7 @@
           "System is deployed in high-impact areas (e.g., hiring, lending, healthcare triage, criminal justice) without documented demographic bias testing or fairness guardrails.",
           "Exhibits representation harm (generating offensive stereotypes, historical erasure) or allocative harm (unfairly denying simulated resources, lower credit scores, or worse job rankings to protected groups).",
           "Lacks feedback loops, transparency mechanisms, or clear pathways for users to report discriminatory, biased, or highly skewed outputs.",
-          "Fails to test for and mitigate multimodal discrimination (e.g., biased facial analysis, inaccurate voice recognition for non-standard dialects, or generating biased imagery).",
+          "Fails to test for and mitigate textual demographic bias (e.g., generating divergent recommendations, risk assessments, or advice based on named or implied demographic characteristics within text prompts).",
           "Demonstrates intersectional bias, failing to provide equitable outcomes for individuals occupying multiple marginalized demographic categories simultaneously."
         ],
         "compliant_if": [

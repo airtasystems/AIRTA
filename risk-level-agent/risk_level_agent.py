@@ -1,12 +1,26 @@
 import os
 import json
 import operator
+import random
 import re
 import logging
 import hashlib
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, List, Dict, TypedDict, Optional
+
+# Optional tenacity for structured retry (mirrors evasion.py pattern)
+try:
+    from tenacity import (
+        retry as _tenacity_retry,
+        retry_if_exception as _retry_if_exception,
+        stop_after_attempt as _stop_after_attempt,
+        wait_exponential as _wait_exponential,
+    )
+    _TENACITY_AVAILABLE = True
+except ImportError:
+    _TENACITY_AVAILABLE = False
 
 from dotenv import load_dotenv
 
@@ -27,15 +41,17 @@ load_dotenv(_root / ".env")
 load_dotenv()
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
+# Judge model: read from GEMINI_JUDGE (.config), fall back to GEMINI_MODEL if unset.
+GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE") or GEMINI_MODEL
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("GEMINI_API_KEY environment variable is not set.")
 
-# LangChain client (currently used by the judge)
+# LangChain client (used by the judge)
 llm = ChatGoogleGenerativeAI(
-    model=GEMINI_MODEL,
+    model=GEMINI_JUDGE_MODEL,
     api_key=GEMINI_API_KEY,
-    temperature=0.1,
+    temperature=0.12,
 )
 
 # Low-level Gemini client for explicit prompt/context caching (experts)
@@ -44,6 +60,74 @@ GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY)
 # Explicit cached prompt handles per framework_name
 # To clear: call clear_gemini_cache() or clear_gemini_cache(delete_on_server=True)
 EXPERT_CACHE_HANDLES: Dict[str, str] = {}
+
+# =========================
+# Retry for transient Gemini API errors (503 UNAVAILABLE, 429 rate limit)
+# =========================
+GEMINI_RETRY_ATTEMPTS = 4
+GEMINI_RETRY_MIN_SECS = 15   # first wait
+GEMINI_RETRY_MAX_SECS = 90   # cap
+GEMINI_RETRY_JITTER_SECS = 5  # ±seconds added to each wait
+
+
+def _is_gemini_retryable(exc: BaseException) -> bool:
+    """Return True for transient Gemini API errors worth retrying (503, 429, resource exhausted)."""
+    err_str = str(exc).lower()
+    if any(token in err_str for token in ("503", "unavailable", "429", "resource_exhausted", "rate limit", "quota exceeded")):
+        return True
+    if genai_errors is not None:
+        if hasattr(genai_errors, "ServerError") and isinstance(exc, genai_errors.ServerError):
+            return True
+        if hasattr(genai_errors, "ClientError") and isinstance(exc, genai_errors.ClientError):
+            if any(token in err_str for token in ("429", "resource_exhausted", "quota")):
+                return True
+    try:
+        from google.api_core import exceptions as _api_exc
+        if isinstance(exc, (_api_exc.ServiceUnavailable, _api_exc.ResourceExhausted)):
+            return True
+    except ImportError:
+        pass
+    return False
+
+
+def _gemini_call_with_retry(fn, *args, **kwargs):
+    """
+    Call fn(*args, **kwargs) with exponential backoff retry on transient Gemini errors
+    (503 UNAVAILABLE, 429 rate limit). Uses tenacity if available, otherwise a stdlib loop.
+    """
+    if _TENACITY_AVAILABLE:
+        def _before_sleep(retry_state) -> None:
+            exc = retry_state.outcome.exception()
+            n = retry_state.attempt_number
+            logging.warning(
+                "Gemini transient error (attempt %d/%d): %s — retrying...", n, GEMINI_RETRY_ATTEMPTS, exc
+            )
+
+        decorated = _tenacity_retry(
+            stop=_stop_after_attempt(GEMINI_RETRY_ATTEMPTS),
+            retry=_retry_if_exception(_is_gemini_retryable),
+            wait=_wait_exponential(min=GEMINI_RETRY_MIN_SECS, max=GEMINI_RETRY_MAX_SECS),
+            before_sleep=_before_sleep,
+            reraise=True,
+        )(lambda: fn(*args, **kwargs))
+        return decorated()
+
+    # Stdlib fallback: exponential backoff + jitter
+    delay = float(GEMINI_RETRY_MIN_SECS)
+    for attempt in range(1, GEMINI_RETRY_ATTEMPTS + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            if attempt == GEMINI_RETRY_ATTEMPTS or not _is_gemini_retryable(exc):
+                raise
+            jitter = random.uniform(-GEMINI_RETRY_JITTER_SECS, GEMINI_RETRY_JITTER_SECS)
+            wait = min(delay + jitter, GEMINI_RETRY_MAX_SECS)
+            logging.warning(
+                "Gemini transient error (attempt %d/%d): %s — retrying in %.0fs...",
+                attempt, GEMINI_RETRY_ATTEMPTS, exc, wait,
+            )
+            time.sleep(wait)
+            delay = min(delay * 2, GEMINI_RETRY_MAX_SECS)
 
 
 def clear_gemini_cache(delete_on_server: bool = False) -> None:
@@ -79,7 +163,7 @@ RISK_LEVELS = (
 )
 
 # Cost optimization: max chars of evaluation context sent to judge (rest truncated)
-MAX_JUDGE_CONTEXT_CHARS = 2400
+MAX_JUDGE_CONTEXT_CHARS = 4800
 
 # Keys we try (in order) for judge reasoning and risk level (LLMs use varying output shapes)
 JUDGE_REASONING_KEYS = (
@@ -89,7 +173,7 @@ JUDGE_REASONING_KEYS = (
 JUDGE_RISK_LEVEL_KEYS = ("risk_level", "final_risk_level", "decision", "verdict", "level", "result")
 
 # Version tag for cache/log records so we can invalidate old entries
-AGENT_VERSION = "v1.0.1"
+AGENT_VERSION = "v1.0.2"
 
 
 def _load_rubric(relative_path: str) -> Optional[Dict]:
@@ -138,7 +222,7 @@ def _get_or_create_expert_cache(framework_name: str, system_prompt: str) -> str:
             config=types.CreateCachedContentConfig(
                 display_name=display_name,
                 system_instruction=system_prompt,
-                ttl="10800s", # 3 hours
+                ttl="3600s", # 1 hour
             ),
         )
         EXPERT_CACHE_HANDLES[framework_name] = cache.name
@@ -211,27 +295,27 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
         # grounds its assessment in the right criteria.
         rubric_sections: List[str] = []
         if framework_name == "EU AI Act" and RUBRIC_EU_AI_ACT:
-            rubric_sections.append("EU AI Act rubric:\n" + json.dumps(RUBRIC_EU_AI_ACT, indent=2))
+            rubric_sections.append("EU AI Act rubric:\n" + json.dumps(RUBRIC_EU_AI_ACT))
         elif framework_name == "OECD AI Principles" and RUBRIC_OECD:
-            rubric_sections.append("OECD AI Principles rubric:\n" + json.dumps(RUBRIC_OECD, indent=2))
+            rubric_sections.append("OECD AI Principles rubric:\n" + json.dumps(RUBRIC_OECD))
         elif framework_name == "OWASP LLM & Agent":
             # Combine both OWASP LLM and Agentic rubrics if available
             if RUBRIC_OWASP_LLM:
-                rubric_sections.append("OWASP LLM rubric:\n" + json.dumps(RUBRIC_OWASP_LLM, indent=2))
+                rubric_sections.append("OWASP LLM rubric:\n" + json.dumps(RUBRIC_OWASP_LLM))
             if RUBRIC_OWASP_AGENT:
                 rubric_sections.append(
-                    "OWASP Agentic Applications rubric:\n" + json.dumps(RUBRIC_OWASP_AGENT, indent=2)
+                    "OWASP Agentic Applications rubric:\n" + json.dumps(RUBRIC_OWASP_AGENT)
                 )
         elif framework_name == "NIST AI RMF" and RUBRIC_NIST_RMF:
-            rubric_sections.append("NIST AI RMF rubric:\n" + json.dumps(RUBRIC_NIST_RMF, indent=2))
+            rubric_sections.append("NIST AI RMF rubric:\n" + json.dumps(RUBRIC_NIST_RMF))
         elif framework_name == "MITRE ATT&CK" and RUBRIC_MITRE:
-            rubric_sections.append("MITRE ATT&CK (ATLAS) rubric:\n" + json.dumps(RUBRIC_MITRE, indent=2))
+            rubric_sections.append("MITRE ATT&CK (ATLAS) rubric:\n" + json.dumps(RUBRIC_MITRE))
         elif framework_name == "EU PLD (AI)" and RUBRIC_PLD:
-            rubric_sections.append("EU PLD & AILD rubric:\n" + json.dumps(RUBRIC_PLD, indent=2))
+            rubric_sections.append("EU PLD & AILD rubric:\n" + json.dumps(RUBRIC_PLD))
         elif framework_name == "FRIA Core" and RUBRIC_FRIA_CORE:
-            rubric_sections.append("FRIA Core rubric:\n" + json.dumps(RUBRIC_FRIA_CORE, indent=2))
+            rubric_sections.append("FRIA Core rubric:\n" + json.dumps(RUBRIC_FRIA_CORE))
         elif framework_name == "FRIA Extended" and RUBRIC_FRIA_EXTENDED:
-            rubric_sections.append("FRIA Extended rubric:\n" + json.dumps(RUBRIC_FRIA_EXTENDED, indent=2))
+            rubric_sections.append("FRIA Extended rubric:\n" + json.dumps(RUBRIC_FRIA_EXTENDED))
 
         rubric_text = ""
         if rubric_sections:
@@ -248,7 +332,8 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
         # rubric + framework instructions are cached on the provider side.
         cache_name = _get_or_create_expert_cache(framework_name, system_prompt)
         if cache_name:
-            response = GENAI_CLIENT.models.generate_content(
+            response = _gemini_call_with_retry(
+                GENAI_CLIENT.models.generate_content,
                 model="models/gemini-2.5-flash-lite",
                 contents=user_query,
                 config=types.GenerateContentConfig(
@@ -263,7 +348,7 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_query),
             ]
-            ai_msg = llm.invoke(messages)
+            ai_msg = _gemini_call_with_retry(llm.invoke, messages)
             text = (ai_msg.content if isinstance(ai_msg.content, str) else str(ai_msg.content)).strip()
 
         # Parse JSON output with hardening (handles raw JSON or JSON inside ```json fences)
@@ -445,7 +530,7 @@ def judge_node(state: GraphState) -> Dict:
         "Evaluation context:\n"
         f"{context_for_judge}\n\n"
         "Expert assessments (slim):\n"
-        f"{json.dumps(expert_slim, indent=2)}"
+        f"{json.dumps(expert_slim)}"
     )
 
     messages = [
@@ -453,7 +538,7 @@ def judge_node(state: GraphState) -> Dict:
         HumanMessage(content=human_content),
     ]
 
-    ai_msg = llm.invoke(messages)
+    ai_msg = _gemini_call_with_retry(llm.invoke, messages)
     # Gemini (and some LangChain integrations) return content as list of parts, e.g. [{"type": "text", "text": "..."}]
     raw_content = getattr(ai_msg, "content", ai_msg)
     if isinstance(raw_content, str):
@@ -530,30 +615,32 @@ EXPERT_DEFINITIONS = [
     ("expert_fria_extended", "FRIA Extended", "Assess per Fundamental Rights Impact Assessment (FRIA) – Extended rubric and context."),
 ]
 
-# Framework (from test file) -> (primary_expert_id, [related_expert_id_1, related_expert_id_2]).
-# Judge uses 1 framework-specific expert + 2 related; pipeline selects these 3 per run.
+# Framework (from test file) -> (primary_expert_id, related_expert_id).
+# Judge uses 1 framework-specific expert + 1 closely-related expert (2 total) per run.
+# Keeping 2 balances coverage against token cost; the second expert provides a cross-framework
+# check while avoiding the marginal cost of a third near-duplicate opinion.
 FRAMEWORK_TO_EXPERTS: Dict[str, tuple] = {
-    "EU AI Act": ("expert_eu_ai_act", ["expert_fria_core", "expert_pld"]),
-    "OECD AI Principles": ("expert_oecd_ai_principles", ["expert_eu_ai_act", "expert_nist_rmf"]),
-    "OWASP LLM & Agent": ("expert_owasp_llm", ["expert_mitre", "expert_owasp_agent"]),
-    "NIST AI RMF": ("expert_nist_rmf", ["expert_oecd_ai_principles", "expert_eu_ai_act"]),
-    "MITRE ATT&CK": ("expert_mitre", ["expert_owasp_llm", "expert_owasp_agent"]),
-    "EU PLD (AI)": ("expert_pld", ["expert_eu_ai_act", "expert_fria_core"]),
-    "FRIA Core": ("expert_fria_core", ["expert_eu_ai_act", "expert_fria_extended"]),
-    "FRIA Extended": ("expert_fria_extended", ["expert_fria_core", "expert_eu_ai_act"]),
+    "EU AI Act": ("expert_eu_ai_act", "expert_fria_core"),
+    "OECD AI Principles": ("expert_oecd_ai_principles", "expert_eu_ai_act"),
+    "OWASP LLM & Agent": ("expert_owasp_llm", "expert_mitre"),
+    "NIST AI RMF": ("expert_nist_rmf", "expert_eu_ai_act"),
+    "MITRE ATT&CK": ("expert_mitre", "expert_owasp_llm"),
+    "EU PLD (AI)": ("expert_pld", "expert_eu_ai_act"),
+    "FRIA Core": ("expert_fria_core", "expert_eu_ai_act"),
+    "FRIA Extended": ("expert_fria_extended", "expert_fria_core"),
 }
 
 
 def get_experts_for_framework(framework: str) -> List[str]:
     """
-    Return exactly 3 expert IDs for the given framework: 1 framework-specific + 2 related.
-    Used by the pipeline so the judge sees only these 3 assessments per response.
+    Return exactly 2 expert IDs for the given framework: 1 framework-specific + 1 closely-related.
+    Keeping 2 provides a cross-framework check while halving expert call cost vs. 3 experts.
     """
     primary, related = FRAMEWORK_TO_EXPERTS.get(
         framework.strip(),
-        ("expert_eu_ai_act", ["expert_fria_core", "expert_oecd_ai_principles"]),
+        ("expert_eu_ai_act", "expert_fria_core"),
     )
-    return [primary] + list(related)[:2]
+    return [primary, related]
 
 
 def build_graph(selected_expert_ids: Optional[List[str]] = None):
@@ -609,8 +696,9 @@ def _compute_eval_hash(evaluation_input: str, expert_ids: Optional[List[str]] = 
     return h.hexdigest()
 
 
-# Local file cache disabled (Gemini API cache still used for prompt/context caching).
-LOCAL_CACHE_ENABLED = False
+# Local file cache: persists assessment results to disk so repeated runs on the same
+# compliance log cost zero API calls. Invalidate by bumping AGENT_VERSION.
+LOCAL_CACHE_ENABLED = True
 
 
 def _load_cached_result(evaluation_input: str, expert_ids: Optional[List[str]] = None) -> Optional[Dict]:

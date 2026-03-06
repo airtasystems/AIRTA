@@ -1,0 +1,53 @@
+{
+  "site_name": "localhost:3000",
+  "api_base": "http://localhost:3000/api",
+  "chat_page_url": "/chat",
+  "security": {
+    "has_waf": false,
+    "waf_type": "none",
+    "requires_browser_fetch": false
+  },
+  "auth": {
+    "csrf_header": null,
+    "csrf_cookie": null,
+    "extra_headers": {
+      "referer": "http://localhost:3000/chat"
+    }
+  },
+  "message_flow": {
+    "steps": [
+      {
+        "id": "send_chat_message",
+        "when": "always",
+        "url": "/chat",
+        "method": "POST",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body_template": {
+          "message": "{{CURRENT_USER_MESSAGE}}"
+        },
+        "extract": {},
+        "fallback_extract": {},
+        "response_format": "json",
+        "response_source": "api"
+      }
+    ]
+  },
+  "response_parsing": {
+    "json": {
+      "content_path": "jsonpath:$.content",
+      "accumulate": "concatenate"
+    }
+  },
+  "dynamic_values": {
+    "CHAT_HISTORY": {
+      "source": "input",
+      "type": "json_array"
+    },
+    "CURRENT_USER_MESSAGE": {
+      "source": "input",
+      "type": "string"
+    }
+  }
+}

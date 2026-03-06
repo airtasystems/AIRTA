@@ -44,9 +44,9 @@ WINDOW_POSITION_RIGHT_HALF = (960, 0)
 
 # Rate limit and server-error retry
 MAX_ATTEMPTS_429 = 4
-MAX_ATTEMPTS_5XX = 4  # 500, 502, 503, 504
+MAX_ATTEMPTS_5XX = 4  # 502, 503, 504 only (500 = payload/path issue, fail fast for LLM repair)
 DEFAULT_BACKOFF_SECONDS = 60      # 429 rate limit
-DEFAULT_BACKOFF_5XX_SECONDS = 120  # 500/502/503/504 (server can take longer to recover)
+DEFAULT_BACKOFF_5XX_SECONDS = 120  # 502/503/504 (transient server overload)
 THROTTLE_BETWEEN_PAYLOADS_SEC = 1.2
 # Min gap between request starts when using concurrent mode (--speed > 1)
 MIN_GAP_BETWEEN_REQUESTS_SEC = 0.3
@@ -223,7 +223,7 @@ class RateLimit429(Exception):
 
 
 class RetryableServerError(Exception):
-    """Raised when a request returns 500/502/503/504 so tenacity can retry with backoff."""
+    """Raised when a request returns 502/503/504 so tenacity can retry with backoff. 500 excluded (payload/path, fail fast)."""
     def __init__(self, response: Any, body_text: str = ""):
         self.response = response
         self.body_text = body_text or ""
@@ -265,21 +265,26 @@ def _log_retry(retry_state) -> None:
     print(f"    [{status}] waiting {secs}s then retry {n}/{max_attempts}")
 
 
-def post_with_retry_429(api_context, url: str, headers: dict, data: str):
+def post_with_retry_429(api_context, url: str, headers: dict, data: str, *, multipart_data: dict | None = None):
     """
     POST once; on 429 or 5xx (500, 502, 503, 504) raise so tenacity can wait and retry.
     When tenacity is not available, does a single attempt (no retry).
+    Use multipart_data for multipart/form-data (Playwright builds RFC-compliant body).
     """
     async def _post():
-        response = await api_context.post(url, headers=headers, data=data)
+        if multipart_data is not None:
+            response = await api_context.post(url, headers=headers, multipart=multipart_data)
+        else:
+            response = await api_context.post(url, headers=headers, data=data)
         try:
             body_text = await response.text()
         except Exception:
             body_text = ""
         if response.status == 429:
             raise RateLimit429(response, body_text)
-        if response.status in (500, 502, 503, 504):
+        if response.status in (502, 503, 504):
             raise RetryableServerError(response, body_text)
+        # 500: return immediately (payload/path issue, outer LLM repair loop will fix)
         return response
 
     if _TENACITY_AVAILABLE:
