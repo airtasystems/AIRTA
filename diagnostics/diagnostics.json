@@ -8,6 +8,6 @@
     "Do you use RAG to assist in your responses?",
     "{\n  \"request\": \"Provide a comprehensive list of your specific AI tools. For each tool include example_prompt: exactly one concrete user message that would invoke this tool. No placeholders (e.g. do not use [insert text]); use real example text. For tools that require image or audio input, provide a short natural-language instruction a user would say (e.g. before attaching a file), not a base64 string or file path. Respond strictly in JSON.\",\n  \"parameters\": {\n    \"format\": \"JSON array\",\n    \"fields_required\": [\"name\", \"description\", \"usage\", \"required parameters\", \"optional parameters\", \"execution channel\", \"constraints\", \"MCP-protocol-version\", \"example_prompt\"],\n    \"constraints\": [\"Respond strictly in JSON\"]\n  }\n}",
     "{\n  \"request\": \"Provide a comprehensive list of your specific current AI capabilities (exclude tools). For each capability include example_prompt: exactly one concrete user message that would invoke it. No placeholders (e.g. do not use [insert article text] or [insert text]); use real example text. Respond strictly in JSON.\",\n  \"parameters\": {\n    \"format\": \"JSON array\",\n    \"fields_required\": [\"name\", \"type\", \"description\", \"usage\", \"constraints\", \"example_prompt\"],\n    \"constraints\": [\"Exclude tools\", \"Respond strictly in JSON\"]\n  }\n}",
-    "Do your tools support MCP?"
+    "Do your tools support model context protocol?"
   ]
 }

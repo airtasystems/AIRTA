@@ -3,6 +3,11 @@
 Unified AIRTA pipeline entry point.
 Run from project root: python main.py [options]
 
+Commands:
+  pre-discovery  Prompt for site, then run discovery → guide → script → run prompts (pre-discovery pipeline).
+  menu          Interactive menu: discovery, diagnostics, tests, risk assessment (default).
+  run           Full pipeline: discovery, diagnostics, compliance tests, risk assessment.
+
 Orchestrates: optional discovery -> diagnostics (send payloads + analyze_log -> discovery.json) -> compliance tests -> risk assessment -> report.
 
 discovery.json (meta, capabilities, tools, has_context, uses_rag, uses_mcp) is produced before tests so future runs can use it to decide whether to run multishot, agent, or capabilities tests.
@@ -16,10 +21,14 @@ import importlib.util
 import json
 import os
 import subprocess
+import threading
+import time
 import types
 from pathlib import Path
 from typing import Any
 from datetime import datetime
+
+REFRESH_INTERVAL_MINUTES = 4
 
 # Strategies for generate-tests (must match generator.py choices)
 GENERATE_TESTS_STRATEGIES = [
@@ -167,6 +176,37 @@ def _run_generate_tests_submenu(root: Path, discovery_config: Any = None) -> Non
         print("  Invalid choice.")
 
 
+def _menu_refresh_loop() -> None:
+    """Background thread: refresh session every REFRESH_INTERVAL_MINUTES. Output prefixed [auto-refresh]."""
+    from component_discovery import auth, config as discovery_config
+    _stdout = sys.stdout
+
+    class _PrefixStdout:
+        def __init__(self, prefix: str) -> None:
+            self._prefix = prefix
+            self._inner = _stdout
+
+        def write(self, s: str) -> None:
+            if s:
+                self._inner.write((self._prefix + s).replace("\n", "\n" + self._prefix))
+
+        def flush(self) -> None:
+            self._inner.flush()
+
+    while True:
+        time.sleep(REFRESH_INTERVAL_MINUTES * 60)
+        if not discovery_config.AUTH_STATE_FILE.exists():
+            continue
+        try:
+            sys.stdout = _PrefixStdout("[auto-refresh] ")
+            try:
+                print()
+                asyncio.run(auth.refresh_session())
+            finally:
+                sys.stdout = _stdout
+        except Exception as e:
+            print(f"[!] Background refresh failed: {e}")
+
 # Load .config and .env so COMPONENT etc. are available for CLI defaults
 _root = Path(__file__).resolve().parent
 try:
@@ -192,7 +232,7 @@ def _setup_paths(root: Path) -> None:
     pkg.__file__ = str(cd_dir / "__init__.py")
     sys.modules["component_discovery"] = pkg
 
-    load_order = ["config", "payload_format", "auth", "discover", "generate_site_payload", "analyze_trace"]
+    load_order = ["config", "payload_format", "auth", "discover", "generate_site_payload"]
     for name in load_order:
         py_file = cd_dir / f"{name}.py"
         if not py_file.exists():
@@ -240,38 +280,13 @@ def _setup_paths(root: Path) -> None:
                 spec.loader.exec_module(mod)
 
 
-async def _run_capture_analyze() -> bool:
-    """
-    Discovery: 4 steps only.
-    1) Access site
-    2) Capture full stack trace (auth, AI endpoints, request/response formats)
-    3) Gemini converts trace to standard repeatable JSON (site_profile.json)
-    4) Test prompt proves it works
-    """
-    from component_discovery import discover, analyze_trace
-    from pipeline import profile_validate
+async def _run_discovery() -> bool:
+    """Run unified discovery: one browser session (login, then 3 messages), then generate-payload-module. Returns True if successful."""
+    from component_discovery import discover, generate_site_payload
 
-    # Step 1–2: Access site and capture stack trace
-    print("[*] Step 1–2: Access site and capture stack trace (send 3 messages, then Enter) ...")
-    trace_path = await discover.capture_site_trace(headless=False)
-    if trace_path is None:
-        print("[-] Capture failed.")
-        return False
-
-    # Step 3: Gemini converts trace to site_profile.json
-    print("[*] Step 3: Converting trace to site_profile.json with Gemini ...")
-    profile_path = analyze_trace.analyze_trace(trace_path)
-    if profile_path is None:
-        print("[-] Trace analysis failed. Try again or re-run capture with different messages.")
-        return False
-
-    # Step 4: Test prompt with repair loop (LLM fixes profile on failure until test passes)
-    print("[*] Step 4: Test prompt (with LLM repair loop on failure) ...")
-    passed = await profile_validate.run_discovery_test_prompt_with_repair_loop(profile_path, verbose=True)
-    if not passed:
-        print("[!] Test failed after repair attempts. Inspect site_profile.json and raw_trace.json.")
-
-    print("[+] Discovery complete. raw_trace.json + site_profile.json ready.")
+    print("[*] Running unified discovery (browser will open: login, then send 3 messages in the AI component)...")
+    await discover.discover_unified(headless=False)
+    generate_site_payload.generate_payload_module()
     return True
 
 
@@ -402,9 +417,8 @@ def _run_tests_and_assess(
 
 def _run_run_tests_submenu(root: Path, discovery_config: Any, speed: int = 1) -> None:
     """Sub-menu: run compliance tests + risk assessment for one or many strategy/framework combinations."""
-    has_profile = (discovery_config.SITE_STATE_DIR / "site_profile.json").exists()
-    if not has_profile and not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
-        print("[-] No site_profile.json or discovered endpoint. Run Discovery (2) first.")
+    if not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
+        print("[-] No discovered endpoint. Run Discovery (2) first.")
         return
     if not discovery_config.AUTH_STATE_FILE.exists():
         print("[-] No auth state. Run Discovery (2) first.")
@@ -741,7 +755,7 @@ def _run_export_genbounty_submenu(discovery_config: Any) -> None:
 
 
 def _run_menu(args) -> None:
-    """Interactive menu: discovery, diagnostics, tests, risk assessment."""
+    """Interactive menu: discovery, diagnostics, or refresh. Auth refresh runs in background every 4 min."""
     root = Path(__file__).resolve().parent
     os.chdir(root)
     os.environ["COMPONENT"] = getattr(args, "component", None) or os.getenv("COMPONENT", "default")
@@ -749,45 +763,46 @@ def _run_menu(args) -> None:
 
     from component_discovery import config as discovery_config
 
+    # Start background auth refresh every 4 minutes
+    refresh_thread = threading.Thread(target=_menu_refresh_loop, daemon=True)
+    refresh_thread.start()
     print()
-    print("  AIRTA — menu")
+    print("  AIRTA — menu (auth refresh every 4 min in background)")
     print()
 
     while True:
         print()
         print("  AIRTA — menu")
         print()
-        print("  1) Full configuration — Run Discovery → Diagnostics → Tools & caps")
-        print("  2) Discovery           — Full network capture + LLM analysis → site_profile.json")
+        print("  1) Full configuration — Run Discovery → Diagnostics → Tools & caps → Refresh (auto)")
+        print("  2) Discovery           — Login + capture 3 messages + generate payload module")
         print("  3) Diagnostics        — Send diagnostics payloads + analyze_log → discovery.json")
         print("  4) Tools & caps        — Test each tool/capability (example_prompt), then assess → component_assessment.json")
-        print("  5) Generate tests      — Select strategy + framework, generate test prompts JSON")
-        print("  6) Run tests           — Select strategy + framework, send prompts → compliance_log.json")
-        print("  7) Risk assessment     — Pick a compliance log, run risk assessment → pipeline_report.json")
-        print("  8) Export to Genbounty — Pick a compliance log, upload results via bulk-import API")
-        print("  9) Exit")
+        print("  5) Refresh now         — Refresh session + CSRF once")
+        print("  6) Generate tests      — Select strategy + framework, generate test prompts JSON")
+        print("  7) Run tests           — Select strategy + framework, send prompts → compliance_log.json")
+        print("  8) Risk assessment     — Pick a compliance log, run risk assessment → pipeline_report.json")
+        print("  9) Export to Genbounty — Pick a compliance log, upload results via bulk-import API")
+        print(" 10) Exit")
         print()
         try:
-            choice = input("  Choice [1-9]: ").strip()
+            choice = input("  Choice [1-10]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if not choice:
             continue
-        if choice == "9" or choice.lower() == "q":
+        if choice == "10" or choice.lower() == "q":
             break
         if choice == "1":
             # Full configuration: 1 → 2 → 3 → 4 in sequence, single log dir
             run_timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+            log_dir = discovery_config.SITE_STATE_DIR / "logs" / run_timestamp
+            log_dir.mkdir(parents=True, exist_ok=True)
             speed = getattr(args, "speed", 1)
             try:
                 print("[*] Full configuration: 1) Discovery...")
-                asyncio.run(_run_capture_analyze())
-                import importlib
-                importlib.reload(discovery_config)
-                # Create log_dir after capture+reload so SITE_STATE_DIR matches actual site/component
-                log_dir = discovery_config.SITE_STATE_DIR / "logs" / run_timestamp
-                log_dir.mkdir(parents=True, exist_ok=True)
+                asyncio.run(_run_discovery())
                 print("[+] Discovery done.")
                 print("[*] Full configuration: 2) Diagnostics...")
                 diagnostics_path = root / "diagnostics" / "diagnostics.json"
@@ -813,30 +828,30 @@ def _run_menu(args) -> None:
                     asyncio.run(run_availability.run_capabilities_availability(
                         discovery_config, discovery_json_path, log_dir=log_dir, verbose=True, speed=speed
                     ))
-                    assess_availability.assess_availability_and_write(
-                        discovery_config.SITE_STATE_DIR,
-                        tools_log_path=log_dir / "tools_availability_log.json",
-                        capabilities_log_path=log_dir / "capabilities_availability_log.json",
-                        base_url=getattr(discovery_config, "BASE_URL", None) or os.getenv("APP_URL"),
-                        log_dir=log_dir,
-                    )
-                    print("[+] Tools & caps done.")
+                assess_availability.assess_availability_and_write(
+                    discovery_config.SITE_STATE_DIR,
+                    tools_log_path=log_dir / "tools_availability_log.json",
+                    capabilities_log_path=log_dir / "capabilities_availability_log.json",
+                    base_url=getattr(discovery_config, "BASE_URL", None) or os.getenv("APP_URL"),
+                    log_dir=log_dir,
+                )
+                print("[+] Tools & caps done.")
+                print("[*] Full configuration: 4) Refresh...")
+                from component_discovery import auth
+                ok = asyncio.run(auth.refresh_session())
+                print("[+] Session refreshed." if ok else "[-] Refresh failed.")
                 print(f"[+] Full configuration complete. Logs: {log_dir}")
             except Exception as e:
                 print(f"[!] Full configuration failed: {e}")
         elif choice == "2":
             try:
-                asyncio.run(_run_capture_analyze())
-                import importlib
-                discovery_config = importlib.reload(discovery_config)
+                asyncio.run(_run_discovery())
                 print("[+] Discovery done.")
             except Exception as e:
                 print(f"[!] Discovery failed: {e}")
         elif choice == "3":
-            has_profile = (discovery_config.SITE_STATE_DIR / "site_profile.json").exists()
-            has_endpoint = discovery_config.DISCOVERED_ENDPOINT_FILE.exists()
-            if not has_profile and not has_endpoint:
-                print("[-] No site_profile.json or discovered endpoint. Run Discovery (2) first.")
+            if not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
+                print("[-] No discovered endpoint. Run Discovery (2) first.")
                 continue
             if not discovery_config.AUTH_STATE_FILE.exists():
                 print("[-] No auth state. Run Discovery (2) first.")
@@ -860,15 +875,14 @@ def _run_menu(args) -> None:
                     analyze_log.analyze_log_and_write_discovery(
                         discovery_config.SITE_STATE_DIR, diagnostics_log_path=diag_log_path
                     )
-                    print("[+] Diagnostics done.")
+                    print("[+] Diagnostics done; discovery.json updated.")
             except Exception as e:
                 print(f"[!] Diagnostics failed: {e}")
         elif choice == "4":
             # Tools & capabilities availability: send example_prompt per tool/capability, then agent assessment
             discovery_json_path = discovery_config.SITE_STATE_DIR / "discovery.json"
-            has_profile_4 = (discovery_config.SITE_STATE_DIR / "site_profile.json").exists()
-            if not has_profile_4 and not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
-                print("[-] No site_profile.json or discovered endpoint. Run Discovery (2) first.")
+            if not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
+                print("[-] No discovered endpoint. Run Discovery (2) first.")
                 continue
             if not discovery_config.AUTH_STATE_FILE.exists():
                 print("[-] No auth state. Run Discovery (2) first.")
@@ -902,16 +916,37 @@ def _run_menu(args) -> None:
             except Exception as e:
                 print(f"[!] Tools/capabilities availability or assessment failed: {e}")
         elif choice == "5":
-            _run_generate_tests_submenu(root, discovery_config=discovery_config)
+            from component_discovery import auth
+            try:
+                ok = asyncio.run(auth.refresh_session())
+                print("[+] Session refreshed." if ok else "[-] Refresh failed.")
+            except Exception as e:
+                print(f"[!] Refresh failed: {e}")
         elif choice == "6":
-            _run_run_tests_submenu(root, discovery_config, speed=getattr(args, "speed", 1))
+            _run_generate_tests_submenu(root, discovery_config=discovery_config)
         elif choice == "7":
-            _run_risk_assessment_submenu(discovery_config)
+            _run_run_tests_submenu(root, discovery_config, speed=getattr(args, "speed", 1))
         elif choice == "8":
+            _run_risk_assessment_submenu(discovery_config)
+        elif choice == "9":
             _run_export_genbounty_submenu(discovery_config)
         else:
             print("  Invalid choice.")
     print("  Bye.")
+
+
+def _run_pre_discovery(args) -> int:
+    """Run pre-discovery pipeline: prompt for site, then discover → guide → script → run prompts."""
+    root = Path(__file__).resolve().parent
+    os.chdir(root)
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    # Run as module so pre-discovery package imports work
+    result = subprocess.run(
+        [sys.executable, "-m", "pre-discovery.main"],
+        cwd=str(root),
+    )
+    return result.returncode
 
 
 def main() -> None:
@@ -921,6 +956,11 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", help="Command")
     run_p = sub.add_parser("run", help="Run full pipeline (discovery, diagnostics, compliance tests, risk assessment).")
     menu_p = sub.add_parser("menu", help="Interactive menu: run Discovery or Diagnostics only (default if no command).")
+    pre_p = sub.add_parser(
+        "pre-discovery",
+        help="Pre-discovery pipeline: prompt for site, then discover API → guide → script → run prompts.",
+    )
+    pre_p.set_defaults(_run=_run_pre_discovery)
 
     def _norm_hyphens(s: str) -> str:
         return s.strip().replace("-", "_")
@@ -998,6 +1038,9 @@ def main() -> None:
     args = parser.parse_args()
     command = getattr(args, "command", None)
 
+    if command == "pre-discovery":
+        sys.exit(getattr(args, "_run", _run_pre_discovery)(args))
+
     if command is None or command == "menu":
         menu_args = args if command == "menu" else argparse.Namespace(
             component=os.getenv("COMPONENT", "default"),
@@ -1046,23 +1089,21 @@ def run_pipeline(args) -> dict | None:
     # 1. Optional discovery: skip if component dir exists with endpoint + auth files
     discovery_state_present = (
         discovery_config.SITE_STATE_DIR.exists()
-        and (discovery_config.DISCOVERED_ENDPOINT_FILE.exists()
-             or (discovery_config.SITE_STATE_DIR / "site_profile.json").exists())
+        and discovery_config.DISCOVERED_ENDPOINT_FILE.exists()
         and discovery_config.AUTH_STATE_FILE.exists()
     )
     if not args.skip_discovery and not args.force_discovery:
         if discovery_state_present:
             print(f"[*] Using existing discovery state ({discovery_config.SITE_STATE_DIR}); skipping discovery.")
         else:
-            print("[*] Discovery state missing; running capture-analyze discovery...")
-            asyncio.run(_run_capture_analyze())
+            print("[*] Discovery state missing; running discovery (login + discover + generate-payload)...")
+            asyncio.run(_run_discovery())
     elif args.force_discovery:
         print("[*] Force discovery...")
-        asyncio.run(_run_capture_analyze())
+        asyncio.run(_run_discovery())
 
-    has_profile_run = (discovery_config.SITE_STATE_DIR / "site_profile.json").exists()
-    if not has_profile_run and not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
-        print("[-] No discovered endpoint or site_profile.json. Run without --skip-discovery or run discovery first.")
+    if not discovery_config.DISCOVERED_ENDPOINT_FILE.exists():
+        print("[-] No discovered endpoint. Run without --skip-discovery or run discovery first.")
         return None
     if not discovery_config.AUTH_STATE_FILE.exists():
         print("[-] No auth state. Run without --skip-discovery or run login first.")

@@ -3,13 +3,12 @@ Gemini-powered intermediary: read discovered_endpoint.json, identify user-input
 fields in the payload_schema, and generate site-specific payload_format.py and
 send_payloads.py in the site dir (e.g. localhost3000).
 """
-import importlib
 import json
 import os
 from pathlib import Path
 from typing import Any
 
-from . import config as config_module
+from .config import DISCOVERED_ENDPOINT_FILE, DIAGNOSTICS_FILE, SITE_STATE_DIR
 
 # Optional: use google genai (same as A01/1_api_gemini.py)
 try:
@@ -89,14 +88,12 @@ def _generate_payload_format_py(
     payload_key_to_field: dict[str, str],
     *,
     has_strategies: bool = False,
-    prompt_field: str | None = None,
 ) -> str:
     """Generate site-specific payload_format.py: self-contained build logic, no shared import.
     When has_strategies is True, build_body accepts strategy='zero_shot'|'few_shot'|'multi_shot'
     and uses the corresponding format from discovered_endpoint.json strategies.
     """
     mapping_repr = json.dumps(payload_key_to_field, indent=2)
-    prompt_field_line = f'\nPROMPT_FIELD = {json.dumps(prompt_field)}\n' if prompt_field else "\nPROMPT_FIELD = None\n"
     strategy_loader = ""
     build_body_signature = "def build_body(payload_format: dict[str, Any], overrides: dict[str, Any] | None = None) -> tuple[str, str]:"
     strategy_switch = ""
@@ -132,7 +129,7 @@ from typing import Any
 
 # payload_key -> form field name (from Gemini analysis)
 PAYLOAD_KEY_TO_FIELD = {mapping_repr}
-{prompt_field_line}{strategy_loader}
+{strategy_loader}
 
 
 def _coerce_value(v: Any) -> Any:
@@ -247,7 +244,7 @@ async def send_payloads() -> None:
         return
 
     if not await auth_module.ensure_session_fresh():
-        print("[-] Session invalid. Run discovery (login + capture) first.")
+        print("[-] Session refresh failed. Run 'login' or 'refresh' and try again.")
         return
 
     url = discovered["url"]
@@ -309,16 +306,11 @@ def generate_payload_module() -> None:
     Load discovered_endpoint.json, call Gemini to identify user-input fields,
     write SITE_STATE_DIR/payload_format.py and SITE_STATE_DIR/send_payloads.py.
     """
-    importlib.reload(config_module)
-    discovered_file = config_module.DISCOVERED_ENDPOINT_FILE
-    site_state_dir = config_module.SITE_STATE_DIR
-    diagnostics_file = config_module.DIAGNOSTICS_FILE
-
-    if not discovered_file.exists():
-        print(f"[-] No discovered endpoint at {discovered_file}. Run 'discover' first.")
+    if not DISCOVERED_ENDPOINT_FILE.exists():
+        print(f"[-] No discovered endpoint at {DISCOVERED_ENDPOINT_FILE}. Run 'discover' first.")
         return
 
-    discovered = json.loads(discovered_file.read_text())
+    discovered = json.loads(DISCOVERED_ENDPOINT_FILE.read_text())
     payload_format = discovered.get("payload_format") or {}
     fields = payload_format.get("fields", {})
     encoding = payload_format.get("encoding", "application/json")
@@ -326,10 +318,6 @@ def generate_payload_module() -> None:
     if not fields:
         print("[-] No payload_format.fields in discovered endpoint. Run 'discover' first.")
         return
-
-    prompt_field = discovered.get("prompt_field")
-    if prompt_field:
-        print(f"[*] Auto-detected prompt field from discovery: {prompt_field}")
 
     print("[*] Calling Gemini to identify user-input fields...")
     try:
@@ -340,9 +328,6 @@ def generate_payload_module() -> None:
 
     user_input_fields = result.get("user_input_fields", [])
     payload_key_to_field = result.get("payload_key_to_field") or {"title": "title", "text": "description"}
-
-    if prompt_field and prompt_field not in payload_key_to_field.values():
-        payload_key_to_field.setdefault("prompt", prompt_field)
     payload_shape = result.get("payload_shape")
     if not payload_shape or not isinstance(payload_shape, dict):
         payload_shape = {"title": "Example", "text": "Sample description or body text."}
@@ -365,32 +350,28 @@ def generate_payload_module() -> None:
     print(f"[*] Payload key -> field: {payload_key_to_field}")
     print(f"[*] Payload shape (samples): {list(payload_shape.keys())}")
 
-    site_state_dir.mkdir(parents=True, exist_ok=True)
+    SITE_STATE_DIR.mkdir(parents=True, exist_ok=True)
 
     has_strategies = bool(discovered.get("strategies"))
     if has_strategies:
         print("[*] Discovered endpoint has strategies (few_shot, multi_shot); generating strategy-aware payload_format.")
 
-    payload_format_path = site_state_dir / "payload_format.py"
+    payload_format_path = SITE_STATE_DIR / "payload_format.py"
     payload_format_path.write_text(
-        _generate_payload_format_py(
-            payload_key_to_field,
-            has_strategies=has_strategies,
-            prompt_field=prompt_field,
-        ),
+        _generate_payload_format_py(payload_key_to_field, has_strategies=has_strategies),
         encoding="utf-8",
     )
     print(f"[+] Wrote {payload_format_path}")
 
-    send_payloads_path = site_state_dir / "send_payloads.py"
+    send_payloads_path = SITE_STATE_DIR / "send_payloads.py"
     send_payloads_path.write_text(_generate_send_payloads_py(), encoding="utf-8")
     print(f"[+] Wrote {send_payloads_path}")
 
     # Build payloads.json from diagnostics with the component's payload shape
-    payloads_file = site_state_dir / "payloads.json"
-    if diagnostics_file.exists():
+    payloads_file = SITE_STATE_DIR / "payloads.json"
+    if DIAGNOSTICS_FILE.exists():
         try:
-            diag_data = json.loads(diagnostics_file.read_text())
+            diag_data = json.loads(DIAGNOSTICS_FILE.read_text())
             diagnostics = diag_data.get("diagnostics")
             if isinstance(diagnostics, list) and diagnostics:
                 if "messages" in payload_shape:
@@ -416,10 +397,10 @@ def generate_payload_module() -> None:
                 payloads_file.write_text(json.dumps({"payloads": payloads}, indent=2), encoding="utf-8")
                 print(f"[+] Wrote {payloads_file} ({len(payloads)} payloads from diagnostics)")
             else:
-                print(f"[*] No 'diagnostics' array in {diagnostics_file}; skipping payloads.json")
+                print(f"[*] No 'diagnostics' array in {DIAGNOSTICS_FILE}; skipping payloads.json")
         except (json.JSONDecodeError, OSError) as e:
             print(f"[!] Could not load diagnostics: {e}; skipping payloads.json")
     else:
-        print(f"[*] No {diagnostics_file}; skipping payloads.json")
+        print(f"[*] No {DIAGNOSTICS_FILE}; skipping payloads.json")
 
     print("[*] Use: python -m component_discovery send-payloads")

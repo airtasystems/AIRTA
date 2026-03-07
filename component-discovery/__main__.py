@@ -1,12 +1,13 @@
 """
 CLI for the LLM endpoint discovery app.
 
-  python -m component_discovery run   # Interactive loop: login, discover, generate, test payloads
+  python -m component_discovery run   # Interactive loop: login, discover, generate, refresh, test payloads
   python -m component_discovery login
   python -m component_discovery discover
   python -m component_discovery discover-multi   # Capture 3 messages to see full-history vs incremental
   python -m component_discovery discover-unified # One flow: login, then 3 messages → zero/few/multi formats + generate
   python -m component_discovery generate-payload-module
+  python -m component_discovery refresh
   python -m component_discovery send-payloads   # Or use "Test payloads" from the run menu
 """
 import os
@@ -15,6 +16,8 @@ os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 import argparse
 import asyncio
 import sys
+import threading
+import time
 from pathlib import Path
 
 # Ensure project root on path so pipeline and diagnostics are resolvable (auth/discover use pipeline.evasion)
@@ -29,6 +32,10 @@ from pipeline import send_payloads
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def cmd_refresh(args):
+    _run(auth.refresh_session())
 
 
 def _send_payloads_impl():
@@ -102,6 +109,10 @@ def cmd_run_availability(args):
     assess_availability.assess_availability_and_write(SITE_STATE_DIR, tools_log_path=log_dir / "tools_availability_log.json", capabilities_log_path=log_dir / "capabilities_availability_log.json")
 
 
+def cmd_refresh_interval(args):
+    _run(send_payloads.run_refresh_every(minutes=args.minutes))
+
+
 async def _run_login_then_discover(headless: bool):
     await auth.capture_login_and_csrf(headless=headless)
     await discover.discover_endpoint(headless=headless)
@@ -136,11 +147,47 @@ def cmd_generate_payload_module(args):
     generate_site_payload.generate_payload_module()
 
 
+REFRESH_INTERVAL_MINUTES = 4
+
+
+def _refresh_loop():
+    """Background thread: refresh session every REFRESH_INTERVAL_MINUTES. Output prefixed [auto-refresh]."""
+    import sys
+    _stdout = sys.stdout
+
+    class _PrefixStdout:
+        def __init__(self, prefix):
+            self._prefix = prefix
+            self._inner = _stdout
+        def write(self, s):
+            if s:
+                self._inner.write((self._prefix + s).replace("\n", "\n" + self._prefix))
+        def flush(self):
+            self._inner.flush()
+
+    while True:
+        time.sleep(REFRESH_INTERVAL_MINUTES * 60)
+        if not AUTH_STATE_FILE.exists():
+            continue
+        try:
+            sys.stdout = _PrefixStdout("[auto-refresh] ")
+            try:
+                print()  # newline so output doesn't run into the prompt line
+                asyncio.run(auth.refresh_session())
+            finally:
+                sys.stdout = _stdout
+        except Exception as e:
+            print(f"[!] Background refresh failed: {e}")
+
+
 def _run_loop_menu():
-    """Interactive menu loop."""
+    """Interactive menu loop; refresh runs in background every 4 min."""
     print()
-    print("  Component Discovery — interactive")
+    print("  Component Discovery — interactive (auth refresh every 4 min)")
     print()
+    # Start background refresh
+    refresh_thread = threading.Thread(target=_refresh_loop, daemon=True)
+    refresh_thread.start()
 
     while True:
         print()
@@ -148,18 +195,19 @@ def _run_loop_menu():
         print("  2) Discover       — intercept one API request (browser)")
         print("  3) Discover multi — intercept 3 messages in one conversation (browser)")
         print("  4) Generate       — Gemini: payload_format + send_payloads; payloads.json from diagnostics")
-        print("  5) Test payloads — send payloads.json to discovered endpoint (same as send-payloads)")
-        print("  6) Analyze log    — Gemini: analyze latest *_log.json → discovery.json")
-        print("  7) Exit")
+        print("  5) Refresh now    — refresh session + CSRF once")
+        print("  6) Test payloads — send payloads.json to discovered endpoint (same as send-payloads)")
+        print("  7) Analyze log    — Gemini: analyze latest *_log.json → discovery.json")
+        print("  8) Exit")
         print()
         try:
-            choice = input("  Choice [1-7]: ").strip()
+            choice = input("  Choice [1-8]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if not choice:
             continue
-        if choice == "7" or choice.lower() == "q":
+        if choice == "8" or choice.lower() == "q":
             break
         if choice == "1":
             _run(auth.capture_login_and_csrf(headless=False))
@@ -171,8 +219,10 @@ def _run_loop_menu():
             from . import generate_site_payload
             generate_site_payload.generate_payload_module()
         elif choice == "5":
-            _send_payloads_impl()
+            _run(auth.refresh_session())
         elif choice == "6":
+            _send_payloads_impl()
+        elif choice == "7":
             import sys
             from pathlib import Path
             _root = Path(__file__).resolve().parent.parent
@@ -203,7 +253,7 @@ def main():
 
     run_p = sub.add_parser(
         "run",
-        help="Interactive loop: menu for login/discover/generate/test payloads.",
+        help="Interactive loop: menu for login/discover/generate/refresh; auth refresh every 4 min in background.",
     )
     run_p.set_defaults(func=cmd_run)
 
@@ -240,6 +290,12 @@ def main():
         help="Use Gemini to analyze payload_schema, write site-specific payload_format.py and send_payloads.py.",
     )
     gen_p.set_defaults(func=cmd_generate_payload_module)
+
+    refresh_p = sub.add_parser(
+        "refresh",
+        help="Refresh auth tokens (site requires refresh every 14 minutes).",
+    )
+    refresh_p.set_defaults(func=cmd_refresh)
 
     send_p = sub.add_parser(
         "send-payloads",
@@ -281,6 +337,19 @@ def main():
     )
     run_avail_p.set_defaults(func=cmd_run_availability)
     run_avail_p.add_argument("--speed", type=float, default=1, help="Delay multiplier between requests (default: 1).")
+
+    interval_p = sub.add_parser(
+        "refresh-interval",
+        help="Run refresh (session + CSRF) every N minutes. Default 4. Ctrl+C to stop.",
+    )
+    interval_p.set_defaults(func=cmd_refresh_interval)
+    interval_p.add_argument(
+        "--minutes",
+        type=float,
+        default=4,
+        metavar="N",
+        help="Interval in minutes (default: 4).",
+    )
 
     args = parser.parse_args()
     args.func(args)

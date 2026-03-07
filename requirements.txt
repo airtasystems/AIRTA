@@ -7,4 +7,3 @@ google-genai
 
 # component-discovery (browser automation + auth)
 playwright
-zstandard

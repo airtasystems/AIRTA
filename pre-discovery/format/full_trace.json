@@ -1,0 +1,2759 @@
+{
+  "captured_at": "2026-03-07T11:36:25.144671+00:00",
+  "app_url": "https://deepai.org/chat",
+  "request_count": 55,
+  "requests": [
+    {
+      "timestamp": "2026-03-07T11:36:19.954246+00:00",
+      "elapsed_ms": 966,
+      "url": "https://deepai.org/",
+      "path": "/",
+      "method": "GET",
+      "headers": {
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.025013+00:00",
+      "elapsed_ms": 1037,
+      "url": "https://browser.sentry-cdn.com/7.19.0/bundle.min.js",
+      "path": "/7.19.0/bundle.min.js",
+      "method": "GET",
+      "headers": {
+        "origin": "https://deepai.org",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.025540+00:00",
+      "elapsed_ms": 1038,
+      "url": "https://www.googletagmanager.com/gtag/js?id=G-GY2GHX2J9Y",
+      "path": "/gtag/js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "id": [
+          "G-GY2GHX2J9Y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.036870+00:00",
+      "elapsed_ms": 1049,
+      "url": "https://static.ads-twitter.com/uwt.js",
+      "path": "/uwt.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.238825+00:00",
+      "elapsed_ms": 1251,
+      "url": "https://deepai.org/static/js/libs/dialog-polyfill.js",
+      "path": "/static/js/libs/dialog-polyfill.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.254192+00:00",
+      "elapsed_ms": 1266,
+      "url": "https://api.deepai.org/daily-time-sync/user/",
+      "path": "/daily-time-sync/user/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {}
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.254542+00:00",
+      "elapsed_ms": 1267,
+      "url": "https://api.deepai.org/get_geo_ip",
+      "path": "/get_geo_ip",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {}
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.312663+00:00",
+      "elapsed_ms": 1325,
+      "url": "https://t.co/1/i/adsct?bci=4&dv=Europe%2FLondon%26en-GB%26Google%20Inc.%26Linux%20x86_64%26255%26960%261080%268%2624%26960%261080%260%26na&eci=3&event=%7B%7D&event_id=bb885e70-272b-424c-8cbe-34ab53460ebd&integration=advertiser&p_id=Twitter&p_user_id=0&pl_id=b7665795-7f73-46ff-8c24-21b8fc0472b3&pt=DeepAI&tw_document_href=https%3A%2F%2Fdeepai.org%2F&tw_iframe_status=0&tw_pid_src=1&twpid=tw.1772883380284.525752235998008964&txn_id=pzofp&type=javascript&version=2.3.41",
+      "path": "/1/i/adsct",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "bci": [
+          "4"
+        ],
+        "dv": [
+          "Europe/London&en-GB&Google Inc.&Linux x86_64&255&960&1080&8&24&960&1080&0&na"
+        ],
+        "eci": [
+          "3"
+        ],
+        "event": [
+          "{}"
+        ],
+        "event_id": [
+          "bb885e70-272b-424c-8cbe-34ab53460ebd"
+        ],
+        "integration": [
+          "advertiser"
+        ],
+        "p_id": [
+          "Twitter"
+        ],
+        "p_user_id": [
+          "0"
+        ],
+        "pl_id": [
+          "b7665795-7f73-46ff-8c24-21b8fc0472b3"
+        ],
+        "pt": [
+          "DeepAI"
+        ],
+        "tw_document_href": [
+          "https://deepai.org/"
+        ],
+        "tw_iframe_status": [
+          "0"
+        ],
+        "tw_pid_src": [
+          "1"
+        ],
+        "twpid": [
+          "tw.1772883380284.525752235998008964"
+        ],
+        "txn_id": [
+          "pzofp"
+        ],
+        "type": [
+          "javascript"
+        ],
+        "version": [
+          "2.3.41"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.313641+00:00",
+      "elapsed_ms": 1326,
+      "url": "https://analytics.twitter.com/1/i/adsct?bci=4&dv=Europe%2FLondon%26en-GB%26Google%20Inc.%26Linux%20x86_64%26255%26960%261080%268%2624%26960%261080%260%26na&eci=3&event=%7B%7D&event_id=bb885e70-272b-424c-8cbe-34ab53460ebd&integration=advertiser&p_id=Twitter&p_user_id=0&pl_id=b7665795-7f73-46ff-8c24-21b8fc0472b3&pt=DeepAI&tw_document_href=https%3A%2F%2Fdeepai.org%2F&tw_iframe_status=0&tw_pid_src=1&twpid=tw.1772883380284.525752235998008964&txn_id=pzofp&type=javascript&version=2.3.41",
+      "path": "/1/i/adsct",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "bci": [
+          "4"
+        ],
+        "dv": [
+          "Europe/London&en-GB&Google Inc.&Linux x86_64&255&960&1080&8&24&960&1080&0&na"
+        ],
+        "eci": [
+          "3"
+        ],
+        "event": [
+          "{}"
+        ],
+        "event_id": [
+          "bb885e70-272b-424c-8cbe-34ab53460ebd"
+        ],
+        "integration": [
+          "advertiser"
+        ],
+        "p_id": [
+          "Twitter"
+        ],
+        "p_user_id": [
+          "0"
+        ],
+        "pl_id": [
+          "b7665795-7f73-46ff-8c24-21b8fc0472b3"
+        ],
+        "pt": [
+          "DeepAI"
+        ],
+        "tw_document_href": [
+          "https://deepai.org/"
+        ],
+        "tw_iframe_status": [
+          "0"
+        ],
+        "tw_pid_src": [
+          "1"
+        ],
+        "twpid": [
+          "tw.1772883380284.525752235998008964"
+        ],
+        "txn_id": [
+          "pzofp"
+        ],
+        "type": [
+          "javascript"
+        ],
+        "version": [
+          "2.3.41"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.431091+00:00",
+      "elapsed_ms": 1443,
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-GY2GHX2J9Y&gtm=45je6341v9104459017za200zd9104459017&_p=1772883380030&_gaz=1&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=387621767.1772883380&ul=en-gb&sr=960x1080&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAGA&_s=1&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&sid=1772883380&sct=1&seg=0&dl=https%3A%2F%2Fdeepai.org%2F&dt=DeepAI&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=452",
+      "path": "/g/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "v": [
+          "2"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "_p": [
+          "1772883380030"
+        ],
+        "_gaz": [
+          "1"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "npa": [
+          "0"
+        ],
+        "dma": [
+          "0"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "ul": [
+          "en-gb"
+        ],
+        "sr": [
+          "960x1080"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "are": [
+          "1"
+        ],
+        "frm": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "_eu": [
+          "AAAAAGA"
+        ],
+        "_s": [
+          "1"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ],
+        "sid": [
+          "1772883380"
+        ],
+        "sct": [
+          "1"
+        ],
+        "seg": [
+          "0"
+        ],
+        "dl": [
+          "https://deepai.org/"
+        ],
+        "dt": [
+          "DeepAI"
+        ],
+        "en": [
+          "page_view"
+        ],
+        "_fv": [
+          "1"
+        ],
+        "_nsi": [
+          "1"
+        ],
+        "_ss": [
+          "1"
+        ],
+        "_ee": [
+          "1"
+        ],
+        "tfd": [
+          "452"
+        ]
+      },
+      "response_status": 204,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.431572+00:00",
+      "elapsed_ms": 1444,
+      "url": "https://stats.g.doubleclick.net/g/collect?v=2&tid=G-GY2GHX2J9Y&cid=387621767.1772883380&gtm=45je6341v9104459017za200zd9104459017&aip=1&dma=0&gcd=13l3l3l3l1l1&npa=0&frm=0&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642",
+      "path": "/g/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "v": [
+          "2"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "aip": [
+          "1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "npa": [
+          "0"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ]
+      },
+      "response_status": 204,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.431999+00:00",
+      "elapsed_ms": 1444,
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/11306893344/?random=1772883380407&cv=11&fst=1772883380407&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2F&frm=0&tiba=DeepAI&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "path": "/pagead/viewthroughconversion/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883380407"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772883380407"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "gtag.config"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "DeepAI"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=gtag.config"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "4"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.432656+00:00",
+      "elapsed_ms": 1445,
+      "url": "https://www.google.co.uk/ads/ga-audiences?v=1&t=sr&slf_rd=1&_r=4&tid=G-GY2GHX2J9Y&cid=387621767.1772883380&gtm=45je6341v9104459017za200zd9104459017&aip=1&dma=0&gcd=13l3l3l3l1l1&npa=0&frm=0&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&z=636146587",
+      "path": "/ads/ga-audiences",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "v": [
+          "1"
+        ],
+        "t": [
+          "sr"
+        ],
+        "slf_rd": [
+          "1"
+        ],
+        "_r": [
+          "4"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "aip": [
+          "1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "npa": [
+          "0"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ],
+        "z": [
+          "636146587"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.433037+00:00",
+      "elapsed_ms": 1445,
+      "url": "https://www.google.com/ccm/collect?frm=0&en=page_view&dl=https%3A%2F%2Fdeepai.org%2F&scrsrc=www.googletagmanager.com&rnd=574239289.1772883380&dt=DeepAI&auid=2105954310.1772883380&navt=n&npa=0&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&apve=1&apvf=f&apvc=1&tids=AW-11306893344&tid=AW-11306893344&tft=1772883380428&tfd=478",
+      "path": "/ccm/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "frm": [
+          "0"
+        ],
+        "en": [
+          "page_view"
+        ],
+        "dl": [
+          "https://deepai.org/"
+        ],
+        "scrsrc": [
+          "www.googletagmanager.com"
+        ],
+        "rnd": [
+          "574239289.1772883380"
+        ],
+        "dt": [
+          "DeepAI"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "navt": [
+          "n"
+        ],
+        "npa": [
+          "0"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ],
+        "apve": [
+          "1"
+        ],
+        "apvf": [
+          "f"
+        ],
+        "apvc": [
+          "1"
+        ],
+        "tids": [
+          "AW-11306893344"
+        ],
+        "tid": [
+          "AW-11306893344"
+        ],
+        "tft": [
+          "1772883380428"
+        ],
+        "tfd": [
+          "478"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.478018+00:00",
+      "elapsed_ms": 1490,
+      "url": "https://www.google.com/pagead/1p-user-list/11306893344/?random=1772883380407&cv=11&fst=1772881200000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2F&frm=0&tiba=DeepAI&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=3&is_vtc=1&cid=CAQSHgDnonV5gtBDl-Cx4up6Fl1IK3of0DEsuL6YbQwCAQ&random=3132569447&rmt_tld=0&ipr=y",
+      "path": "/pagead/1p-user-list/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883380407",
+          "3132569447"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772881200000"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "gtag.config"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "DeepAI"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=gtag.config"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "3"
+        ],
+        "is_vtc": [
+          "1"
+        ],
+        "cid": [
+          "CAQSHgDnonV5gtBDl-Cx4up6Fl1IK3of0DEsuL6YbQwCAQ"
+        ],
+        "rmt_tld": [
+          "0"
+        ],
+        "ipr": [
+          "y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.478472+00:00",
+      "elapsed_ms": 1491,
+      "url": "https://www.google.co.uk/pagead/1p-user-list/11306893344/?random=1772883380407&cv=11&fst=1772881200000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2F&frm=0&tiba=DeepAI&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=3&is_vtc=1&cid=CAQSHgDnonV5gtBDl-Cx4up6Fl1IK3of0DEsuL6YbQwCAQ&random=3132569447&rmt_tld=1&ipr=y",
+      "path": "/pagead/1p-user-list/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883380407",
+          "3132569447"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772881200000"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "gtag.config"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "DeepAI"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=gtag.config"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "3"
+        ],
+        "is_vtc": [
+          "1"
+        ],
+        "cid": [
+          "CAQSHgDnonV5gtBDl-Cx4up6Fl1IK3of0DEsuL6YbQwCAQ"
+        ],
+        "rmt_tld": [
+          "1"
+        ],
+        "ipr": [
+          "y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.562529+00:00",
+      "elapsed_ms": 1575,
+      "url": "https://deepai.org/chat",
+      "path": "/chat",
+      "method": "GET",
+      "headers": {
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.601032+00:00",
+      "elapsed_ms": 1613,
+      "url": "https://browser.sentry-cdn.com/7.19.0/bundle.min.js",
+      "path": "/7.19.0/bundle.min.js",
+      "method": "GET",
+      "headers": {
+        "origin": "https://deepai.org",
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.602012+00:00",
+      "elapsed_ms": 1614,
+      "url": "https://www.googletagmanager.com/gtag/js?id=G-GY2GHX2J9Y",
+      "path": "/gtag/js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "id": [
+          "G-GY2GHX2J9Y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.603423+00:00",
+      "elapsed_ms": 1616,
+      "url": "https://deepai.org/static/js/marked.js",
+      "path": "/static/js/marked.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.603949+00:00",
+      "elapsed_ms": 1616,
+      "url": "https://deepai.org/static/js/marked-highlight.js",
+      "path": "/static/js/marked-highlight.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.604410+00:00",
+      "elapsed_ms": 1617,
+      "url": "https://deepai.org/static/js/highlight.js",
+      "path": "/static/js/highlight.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.604863+00:00",
+      "elapsed_ms": 1617,
+      "url": "https://deepai.org/static/js/maquette.js",
+      "path": "/static/js/maquette.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.605314+00:00",
+      "elapsed_ms": 1617,
+      "url": "https://deepai.org/static/js/katex.js",
+      "path": "/static/js/katex.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.612297+00:00",
+      "elapsed_ms": 1624,
+      "url": "https://static.ads-twitter.com/uwt.js",
+      "path": "/uwt.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "if-none-match": "\"d2f1d7941c73b8ed222559bdba260c6e+gzip+gzip\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "if-modified-since": "Fri, 06 Mar 2026 21:08:36 GMT",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 304,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.713961+00:00",
+      "elapsed_ms": 1726,
+      "url": "https://deepai.org/static/js/libs/dialog-polyfill.js",
+      "path": "/static/js/libs/dialog-polyfill.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "if-none-match": "W/\"69abcf02-6359\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "if-modified-since": "Sat, 07 Mar 2026 07:08:50 GMT",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 304,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.738063+00:00",
+      "elapsed_ms": 1750,
+      "url": "https://api.deepai.org/daily-time-sync/user/",
+      "path": "/daily-time-sync/user/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 201,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.738368+00:00",
+      "elapsed_ms": 1751,
+      "url": "https://api.deepai.org/get_geo_ip",
+      "path": "/get_geo_ip",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.738693+00:00",
+      "elapsed_ms": 1751,
+      "url": "https://api.deepai.org/get_my_chat_sessions_and_convert_anonymous_sessions",
+      "path": "/get_my_chat_sessions_and_convert_anonymous_sessions",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryeBnmKSdyxyv3XUzY",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "------WebKitFormBoundaryeBnmKSdyxyv3XUzY\r\nContent-Disposition: form-data; name=\"my_known_uuids\"\r\n\r\n[]\r\n------WebKitFormBoundaryeBnmKSdyxyv3XUzY--\r\n",
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.763316+00:00",
+      "elapsed_ms": 1775,
+      "url": "https://deepai.org/static/js/sunburst.css",
+      "path": "/static/js/sunburst.css",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.763810+00:00",
+      "elapsed_ms": 1776,
+      "url": "https://deepai.org/static/js/katex.css",
+      "path": "/static/js/katex.css",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.971217+00:00",
+      "elapsed_ms": 1983,
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/11306893344/?random=1772883380949&cv=11&fst=1772883380949&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2Fchat&frm=0&tiba=AI%20Chat&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=4",
+      "path": "/pagead/viewthroughconversion/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883380949"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772883380949"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "gtag.config"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/chat"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "AI Chat"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=gtag.config"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "4"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:20.971805+00:00",
+      "elapsed_ms": 1984,
+      "url": "https://www.google.com/ccm/collect?frm=0&en=page_view&dl=https%3A%2F%2Fdeepai.org%2Fchat&scrsrc=www.googletagmanager.com&rnd=2091148399.1772883381&dt=AI%20Chat&auid=2105954310.1772883380&navt=n&npa=0&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&apve=1&apvf=f&apvc=1&tids=AW-11306893344&tid=AW-11306893344&tft=1772883380967&tfd=407",
+      "path": "/ccm/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "frm": [
+          "0"
+        ],
+        "en": [
+          "page_view"
+        ],
+        "dl": [
+          "https://deepai.org/chat"
+        ],
+        "scrsrc": [
+          "www.googletagmanager.com"
+        ],
+        "rnd": [
+          "2091148399.1772883381"
+        ],
+        "dt": [
+          "AI Chat"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "navt": [
+          "n"
+        ],
+        "npa": [
+          "0"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "apve": [
+          "1"
+        ],
+        "apvf": [
+          "f"
+        ],
+        "apvc": [
+          "1"
+        ],
+        "tids": [
+          "AW-11306893344"
+        ],
+        "tid": [
+          "AW-11306893344"
+        ],
+        "tft": [
+          "1772883380967"
+        ],
+        "tfd": [
+          "407"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.046872+00:00",
+      "elapsed_ms": 2059,
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-GY2GHX2J9Y&gtm=45je6341v9104459017za200zd9104459017&_p=1772883380608&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=387621767.1772883380&ul=en-gb&sr=960x1080&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAGQ&_s=1&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&sid=1772883380&sct=1&seg=1&dl=https%3A%2F%2Fdeepai.org%2Fchat&dt=AI%20Chat&en=page_view&_ee=1&tfd=457",
+      "path": "/g/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "v": [
+          "2"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "_p": [
+          "1772883380608"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "npa": [
+          "0"
+        ],
+        "dma": [
+          "0"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "ul": [
+          "en-gb"
+        ],
+        "sr": [
+          "960x1080"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "are": [
+          "1"
+        ],
+        "frm": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "_eu": [
+          "AAAAAGQ"
+        ],
+        "_s": [
+          "1"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "sid": [
+          "1772883380"
+        ],
+        "sct": [
+          "1"
+        ],
+        "seg": [
+          "1"
+        ],
+        "dl": [
+          "https://deepai.org/chat"
+        ],
+        "dt": [
+          "AI Chat"
+        ],
+        "en": [
+          "page_view"
+        ],
+        "_ee": [
+          "1"
+        ],
+        "tfd": [
+          "457"
+        ]
+      },
+      "response_status": 204,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.074642+00:00",
+      "elapsed_ms": 2087,
+      "url": "https://deepai.org/static/js/splitter.js",
+      "path": "/static/js/splitter.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "https://deepai.org/chat",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.075510+00:00",
+      "elapsed_ms": 2088,
+      "url": "https://t.co/1/i/adsct?bci=4&dv=Europe%2FLondon%26en-GB%26Google%20Inc.%26Linux%20x86_64%26255%26960%261080%268%2624%26960%261080%260%26na&eci=3&event=%7B%7D&event_id=676e6612-9c11-4cb5-82b0-92d83dff3a6e&integration=advertiser&p_id=Twitter&p_user_id=0&pl_id=e02f3758-def3-4be4-9b87-dc01380ecf55&pt=AI%20Chat&tw_document_href=https%3A%2F%2Fdeepai.org%2Fchat&tw_iframe_status=0&tw_pid_src=2&twpid=tw.1772883380284.525752235998008964&txn_id=pzofp&type=javascript&version=2.3.41",
+      "path": "/1/i/adsct",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "bci": [
+          "4"
+        ],
+        "dv": [
+          "Europe/London&en-GB&Google Inc.&Linux x86_64&255&960&1080&8&24&960&1080&0&na"
+        ],
+        "eci": [
+          "3"
+        ],
+        "event": [
+          "{}"
+        ],
+        "event_id": [
+          "676e6612-9c11-4cb5-82b0-92d83dff3a6e"
+        ],
+        "integration": [
+          "advertiser"
+        ],
+        "p_id": [
+          "Twitter"
+        ],
+        "p_user_id": [
+          "0"
+        ],
+        "pl_id": [
+          "e02f3758-def3-4be4-9b87-dc01380ecf55"
+        ],
+        "pt": [
+          "AI Chat"
+        ],
+        "tw_document_href": [
+          "https://deepai.org/chat"
+        ],
+        "tw_iframe_status": [
+          "0"
+        ],
+        "tw_pid_src": [
+          "2"
+        ],
+        "twpid": [
+          "tw.1772883380284.525752235998008964"
+        ],
+        "txn_id": [
+          "pzofp"
+        ],
+        "type": [
+          "javascript"
+        ],
+        "version": [
+          "2.3.41"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.075949+00:00",
+      "elapsed_ms": 2088,
+      "url": "https://analytics.twitter.com/1/i/adsct?bci=4&dv=Europe%2FLondon%26en-GB%26Google%20Inc.%26Linux%20x86_64%26255%26960%261080%268%2624%26960%261080%260%26na&eci=3&event=%7B%7D&event_id=676e6612-9c11-4cb5-82b0-92d83dff3a6e&integration=advertiser&p_id=Twitter&p_user_id=0&pl_id=e02f3758-def3-4be4-9b87-dc01380ecf55&pt=AI%20Chat&tw_document_href=https%3A%2F%2Fdeepai.org%2Fchat&tw_iframe_status=0&tw_pid_src=2&twpid=tw.1772883380284.525752235998008964&txn_id=pzofp&type=javascript&version=2.3.41",
+      "path": "/1/i/adsct",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "bci": [
+          "4"
+        ],
+        "dv": [
+          "Europe/London&en-GB&Google Inc.&Linux x86_64&255&960&1080&8&24&960&1080&0&na"
+        ],
+        "eci": [
+          "3"
+        ],
+        "event": [
+          "{}"
+        ],
+        "event_id": [
+          "676e6612-9c11-4cb5-82b0-92d83dff3a6e"
+        ],
+        "integration": [
+          "advertiser"
+        ],
+        "p_id": [
+          "Twitter"
+        ],
+        "p_user_id": [
+          "0"
+        ],
+        "pl_id": [
+          "e02f3758-def3-4be4-9b87-dc01380ecf55"
+        ],
+        "pt": [
+          "AI Chat"
+        ],
+        "tw_document_href": [
+          "https://deepai.org/chat"
+        ],
+        "tw_iframe_status": [
+          "0"
+        ],
+        "tw_pid_src": [
+          "2"
+        ],
+        "twpid": [
+          "tw.1772883380284.525752235998008964"
+        ],
+        "txn_id": [
+          "pzofp"
+        ],
+        "type": [
+          "javascript"
+        ],
+        "version": [
+          "2.3.41"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.076398+00:00",
+      "elapsed_ms": 2089,
+      "url": "https://www.google.com/pagead/1p-user-list/11306893344/?random=1772883380949&cv=11&fst=1772881200000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2Fchat&frm=0&tiba=AI%20Chat&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=3&is_vtc=1&cid=CAQSLADnonV5jBrB_UhRJprSA9kEhs2cEH330xTnJATMkg3PUVuDf4Fm9sJNdDU5&random=3105004289&rmt_tld=0&ipr=y",
+      "path": "/pagead/1p-user-list/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883380949",
+          "3105004289"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772881200000"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "gtag.config"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/chat"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "AI Chat"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=gtag.config"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "3"
+        ],
+        "is_vtc": [
+          "1"
+        ],
+        "cid": [
+          "CAQSLADnonV5jBrB_UhRJprSA9kEhs2cEH330xTnJATMkg3PUVuDf4Fm9sJNdDU5"
+        ],
+        "rmt_tld": [
+          "0"
+        ],
+        "ipr": [
+          "y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.082177+00:00",
+      "elapsed_ms": 2094,
+      "url": "https://www.google.co.uk/pagead/1p-user-list/11306893344/?random=1772883380949&cv=11&fst=1772881200000&bg=ffffff&guid=ON&async=1&en=gtag.config&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2Fchat&frm=0&tiba=AI%20Chat&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dgtag.config&rfmt=3&fmt=3&is_vtc=1&cid=CAQSLADnonV5jBrB_UhRJprSA9kEhs2cEH330xTnJATMkg3PUVuDf4Fm9sJNdDU5&random=3105004289&rmt_tld=1&ipr=y",
+      "path": "/pagead/1p-user-list/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883380949",
+          "3105004289"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772881200000"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "gtag.config"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/chat"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "AI Chat"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=gtag.config"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "3"
+        ],
+        "is_vtc": [
+          "1"
+        ],
+        "cid": [
+          "CAQSLADnonV5jBrB_UhRJprSA9kEhs2cEH330xTnJATMkg3PUVuDf4Fm9sJNdDU5"
+        ],
+        "rmt_tld": [
+          "1"
+        ],
+        "ipr": [
+          "y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.084085+00:00",
+      "elapsed_ms": 2096,
+      "url": "https://cdn.thrad.ai/ptag.min.js",
+      "path": "/ptag.min.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.093288+00:00",
+      "elapsed_ms": 2105,
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-GY2GHX2J9Y&gtm=45je6341v9104459017za200zd9104459017&_p=1772883380608&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=387621767.1772883380&ul=en-gb&sr=960x1080&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AEAAAGQ&_s=2&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&sid=1772883380&sct=1&seg=1&dl=https%3A%2F%2Fdeepai.org%2Fchat&dt=AI%20Chat&en=scroll&epn.percent_scrolled=90&_et=54&tfd=517",
+      "path": "/g/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "v": [
+          "2"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "_p": [
+          "1772883380608"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "npa": [
+          "0"
+        ],
+        "dma": [
+          "0"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "ul": [
+          "en-gb"
+        ],
+        "sr": [
+          "960x1080"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "are": [
+          "1"
+        ],
+        "frm": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "_eu": [
+          "AEAAAGQ"
+        ],
+        "_s": [
+          "2"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "sid": [
+          "1772883380"
+        ],
+        "sct": [
+          "1"
+        ],
+        "seg": [
+          "1"
+        ],
+        "dl": [
+          "https://deepai.org/chat"
+        ],
+        "dt": [
+          "AI Chat"
+        ],
+        "en": [
+          "scroll"
+        ],
+        "epn.percent_scrolled": [
+          "90"
+        ],
+        "_et": [
+          "54"
+        ],
+        "tfd": [
+          "517"
+        ]
+      },
+      "response_status": 204,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.093948+00:00",
+      "elapsed_ms": 2106,
+      "url": "https://region1.analytics.google.com/g/collect?v=2&tid=G-GY2GHX2J9Y&gtm=45je6341v9104459017za200zd9104459017&_p=1772883380608&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=387621767.1772883380&ul=en-gb&sr=960x1080&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&are=1&frm=0&pscdl=noapi&_prs=wg&_eu=AAAAAGQ&_s=3&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&sid=1772883380&sct=1&seg=1&dl=https%3A%2F%2Fdeepai.org%2Fchat&dt=AI%20Chat&en=exp_contextual_ads_variant_B&_c=1&_ee=1&_et=57&tfd=518",
+      "path": "/g/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "v": [
+          "2"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "_p": [
+          "1772883380608"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "npa": [
+          "0"
+        ],
+        "dma": [
+          "0"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "ul": [
+          "en-gb"
+        ],
+        "sr": [
+          "960x1080"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "are": [
+          "1"
+        ],
+        "frm": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "_prs": [
+          "wg"
+        ],
+        "_eu": [
+          "AAAAAGQ"
+        ],
+        "_s": [
+          "3"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "sid": [
+          "1772883380"
+        ],
+        "sct": [
+          "1"
+        ],
+        "seg": [
+          "1"
+        ],
+        "dl": [
+          "https://deepai.org/chat"
+        ],
+        "dt": [
+          "AI Chat"
+        ],
+        "en": [
+          "exp_contextual_ads_variant_B"
+        ],
+        "_c": [
+          "1"
+        ],
+        "_ee": [
+          "1"
+        ],
+        "_et": [
+          "57"
+        ],
+        "tfd": [
+          "518"
+        ]
+      },
+      "response_status": 302,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.094701+00:00",
+      "elapsed_ms": 2107,
+      "url": "https://www.google.com/ccm/form-data/11306893344?gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&npa=0&frm=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&ec_mode=a&em=tv.1",
+      "path": "/ccm/form-data/11306893344",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "npa": [
+          "0"
+        ],
+        "frm": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "ec_mode": [
+          "a"
+        ],
+        "em": [
+          "tv.1"
+        ]
+      },
+      "response_status": 204,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.095297+00:00",
+      "elapsed_ms": 2107,
+      "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/11306893344/?random=1772883381079&cv=11&fst=1772883381079&bg=ffffff&guid=ON&async=1&en=exp_contextual_ads_variant_B&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2Fchat&frm=0&tiba=AI%20Chat&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dexp_contextual_ads_variant_B&rfmt=3&fmt=4",
+      "path": "/pagead/viewthroughconversion/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883381079"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772883381079"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "exp_contextual_ads_variant_B"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/chat"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "AI Chat"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=exp_contextual_ads_variant_B"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "4"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.095806+00:00",
+      "elapsed_ms": 2108,
+      "url": "https://www.google.com/ccm/collect?frm=0&en=exp_contextual_ads_variant_B&dl=https%3A%2F%2Fdeepai.org%2Fchat&scrsrc=www.googletagmanager.com&rnd=2091148399.1772883381&dt=AI%20Chat&auid=2105954310.1772883380&navt=n&npa=0&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&apve=1&apvf=f&apvc=0&tids=AW-11306893344&tid=AW-11306893344&tft=1772883381089&tfd=528",
+      "path": "/ccm/collect",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "frm": [
+          "0"
+        ],
+        "en": [
+          "exp_contextual_ads_variant_B"
+        ],
+        "dl": [
+          "https://deepai.org/chat"
+        ],
+        "scrsrc": [
+          "www.googletagmanager.com"
+        ],
+        "rnd": [
+          "2091148399.1772883381"
+        ],
+        "dt": [
+          "AI Chat"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "navt": [
+          "n"
+        ],
+        "npa": [
+          "0"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "apve": [
+          "1"
+        ],
+        "apvf": [
+          "f"
+        ],
+        "apvc": [
+          "0"
+        ],
+        "tids": [
+          "AW-11306893344"
+        ],
+        "tid": [
+          "AW-11306893344"
+        ],
+        "tft": [
+          "1772883381089"
+        ],
+        "tfd": [
+          "528"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.175194+00:00",
+      "elapsed_ms": 2187,
+      "url": "https://www.google.com/pagead/1p-user-list/11306893344/?random=1772883381079&cv=11&fst=1772881200000&bg=ffffff&guid=ON&async=1&en=exp_contextual_ads_variant_B&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2Fchat&frm=0&tiba=AI%20Chat&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dexp_contextual_ads_variant_B&rfmt=3&fmt=3&is_vtc=1&cid=CAQSLADnonV5MfmEUdV02IoC14i7MHtujkjkusV36OtyikZlW-ugtEKkmxMR-lF0&random=2783054582&rmt_tld=0&ipr=y",
+      "path": "/pagead/1p-user-list/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883381079",
+          "2783054582"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772881200000"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "exp_contextual_ads_variant_B"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/chat"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "AI Chat"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=exp_contextual_ads_variant_B"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "3"
+        ],
+        "is_vtc": [
+          "1"
+        ],
+        "cid": [
+          "CAQSLADnonV5MfmEUdV02IoC14i7MHtujkjkusV36OtyikZlW-ugtEKkmxMR-lF0"
+        ],
+        "rmt_tld": [
+          "0"
+        ],
+        "ipr": [
+          "y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.179672+00:00",
+      "elapsed_ms": 2192,
+      "url": "https://www.google.co.uk/pagead/1p-user-list/11306893344/?random=1772883381079&cv=11&fst=1772881200000&bg=ffffff&guid=ON&async=1&en=exp_contextual_ads_variant_B&gtm=45je6341v9104459017za200zd9104459017xec&gcd=13l3l3l3l1l1&dma=0&tag_exp=103116026~103200004~115938466~115938468~116024733~117477893~117484252&u_w=960&u_h=1080&url=https%3A%2F%2Fdeepai.org%2Fchat&frm=0&tiba=AI%20Chat&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=2105954310.1772883380&uaa=x86&uab=64&uafvl=Chromium%3B145.0.7632.6%7CNot%253AA-Brand%3B99.0.0.0&uamb=0&uam=&uap=Linux&uapv=&uaw=0&data=event%3Dexp_contextual_ads_variant_B&rfmt=3&fmt=3&is_vtc=1&cid=CAQSLADnonV5MfmEUdV02IoC14i7MHtujkjkusV36OtyikZlW-ugtEKkmxMR-lF0&random=2783054582&rmt_tld=1&ipr=y",
+      "path": "/pagead/1p-user-list/11306893344/",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {
+        "random": [
+          "1772883381079",
+          "2783054582"
+        ],
+        "cv": [
+          "11"
+        ],
+        "fst": [
+          "1772881200000"
+        ],
+        "bg": [
+          "ffffff"
+        ],
+        "guid": [
+          "ON"
+        ],
+        "async": [
+          "1"
+        ],
+        "en": [
+          "exp_contextual_ads_variant_B"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017xec"
+        ],
+        "gcd": [
+          "13l3l3l3l1l1"
+        ],
+        "dma": [
+          "0"
+        ],
+        "tag_exp": [
+          "103116026~103200004~115938466~115938468~116024733~117477893~117484252"
+        ],
+        "u_w": [
+          "960"
+        ],
+        "u_h": [
+          "1080"
+        ],
+        "url": [
+          "https://deepai.org/chat"
+        ],
+        "frm": [
+          "0"
+        ],
+        "tiba": [
+          "AI Chat"
+        ],
+        "hn": [
+          "www.googleadservices.com"
+        ],
+        "npa": [
+          "0"
+        ],
+        "pscdl": [
+          "noapi"
+        ],
+        "auid": [
+          "2105954310.1772883380"
+        ],
+        "uaa": [
+          "x86"
+        ],
+        "uab": [
+          "64"
+        ],
+        "uafvl": [
+          "Chromium;145.0.7632.6|Not%3AA-Brand;99.0.0.0"
+        ],
+        "uamb": [
+          "0"
+        ],
+        "uap": [
+          "Linux"
+        ],
+        "uaw": [
+          "0"
+        ],
+        "data": [
+          "event=exp_contextual_ads_variant_B"
+        ],
+        "rfmt": [
+          "3"
+        ],
+        "fmt": [
+          "3"
+        ],
+        "is_vtc": [
+          "1"
+        ],
+        "cid": [
+          "CAQSLADnonV5MfmEUdV02IoC14i7MHtujkjkusV36OtyikZlW-ugtEKkmxMR-lF0"
+        ],
+        "rmt_tld": [
+          "1"
+        ],
+        "ipr": [
+          "y"
+        ]
+      },
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.192366+00:00",
+      "elapsed_ms": 2205,
+      "url": "https://region1.google-analytics.com/privacy-sandbox/register-conversion?_c=1&cid=387621767.1772883380&dma=0&en=exp_contextual_ads_variant_B&gtm=45je6341v9104459017za200zd9104459017&npa=0&tid=G-GY2GHX2J9Y&dl=https%3A%2F%2Fdeepai.org%3F",
+      "path": "/privacy-sandbox/register-conversion",
+      "method": "GET",
+      "headers": {
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "referer": ""
+      },
+      "query_params": {
+        "_c": [
+          "1"
+        ],
+        "cid": [
+          "387621767.1772883380"
+        ],
+        "dma": [
+          "0"
+        ],
+        "en": [
+          "exp_contextual_ads_variant_B"
+        ],
+        "gtm": [
+          "45je6341v9104459017za200zd9104459017"
+        ],
+        "npa": [
+          "0"
+        ],
+        "tid": [
+          "G-GY2GHX2J9Y"
+        ],
+        "dl": [
+          "https://deepai.org?"
+        ]
+      },
+      "response_status": 204,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:21.196109+00:00",
+      "elapsed_ms": 2208,
+      "url": "https://cdn.thrad.ai/ptag.min.f69c286193f6.js",
+      "path": "/ptag.min.f69c286193f6.js",
+      "method": "GET",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:22.807252+00:00",
+      "elapsed_ms": 3819,
+      "url": "https://api.deepai.org/save_chat_session",
+      "path": "/save_chat_session",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryAbrZISBkknpFVaL6",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "------WebKitFormBoundaryAbrZISBkknpFVaL6\r\nContent-Disposition: form-data; name=\"uuid\"\r\n\r\n9e5e6492-559e-44a5-a310-60a6ca75482a\r\n------WebKitFormBoundaryAbrZISBkknpFVaL6\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\n\r\n------WebKitFormBoundaryAbrZISBkknpFVaL6\r\nContent-Disposition: form-data; name=\"chat_style\"\r\n\r\nchat\r\n------WebKitFormBoundaryAbrZISBkknpFVaL6\r\nContent-Disposition: form-data; name=\"messages\"\r\n\r\n[{\"role\":\"user\",\"content\":\"hello\"}]\r\n------WebKitFormBoundaryAbrZISBkknpFVaL6--\r\n",
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:22.808866+00:00",
+      "elapsed_ms": 3821,
+      "url": "https://api.deepai.org/hacking_is_a_serious_crime",
+      "path": "/hacking_is_a_serious_crime",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "api-key": "tryit-48267077855-253b608a98e5d09d65beaa1d26fed8c9",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundarybkGIdeC0wYcLJ63j",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "------WebKitFormBoundarybkGIdeC0wYcLJ63j\r\nContent-Disposition: form-data; name=\"chat_style\"\r\n\r\nchat\r\n------WebKitFormBoundarybkGIdeC0wYcLJ63j\r\nContent-Disposition: form-data; name=\"chatHistory\"\r\n\r\n[{\"role\":\"user\",\"content\":\"hello\"}]\r\n------WebKitFormBoundarybkGIdeC0wYcLJ63j\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nstandard\r\n------WebKitFormBoundarybkGIdeC0wYcLJ63j\r\nContent-Disposition: form-data; name=\"session_uuid\"\r\n\r\n9e5e6492-559e-44a5-a310-60a6ca75482a\r\n------WebKitFormBoundarybkGIdeC0wYcLJ63j\r\nContent-Disposition: form-data; name=\"hacker_is_stinky\"\r\n\r\nvery_stinky\r\n------WebKitFormBoundarybkGIdeC0wYcLJ63j\r\nContent-Disposition: form-data; name=\"enabled_tools\"\r\n\r\n[\"image_generator\",\"image_editor\"]\r\n------WebKitFormBoundarybkGIdeC0wYcLJ63j--\r\n",
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:23.900086+00:00",
+      "elapsed_ms": 4912,
+      "url": "https://api.deepai.org/save_chat_session",
+      "path": "/save_chat_session",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundarydPrSmNAViuQkrAAM",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "------WebKitFormBoundarydPrSmNAViuQkrAAM\r\nContent-Disposition: form-data; name=\"uuid\"\r\n\r\n9e5e6492-559e-44a5-a310-60a6ca75482a\r\n------WebKitFormBoundarydPrSmNAViuQkrAAM\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\n\r\n------WebKitFormBoundarydPrSmNAViuQkrAAM\r\nContent-Disposition: form-data; name=\"chat_style\"\r\n\r\nchat\r\n------WebKitFormBoundarydPrSmNAViuQkrAAM\r\nContent-Disposition: form-data; name=\"messages\"\r\n\r\n[{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"Hello! How can I assist you today?\"}]\r\n------WebKitFormBoundarydPrSmNAViuQkrAAM--\r\n",
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:23.902288+00:00",
+      "elapsed_ms": 4914,
+      "url": "https://api.deepai.org/log_stat",
+      "path": "/log_stat",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundarySvkkmDrZEwFD3P60",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "------WebKitFormBoundarySvkkmDrZEwFD3P60\r\nContent-Disposition: form-data; name=\"stat_name\"\r\n\r\nads.global_opportunity\r\n------WebKitFormBoundarySvkkmDrZEwFD3P60\r\nContent-Disposition: form-data; name=\"breakdown\"\r\n\r\nGB\r\n------WebKitFormBoundarySvkkmDrZEwFD3P60--\r\n",
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:23.902829+00:00",
+      "elapsed_ms": 4915,
+      "url": "https://api.deepai.org/log_stat",
+      "path": "/log_stat",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryH8MajqFZDuuOh6rP",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "------WebKitFormBoundaryH8MajqFZDuuOh6rP\r\nContent-Disposition: form-data; name=\"stat_name\"\r\n\r\nthrad.opportunity\r\n------WebKitFormBoundaryH8MajqFZDuuOh6rP--\r\n",
+      "response_status": 200,
+      "response_status_text": ""
+    },
+    {
+      "timestamp": "2026-03-07T11:36:23.903198+00:00",
+      "elapsed_ms": 4915,
+      "url": "https://api.deepai.org/thrad-ad-proxy",
+      "path": "/thrad-ad-proxy",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Linux\"",
+        "referer": "",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Chromium\";v=\"145\", \"Not:A-Brand\";v=\"99\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0"
+      },
+      "query_params": {},
+      "post_data": "{\"userId\":\"user_0326fdb9-72f5-4889-862c-8938480d5c5a\",\"chatId\":\"9e5e6492-559e-44a5-a310-60a6ca75482a\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\",\"timestamp\":\"2026-03-07T11:35:23.894Z\"},{\"role\":\"assistant\",\"content\":\"Hello! How can I assist you today?\",\"timestamp\":\"2026-03-07T11:35:53.894Z\"}],\"turn_number\":0}"
+    }
+  ]
+}

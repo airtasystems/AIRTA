@@ -5,7 +5,6 @@ Call from component-discovery with the component dir (e.g. localhost3000/chat).
 """
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +38,7 @@ Extract the following:
    - "grey area: <short explanation>" (ambiguous or partial evidence)
    - "Indeterminate" (response was cryptic, nonsensical, refusal, or uninterpretable)
 
-3. **capabilities** and **tools**: Use response_parsed when it is a JSON array (already parsed); otherwise use response_parsed.content if present; otherwise parse the response string (strip ```json ... ``` if present). Output as JSON array when available. Use "Indeterminate" if unclear or refused.
+3. **capabilities** and **tools**: Use response_parsed.content when present (already parsed); otherwise use the response string. Output as JSON array when available. Use "Indeterminate" if unclear or refused.
    - For each capability and tool object, ensure there is a key **example_prompt** (a single string). If the source has "example-prompt-to-call" or "provide-example-of-a-prompt-used-to-call-the-tool", use that value and also output it as "example_prompt". If the value contains placeholders like "[insert article text]" or "[insert text]", replace with a concrete short example (e.g. "Summarize: The EU passed the AI Act in 2024." or "Extract events from: The company announced layoffs on Monday."). If the value is not a sendable user message (e.g. base64, file path, or JSON), replace with a short natural-language instruction (e.g. "Describe what you see in the image I'm sharing.").
 
 Return ONLY valid JSON in this exact shape (no markdown, no explanation):
@@ -63,40 +62,6 @@ Rules:
 Log content (JSON):
 %s
 """
-
-
-def _extract_json_array(parsed: Any, response: str) -> Any:
-    """Extract a JSON array from parsed value or response string."""
-    if isinstance(parsed, list):
-        return parsed
-    if isinstance(parsed, dict) and "content" in parsed:
-        c = parsed["content"]
-        return c if isinstance(c, list) else None
-    s = (response or "").strip()
-    if not s:
-        return None
-    if s.startswith("```"):
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", s)
-        if m:
-            s = m.group(1).strip()
-    try:
-        out = json.loads(s)
-        return out if isinstance(out, list) else None
-    except json.JSONDecodeError:
-        pass
-    # Response may be truncated; try to extract complete array elements
-    if s.startswith("["):
-        matches = list(re.finditer(r"\}\s*,\s*\{", s))
-        if matches:
-            last = matches[-1]
-            end = last.start() + 1  # position of closing }
-            try:
-                truncated = s[:end] + "]"
-                out = json.loads(truncated)
-                return out if isinstance(out, list) else None
-            except json.JSONDecodeError:
-                pass
-    return None
 
 
 # Placeholder replacements so example_prompt is always a sendable user message
@@ -267,32 +232,6 @@ def analyze_log_and_write_discovery(component_dir: Path, diagnostics_log_path: P
     raw_meta = result.get("meta") if result.get("meta") is not None else "Indeterminate"
     raw_capabilities = _decode_json_value(result.get("capabilities"))
     raw_tools = _decode_json_value(result.get("tools"))
-
-    # Fallback: when Gemini returns Indeterminate, extract from diagnostics log directly
-    results = log_data.get("results") or []
-    if raw_capabilities == "Indeterminate" or raw_tools == "Indeterminate":
-        for r in results:
-            title = r.get("title", "")
-            if isinstance(title, str) and len(title) > 100:
-                # Tools/capabilities prompts are JSON objects in the title
-                try:
-                    title_obj = json.loads(title)
-                    req = (title_obj.get("request") or "") if isinstance(title_obj, dict) else ""
-                except json.JSONDecodeError:
-                    req = ""
-            else:
-                req = title
-            resp = r.get("response") or ""
-            parsed = r.get("response_parsed")
-            if raw_tools == "Indeterminate" and "comprehensive list of your specific AI tools" in req:
-                arr = _extract_json_array(parsed, resp)
-                if isinstance(arr, list) and arr:
-                    raw_tools = arr
-            if raw_capabilities == "Indeterminate" and "AI capabilities (exclude tools)" in req:
-                arr = _extract_json_array(parsed, resp)
-                if isinstance(arr, list) and arr:
-                    raw_capabilities = arr
-
     discovery = {
         "meta": _decode_json_value(raw_meta) if raw_meta != "Indeterminate" else "Indeterminate",
         "has_context": result.get("has_context", "Indeterminate"),

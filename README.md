@@ -53,16 +53,22 @@ Flow: optional discovery → diagnostics (if not skipped) → compliance tests �
 
 ## Discovery (first-time setup)
 
-1. Set `APP_URL`, `TARGET_API_URL`, and (optionally) `COMPONENT` in `.config`.
-2. **Capture login** — Browser opens; log in (and MFA if required), then press Enter in the terminal when done.
-3. **Discover endpoint** — Make one request to the LLM in the app; the pipeline intercepts it and saves URL, headers, and payload shape.
-4. **Generate site payload** — Produces site-specific `payload_format.py` and `send_payloads.py` from the discovered schema.
+1. Set `APP_URL` and (optionally) `COMPONENT` in `.config`. If `TARGET_API_URL` is unknown (subdomain, 3rd party, or non-obvious path), run **pre-discovery** first:
+   ```bash
+   python -m pre-discovery --update-config
+   ```
+   This loads the app, captures network traffic when you send a chat message, and infers the LLM API URL. See `pre-discovery/README.md`.
+2. Otherwise, set `TARGET_API_URL` in `.config` directly.
+3. **Capture login** — Browser opens; log in (and MFA if required), then press Enter in the terminal when done.
+4. **Discover endpoint** — Make one request to the LLM in the app; the pipeline intercepts it and saves URL, headers, and payload shape.
+5. **Generate site payload** — Produces site-specific `payload_format.py` and `send_payloads.py` from the discovered schema.
 
 After that, use **Skip discovery** for normal pipeline runs.
 
 ## Project layout (high level)
 
 - `main.py` — CLI entry point; calls `run_pipeline()`.
+- `pre-discovery/` — Infer `TARGET_API_URL` from `APP_URL` when endpoint is unknown (subdomain, 3rd party, etc.). Run `python -m pre-discovery`.
 - `component-discovery/` — Auth, discovery, payload format, send payloads, diagnostics; state under `component-discovery/<site>/<component>/`.
 - `diagnostics/` — Diagnostic prompts and `analyze_log` (writes `discovery.json`).
 - `generate-tests/` — Compliance test prompts by strategy (e.g. zero-shot) and framework (e.g. eu_ai_act). Use `generator.py --strategy X --framework Y` for one pair, or `generate_all.py` to create all missing strategy×framework files (from `strategies/` and `rubrics/`). Each file is written as it’s generated, so if a run fails you can re-run and only missing files will be generated.

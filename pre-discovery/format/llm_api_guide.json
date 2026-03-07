@@ -1,0 +1,131 @@
+{
+  "app_url": "https://deepai.org/chat",
+  "base_url": "https://api.deepai.org",
+  "overview": "DeepAI's chat API uses a multipart/form-data interface to manage sessions and generate AI responses, requiring an API key for authentication.",
+  "flow": [
+    "Synchronize user time via GET /daily-time-sync/user/",
+    "Retrieve geographic location via GET /get_geo_ip",
+    "Initialize or retrieve chat sessions via POST /get_my_chat_sessions_and_convert_anonymous_sessions",
+    "Send messages and receive completions via POST /hacking_is_a_serious_crime",
+    "Persist chat history via POST /save_chat_session"
+  ],
+  "get": {
+    "daily_time_sync": {
+      "path": "/daily-time-sync/user/",
+      "path_template": "/daily-time-sync/user/",
+      "description": "Synchronizes the user's local time with the server.",
+      "query_params": {},
+      "required_headers": {
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "response_status": 201,
+      "example_url": "https://api.deepai.org/daily-time-sync/user/"
+    },
+    "get_geo_ip": {
+      "path": "/get_geo_ip",
+      "path_template": "/get_geo_ip",
+      "description": "Retrieves the user's geographic location based on IP.",
+      "query_params": {},
+      "required_headers": {
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+        "sec-ch-ua-platform": "\"Linux\""
+      },
+      "response_status": 200,
+      "example_url": "https://api.deepai.org/get_geo_ip"
+    }
+  },
+  "post": {
+    "get_sessions": {
+      "path": "/get_my_chat_sessions_and_convert_anonymous_sessions",
+      "path_template": "/get_my_chat_sessions_and_convert_anonymous_sessions",
+      "description": "Retrieves existing chat sessions and converts anonymous ones.",
+      "request_format": {
+        "fields": {
+          "my_known_uuids": "array"
+        },
+        "field_types": {
+          "my_known_uuids": "array"
+        },
+        "example": {
+          "my_known_uuids": "[]"
+        }
+      },
+      "required_headers": {
+        "api-key": "tryit-48267077855-253b608a98e5d09d65beaa1d26fed8c9",
+        "content-type": "multipart/form-data",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+      },
+      "response_status": 200,
+      "example_request": "https://api.deepai.org/get_my_chat_sessions_and_convert_anonymous_sessions"
+    },
+    "save_session": {
+      "path": "/save_chat_session",
+      "path_template": "/save_chat_session",
+      "description": "Saves the current chat session state and message history.",
+      "request_format": {
+        "fields": {
+          "uuid": "string",
+          "messages": "array"
+        },
+        "field_types": {
+          "uuid": "string",
+          "messages": "array"
+        },
+        "example": {
+          "uuid": "9e5e6492-559e-44a5-a310-60a6ca75482a",
+          "messages": "[{\"role\":\"user\",\"content\":\"hello\"}]"
+        }
+      },
+      "required_headers": {
+        "api-key": "tryit-48267077855-253b608a98e5d09d65beaa1d26fed8c9",
+        "content-type": "multipart/form-data",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+      },
+      "response_status": 200,
+      "example_request": "https://api.deepai.org/save_chat_session"
+    },
+    "chat_completion": {
+      "path": "/hacking_is_a_serious_crime",
+      "path_template": "/hacking_is_a_serious_crime",
+      "description": "Main endpoint for sending messages and receiving AI completions.",
+      "request_format": {
+        "fields": {
+          "chat_style": "string",
+          "chatHistory": "array",
+          "model": "string",
+          "session_uuid": "string"
+        },
+        "field_types": {
+          "chat_style": "string",
+          "chatHistory": "array",
+          "model": "string",
+          "session_uuid": "string"
+        },
+        "example": {
+          "chat_style": "chat",
+          "chatHistory": "[{\"role\":\"user\",\"content\":\"hello\"}]",
+          "model": "standard",
+          "session_uuid": "9e5e6492-559e-44a5-a310-60a6ca75482a"
+        }
+      },
+      "required_headers": {
+        "api-key": "tryit-48267077855-253b608a98e5d09d65beaa1d26fed8c9",
+        "content-type": "multipart/form-data",
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+      },
+      "response_status": 200,
+      "example_request": "https://api.deepai.org/hacking_is_a_serious_crime"
+    }
+  },
+  "primary_chat_endpoint": "chat_completion",
+  "ui": {
+    "chat_input_selectors": [
+      "#persistentChatbox",
+      "textarea[placeholder*=\"Message\" i]"
+    ],
+    "response_container": null,
+    "response_extraction": "selectors",
+    "consent_selectors": []
+  }
+}
