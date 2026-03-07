@@ -176,6 +176,49 @@ def extract_payload_format(body: str | None) -> dict | None:
     return out
 
 
+def find_multishot_from_trace(trace_entries: list, target_url: str) -> list | None:
+    """
+    Find POST to target URL with the most messages (multi-turn).
+    Returns messages array from the best request, or None if none with 2+ messages.
+    """
+    target_path = (urlparse(target_url).path or "/").rstrip("/") or "/"
+    best: list | None = None
+    best_len = 0
+    for req in trace_entries:
+        if req.get("method") != "POST":
+            continue
+        path = (urlparse(req.get("url", "")).path or "/").rstrip("/") or "/"
+        if path != target_path:
+            continue
+        pd = req.get("post_data")
+        if not pd or len(pd) < 10:
+            continue
+        try:
+            data = json.loads(pd)
+            msgs = data.get("messages")
+            if isinstance(msgs, list) and len(msgs) >= 2 and len(msgs) > best_len:
+                best = msgs
+                best_len = len(msgs)
+        except json.JSONDecodeError:
+            continue
+    return best
+
+
+def build_multishot_example(messages_structure: dict | None) -> list[dict]:
+    """
+    Build synthetic multishot example [user, assistant, user] from messages_structure.
+    Used when trace has no multi-turn requests.
+    """
+    keys = list(messages_structure.keys()) if messages_structure else ["role", "content"]
+    role_key = "role" if "role" in keys else (keys[0] if keys else "role")
+    content_key = "content" if "content" in keys else (keys[1] if len(keys) > 1 else keys[0])
+    return [
+        {role_key: "user", content_key: "First user message."},
+        {role_key: "assistant", content_key: "Assistant response."},
+        {role_key: "user", content_key: "Follow-up user message."},
+    ]
+
+
 def score_request_url_only(url: str, method: str, app_origin: str) -> tuple[int, str]:
     """
     Score by URL path only (when body is missing or unavailable).

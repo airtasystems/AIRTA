@@ -97,6 +97,66 @@ def _extract_json(text: str) -> dict | None:
     return None
 
 
+def _extract_prompt_structure_from_trace(
+    trace_data: dict | None,
+) -> list[dict] | None:
+    """
+    Extract the message/prompt structure from full_trace POST requests.
+    Finds chat POSTs (matching target path or with messages in post_data), parses
+    post_data, returns the messages array. If single-turn (user only), augments
+    with a canonical assistant message to show the full format.
+    """
+    if not trace_data:
+        return None
+    requests = trace_data.get("requests") or []
+    best_messages: list[dict] | None = None
+    for r in requests:
+        if r.get("method") != "POST":
+            continue
+        post_data = r.get("post_data")
+        if not post_data or not isinstance(post_data, str):
+            continue
+        if "messages" not in post_data.lower():
+            continue
+        try:
+            body = json.loads(post_data)
+        except json.JSONDecodeError:
+            continue
+        messages = None
+        if isinstance(body, dict) and "messages" in body:
+            messages = body["messages"]
+        elif isinstance(body, list):
+            messages = body
+        if not isinstance(messages, list) or not messages:
+            continue
+        # Prefer multi-turn (has assistant)
+        has_assistant = any(
+            (m.get("role") or "").lower() == "assistant" for m in messages if isinstance(m, dict)
+        )
+        if has_assistant or best_messages is None:
+            best_messages = messages
+        if has_assistant:
+            break
+
+    if not best_messages:
+        return None
+    # If single-turn (user only), augment with assistant example
+    has_assistant = any(
+        (m.get("role") or "").lower() == "assistant" for m in best_messages if isinstance(m, dict)
+    )
+    if not has_assistant and best_messages:
+        user_content = ""
+        for m in best_messages:
+            if isinstance(m, dict) and (m.get("role") or "").lower() == "user":
+                user_content = m.get("content") or ""
+                break
+        best_messages = [
+            {"role": "user", "content": user_content or "Hello"},
+            {"role": "assistant", "content": "I am an AI assistant. How can I help you?"},
+        ]
+    return best_messages
+
+
 def _extract_brace_balanced(s: str) -> str | None:
     """Extract first complete {...} from string using brace balancing."""
     start = s.find("{")
@@ -252,11 +312,11 @@ Output structure (fill from the actual data):
   "overview": "<1-2 sentence summary of this app's chat API>",
   "flow": ["<step 1>", "<step 2>", ...],
   "get": { "<id>": { "path", "path_template", "description", "query_params", "required_headers", "response_status", "example_url" } },
-  "post": { "<id>": { "path", "path_template", "description", "request_format": { "fields", "field_types", "example" }, "required_headers", "response_status", "example_request" } },
+  "post": { "<id>": { "path", "path_template", "description", "request_format": { "fields", "field_types", "example", "prompt_structure" }, "required_headers", "response_status", "example_request" } },
   "primary_chat_endpoint": "<key of the main send-message POST endpoint>"
 }
 
-For request_format.fields, use the payload_format from discovered_api. For required_headers, use the headers from discovered_api. example_url = base_url + path.
+For request_format: use payload_format from discovered_api. For the primary chat POST, request_format MUST include "prompt_structure": an array showing the message format with both user and assistant roles, e.g. [{"role":"user","content":"..."},{"role":"assistant","content":"..."}]. Use post_data from full_trace when available; if only single-turn, add an assistant example. For required_headers, use headers from discovered_api. example_url = base_url + path.
 
 Respond with ONLY the raw JSON. No markdown, no code fences."""
 
@@ -264,7 +324,15 @@ Respond with ONLY the raw JSON. No markdown, no code fences."""
     if discovered:
         user_parts.append(f"discovered_api.json:\n{json.dumps(discovered, indent=2)}")
     if trace_data:
-        user_parts.append(f"\nfull_trace (app_url, sample requests):\n{json.dumps({'app_url': trace_data.get('app_url'), 'requests': (trace_data.get('requests') or [])[:20]}, indent=2)}")
+        all_requests = trace_data.get("requests") or []
+        # Include chat POSTs (with post_data) — they may be late in the trace
+        chat_posts = [r for r in all_requests if r.get("method") == "POST" and r.get("post_data")][:5]
+        seen_urls = {r.get("url") for r in chat_posts}
+        head = [r for r in all_requests[:15] if r.get("url") not in seen_urls]
+        trace_subset = chat_posts + head
+        user_parts.append(
+            f"\nfull_trace (app_url, requests including chat POSTs with post_data):\n{json.dumps({'app_url': trace_data.get('app_url'), 'requests': trace_subset}, indent=2)}"
+        )
     if endpoint:
         user_parts.append(f"\nEndpoint analysis:\n{endpoint}")
     if trace_analysis:
@@ -302,9 +370,14 @@ Respond with ONLY the raw JSON. No markdown, no code fences."""
 # =========================
 
 
-def run_format_guide_team(format_dir: Path | None = None, output_path: Path | None = None) -> dict | None:
+def run_format_guide_team(
+    format_dir: Path | None = None,
+    output_path: Path | None = None,
+    component_name: str | None = None,
+) -> dict | None:
     """
     Run the agent team to analyze format/ and produce llm_api_guide.json.
+    If component_name is provided, it is written as the first JSON entry.
     Returns the guide dict, or None on failure.
     """
     format_dir = format_dir or DEFAULT_FORMAT_DIR
@@ -355,6 +428,19 @@ def run_format_guide_team(format_dir: Path | None = None, output_path: Path | No
 
     guide = result.get("guide")
 
+    # Post-process: add prompt_structure from full_trace if missing
+    if guide and format_data.get("full_trace"):
+        prompt_structure = _extract_prompt_structure_from_trace(format_data["full_trace"])
+        if prompt_structure:
+            primary_key = guide.get("primary_chat_endpoint")
+            post_endpoints = guide.get("post") or {}
+            if primary_key and primary_key in post_endpoints:
+                rf = post_endpoints[primary_key].get("request_format") or {}
+                if "prompt_structure" not in rf:
+                    rf["prompt_structure"] = prompt_structure
+                    post_endpoints[primary_key]["request_format"] = rf
+                    print(f"[+] Added prompt_structure from trace ({len(prompt_structure)} messages)")
+
     # Post-process: merge UI hints from Playwright trace into guide
     if guide:
         fmt_dir = Path(result.get("_format_dir") or format_dir)
@@ -377,7 +463,10 @@ def run_format_guide_team(format_dir: Path | None = None, output_path: Path | No
 
     if guide and guide.get("app_url") and (guide.get("get") or guide.get("post")):
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(guide, indent=2), encoding="utf-8")
+        to_write = guide
+        if component_name:
+            to_write = {"component_name": component_name, **guide}
+        output_path.write_text(json.dumps(to_write, indent=2), encoding="utf-8")
         n_get = len(guide.get("get", {}))
         n_post = len(guide.get("post", {}))
         app_url = guide.get("app_url", "")

@@ -9,10 +9,39 @@ from urllib.parse import parse_qs, urlparse
 
 from ..heuristics import IMAGE_EXTENSIONS
 
+# Path/URL patterns to exclude from full_trace.json (static assets, analytics)
+TRACE_EXCLUSIONS = (
+    ".js",
+    ".css",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".map",
+    "google-analytics",
+    "googletagmanager",
+    "google-analytics.com",
+    "analytics.js",
+    "gtag",
+    "ga.js",
+    "gtm.js",
+)
+
 
 def is_image_path(path: str) -> bool:
     """Exclude image requests from trace (complete unabridged except IMAGE_EXTENSIONS)."""
     return any((path or "").lower().endswith(ext) for ext in IMAGE_EXTENSIONS)
+
+
+def should_exclude_from_trace(path: str, url: str = "") -> bool:
+    """Exclude static assets and analytics from full_trace.json."""
+    path_lower = (path or "").lower()
+    url_lower = (url or "").lower()
+    if is_image_path(path):
+        return True
+    for excl in TRACE_EXCLUSIONS:
+        if excl in path_lower or excl in url_lower:
+            return True
+    return False
 
 
 def build_trace_entry(

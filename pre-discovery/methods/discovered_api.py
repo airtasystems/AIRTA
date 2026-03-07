@@ -5,10 +5,15 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..heuristics import MIN_SCORE, extract_payload_format
+from ..heuristics import (
+    MIN_SCORE,
+    build_multishot_example,
+    extract_payload_format,
+    find_multishot_from_trace,
+)
 
 
-def _build_post_endpoint(c: dict) -> dict:
+def _build_post_endpoint(c: dict, multishot_messages: list | None = None) -> dict:
     """Build a POST endpoint entry with payload_format."""
     entry = {
         "url": c["url"],
@@ -24,6 +29,13 @@ def _build_post_endpoint(c: dict) -> dict:
     payload_fmt = extract_payload_format(c.get("post_data"))
     if payload_fmt:
         entry["payload_format"] = payload_fmt
+        if payload_fmt.get("messages_structure") and "messages" in (payload_fmt.get("fields") or []):
+            if multishot_messages:
+                payload_fmt["multishot_example"] = multishot_messages
+                payload_fmt["multishot_verified"] = True
+            else:
+                payload_fmt["multishot_example"] = build_multishot_example(payload_fmt.get("messages_structure"))
+                payload_fmt["multishot_verified"] = False
     return entry
 
 
@@ -62,6 +74,9 @@ def write_discovered(
     if best["score"] < MIN_SCORE:
         return None
 
+    trace_entries = captured.get("trace", [])
+    multishot_messages = find_multishot_from_trace(trace_entries, best["url"])
+
     output_dir.mkdir(parents=True, exist_ok=True)
     out_file = output_dir / "discovered_api.json"
     confidence = "high" if best["score"] >= 6 else "medium" if best["score"] >= 3 else "low"
@@ -77,7 +92,10 @@ def write_discovered(
             for c in post_candidates[:10]
         ],
         "endpoints": {
-            "post": [_build_post_endpoint(c) for c in post_candidates[:20]],
+            "post": [
+                _build_post_endpoint(c, multishot_messages=(multishot_messages if c["url"] == best["url"] else None))
+                for c in post_candidates[:20]
+            ],
             "get": [_build_get_endpoint(c) for c in get_endpoints[:20]],
         },
     }

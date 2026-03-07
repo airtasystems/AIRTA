@@ -1,0 +1,141 @@
+{
+  "captured_at": "2026-03-07T18:52:39.780562+00:00",
+  "app_url": "http://localhost:3000/chat",
+  "request_count": 8,
+  "requests": [
+    {
+      "timestamp": "2026-03-07T18:52:21.150084+00:00",
+      "elapsed_ms": 1775,
+      "url": "http://localhost:3000/",
+      "path": "/",
+      "method": "GET",
+      "headers": {
+        "accept-language": "en-GB",
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Windows\""
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": "OK"
+    },
+    {
+      "timestamp": "2026-03-07T18:52:22.678346+00:00",
+      "elapsed_ms": 3303,
+      "url": "ws://localhost:3000/_next/webpack-hmr",
+      "path": "/_next/webpack-hmr",
+      "method": "WebSocket",
+      "headers": {},
+      "query_params": {}
+    },
+    {
+      "timestamp": "2026-03-07T18:52:22.788020+00:00",
+      "elapsed_ms": 3413,
+      "url": "http://localhost:3000/__nextjs_original-stack-frames",
+      "path": "/__nextjs_original-stack-frames",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "http://localhost:3000/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "text/plain;charset=UTF-8",
+        "sec-ch-ua-mobile": "?0",
+        "accept-language": "en-GB"
+      },
+      "query_params": {},
+      "post_data": "{\"frames\":[{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_b0daae9a._.js\",\"line1\":1605,\"column1\":71,\"methodName\":\"createConsoleError\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_b0daae9a._.js\",\"line1\":2203,\"column1\":54,\"methodName\":\"handleConsoleError\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_b0daae9a._.js\",\"line1\":2354,\"column1\":57,\"methodName\":\"console.error\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":2051,\"column1\":113,\"methodName\":\"validateProperty\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":2161,\"column1\":26,\"methodName\":\"warnUnknownProperties\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":9332,\"column1\":66,\"methodName\":\"validatePropertiesInDevelopment\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":9602,\"column1\":9,\"methodName\":\"setInitialProperties\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":6386,\"column1\":35,\"methodName\":\"completeWork\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":886,\"column1\":74,\"methodName\":\"runWithFiberInDEV\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8363,\"column1\":23,\"methodName\":\"completeUnitOfWork\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8300,\"column1\":28,\"methodName\":\"performUnitOfWork\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8190,\"column1\":40,\"methodName\":\"workLoopSync\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8173,\"column1\":13,\"methodName\":\"renderRootSync\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":7908,\"column1\":212,\"methodName\":\"performWorkOnRoot\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8890,\"column1\":9,\"methodName\":\"performSyncWorkOnRoot\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8809,\"column1\":316,\"methodName\":\"flushSyncWorkAcrossRoots_impl\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8586,\"column1\":13,\"methodName\":\"flushSpawnedWork\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8447,\"column1\":13,\"methodName\":\"commitRoot\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8005,\"column1\":9,\"methodName\":\"commitRootWhenReady\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":7983,\"column1\":25,\"methodName\":\"performWorkOnRoot\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js\",\"line1\":8882,\"column1\":9,\"methodName\":\"performWorkOnRootViaSchedulerTask\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/node_modules_next_dist_compiled_5150ccfd._.js\",\"line1\":2601,\"column1\":64,\"methodName\":\"MessagePort.performWorkUntilDeadline\",\"arguments\":[]},{\"file\":\"<anonymous>\",\"line1\":null,\"column1\":null,\"methodName\":\"p\",\"arguments\":[]},{\"file\":\"file:///home/saladsauce/Code/pointlessai/.next/static/chunks/app_58411d53._.js\",\"line1\":675,\"column1\":227,\"methodName\":\"Home\",\"arguments\":[]},{\"file\":\"about://React/Server/file:///home/saladsauce/Code/pointlessai/.next/server/chunks/ssr/%5Broot-of-the-server%5D__4369015e._.js?32\",\"line1\":116,\"column1\":263,\"methodName\":\"Home\",\"arguments\":[]}],\"isServer\":false,\"isEdgeServer\":false,\"isAppDirectory\":true}",
+      "response_status": 200,
+      "response_status_text": "OK"
+    },
+    {
+      "timestamp": "2026-03-07T18:52:25.936310+00:00",
+      "elapsed_ms": 6561,
+      "url": "http://localhost:3000/chat",
+      "path": "/chat",
+      "method": "GET",
+      "headers": {
+        "accept-language": "en-GB",
+        "upgrade-insecure-requests": "1",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Windows\""
+      },
+      "query_params": {},
+      "response_status": 200,
+      "response_status_text": "OK"
+    },
+    {
+      "timestamp": "2026-03-07T18:52:27.084127+00:00",
+      "elapsed_ms": 7709,
+      "url": "ws://localhost:3000/_next/webpack-hmr",
+      "path": "/_next/webpack-hmr",
+      "method": "WebSocket",
+      "headers": {},
+      "query_params": {}
+    },
+    {
+      "timestamp": "2026-03-07T18:52:28.732592+00:00",
+      "elapsed_ms": 9358,
+      "url": "http://localhost:3000/api/chat",
+      "path": "/api/chat",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "http://localhost:3000/chat",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "accept-language": "en-GB"
+      },
+      "query_params": {},
+      "post_data": "{\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}",
+      "response_status": 200,
+      "response_status_text": "OK"
+    },
+    {
+      "timestamp": "2026-03-07T18:52:32.628905+00:00",
+      "elapsed_ms": 13254,
+      "url": "http://localhost:3000/api/chat",
+      "path": "/api/chat",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "http://localhost:3000/chat",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "accept-language": "en-GB"
+      },
+      "query_params": {},
+      "post_data": "{\"messages\":[{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"Hello! How can I assist you today?\"},{\"role\":\"user\",\"content\":\"and you?\"}]}",
+      "response_status": 200,
+      "response_status_text": "OK"
+    },
+    {
+      "timestamp": "2026-03-07T18:52:37.548807+00:00",
+      "elapsed_ms": 18174,
+      "url": "http://localhost:3000/api/chat",
+      "path": "/api/chat",
+      "method": "POST",
+      "headers": {
+        "sec-ch-ua-platform": "\"Windows\"",
+        "referer": "http://localhost:3000/chat",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "content-type": "application/json",
+        "sec-ch-ua-mobile": "?0",
+        "accept-language": "en-GB"
+      },
+      "query_params": {},
+      "post_data": "{\"messages\":[{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"Hello! How can I assist you today?\"},{\"role\":\"user\",\"content\":\"and you?\"},{\"role\":\"assistant\",\"content\":\"I'm here and ready to help! What would you like to talk about or ask?\"},{\"role\":\"user\",\"content\":\"thanks\"}]}",
+      "response_status": 200,
+      "response_status_text": "OK"
+    }
+  ]
+}

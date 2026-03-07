@@ -32,8 +32,8 @@ from .methods.trace import (
     build_trace_entry,
     build_websocket_trace_entry,
     is_image_path,
+    should_exclude_from_trace,
 )
-from .methods.playwright_record import start_playwright_trace, stop_playwright_trace
 
 
 async def _has_chat_input(page) -> bool:
@@ -54,33 +54,41 @@ async def _has_chat_input(page) -> bool:
     return False
 
 
-async def _try_auto_trigger_chat(page) -> bool:
+async def _try_auto_trigger_chat_multi(page, num_messages: int = 3) -> int:
     """
-    Attempt to find a chat input and send a test message.
-    Returns True if we triggered something, False if we should fall back to manual.
+    Send num_messages to the chat UI (one at a time, waiting for response).
+    Returns number of messages successfully sent.
     """
-    try:
-        # Common selectors for chat inputs
-        selectors = [
-            'textarea[placeholder*="message" i], textarea[placeholder*="chat" i], textarea[placeholder*="ask" i]',
-            'textarea[aria-label*="message" i], textarea[aria-label*="chat" i]',
-            '[contenteditable="true"][role="textbox"]',
-            'input[type="text"][placeholder*="message" i], input[type="text"][placeholder*="ask" i]',
-            "textarea",
-        ]
-        for sel in selectors:
-            try:
-                el = await page.wait_for_selector(sel, timeout=2000)
-                if el:
-                    await el.fill("hello")
-                    await asyncio.sleep(evasion.human_delay(100, 300))
-                    await page.keyboard.press("Enter")
-                    return True
-            except Exception:
-                continue
-    except Exception:
-        pass
-    return False
+    prompts = ["hello", "and you?", "thanks"]
+    selectors = [
+        'textarea[placeholder*="message" i], textarea[placeholder*="chat" i], textarea[placeholder*="ask" i]',
+        'textarea[aria-label*="message" i], textarea[aria-label*="chat" i]',
+        '[contenteditable="true"][role="textbox"]',
+        'input[type="text"][placeholder*="message" i], input[type="text"][placeholder*="ask" i]',
+        "textarea",
+    ]
+    sent = 0
+    for i in range(min(num_messages, len(prompts))):
+        try:
+            chat_input = None
+            for sel in selectors:
+                try:
+                    chat_input = await page.wait_for_selector(sel, timeout=3000, state="visible")
+                    if chat_input:
+                        break
+                except Exception:
+                    continue
+            if not chat_input:
+                break
+            await chat_input.fill(prompts[i])
+            await asyncio.sleep(evasion.human_delay(100, 300))
+            await page.keyboard.press("Enter")
+            sent += 1
+            if i < num_messages - 1:
+                await asyncio.sleep(evasion.human_delay(3000, 5000))
+        except Exception:
+            break
+    return sent
 
 
 async def discover_api(
@@ -89,18 +97,21 @@ async def discover_api(
     headless: bool = False,
     timeout_seconds: float = 120.0,
     try_auto_trigger: bool = True,
+    num_messages: int = 3,
     auth_state_path: Path | None = None,
     verbose: bool = False,
-    record_playwright_trace: bool = True,
     output_dir: Path | None = None,
 ) -> dict:
     """
     Load app at app_url, capture GET and POST requests, score by LLM-likelihood.
-    Returns {"post": [...], "get": [...]} with candidates sorted by score (best first).
+    Captures up to num_messages (default 3) POSTs per chat URL to record verified
+    single-turn and multi-turn formats.
+    Returns {"post": [...], "get": [...], "trace": [...]} with candidates sorted by score.
     """
     post_candidates: list[dict] = []
     get_endpoints: list[dict] = []
     seen_post: set[str] = set()
+    post_count_by_url: dict[str, int] = {}
     seen_get: set[str] = set()
 
     # Full trace: every request during the session
@@ -114,8 +125,8 @@ async def discover_api(
         parsed = urlparse(url)
         path = parsed.path or "/"
 
-        # Full trace: record every request (except images), all headers unabridged
-        if not is_image_path(path):
+        # Full trace: record every request (except images, js, css, analytics)
+        if not should_exclude_from_trace(path, url):
             try:
                 post_data = request.post_data if method in ("POST", "PUT", "PATCH") else None
             except Exception:
@@ -132,9 +143,6 @@ async def discover_api(
             request_to_index[id(request)] = len(trace_entries) - 1
 
         if method == "POST":
-            if url in seen_post:
-                return
-            seen_post.add(url)
             try:
                 post_data = request.post_data
             except Exception:
@@ -148,6 +156,16 @@ async def discover_api(
             if score <= 0:
                 return
 
+            count = post_count_by_url.get(url, 0)
+            if count >= num_messages:
+                return
+            post_count_by_url[url] = count + 1
+            if url not in seen_post:
+                seen_post.add(url)
+
+            n = count + 1
+            if verbose:
+                print(f"[verbose] Captured request {n}/{num_messages} for {url[:60]}...")
             post_candidates.append({
                 "url": url,
                 "method": method,
@@ -155,6 +173,7 @@ async def discover_api(
                 "reason": reason,
                 "headers": {k: v for k, v in headers.items() if k.lower() not in {"cookie", "content-length", "host"}},
                 "post_data": post_data,
+                "_request_index": n,
             })
         elif method == "GET":
             if url in seen_get:
@@ -219,9 +238,6 @@ async def discover_api(
 
         context = await browser.new_context(**context_options)
         page = await context.new_page()
-
-        if record_playwright_trace and output_dir:
-            await start_playwright_trace(context)
 
         if await evasion.apply_stealth(page):
             print("[*] Stealth applied (WAF evasion).")
@@ -290,35 +306,41 @@ async def discover_api(
         await evasion.scroll_human_like(page, -80, steps=3)
 
         if try_auto_trigger:
-            print("[*] Attempting to auto-trigger chat...")
-            triggered = await _try_auto_trigger_chat(page)
-            if triggered:
+            print(f"[*] Attempting to auto-trigger {num_messages} chat messages...")
+            sent = await _try_auto_trigger_chat_multi(page, num_messages)
+            if sent > 0:
+                print(f"[*] Sent {sent} message(s); waiting for API responses...")
                 await asyncio.sleep(2.0)
-            else:
-                print("[*] Could not auto-trigger; waiting for manual interaction.")
+            if sent < num_messages:
+                print(f"[*] Could not auto-trigger all {num_messages}; send remaining manually.")
 
         print("\n" + "=" * 60)
-        print("[!] Send one chat message in the browser (or wait if auto-trigger worked).")
-        print("[!] This will capture the LLM API request.")
+        print(f"[!] Send {num_messages} chat messages in the browser (one at a time).")
+        print("[!] This captures single-turn and multi-turn formats for each component.")
         print("=" * 60 + "\n")
 
-        # Wait until we have at least one POST/WS candidate or timeout
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             if post_candidates:
-                break
+                best_url = post_candidates[0]["url"]
+                if post_count_by_url.get(best_url, 0) >= num_messages:
+                    break
             await asyncio.sleep(0.5)
-
-        if record_playwright_trace and output_dir:
-            extract_dir = await stop_playwright_trace(context, output_dir)
-            print(f"[+] Playwright trace extracted to {extract_dir}")
 
         await context.close()
         await browser.close()
 
-    # Sort by score descending, keep only valid candidates
-    post_candidates.sort(key=lambda c: c["score"], reverse=True)
+    post_candidates.sort(key=lambda c: (c["score"], -c.get("_request_index", 1)), reverse=True)
     post_candidates = [c for c in post_candidates if c["score"] >= MIN_SCORE]
+    seen_urls: set[str] = set()
+    post_deduped: list[dict] = []
+    for c in post_candidates:
+        url = c["url"]
+        if url not in seen_urls:
+            seen_urls.add(url)
+            c_clean = {k: v for k, v in c.items() if k != "_request_index"}
+            post_deduped.append(c_clean)
+    post_candidates = post_deduped
     get_endpoints.sort(key=lambda c: c["score"], reverse=True)
     get_endpoints = [c for c in get_endpoints if c["score"] >= MIN_SCORE_GET]
 

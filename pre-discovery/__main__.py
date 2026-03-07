@@ -43,20 +43,22 @@ def _find_auth_state(app_url: str) -> Path | None:
 
 async def _run(app_url: str, args: argparse.Namespace) -> int:
     from . import discover, output
+    from .paths import get_format_dir
 
     auth_state = _find_auth_state(app_url) if app_url else None
     if auth_state:
         print(f"[*] Using auth state: {auth_state}")
 
-    out_dir = Path(args.output_dir).resolve()
+    out_dir = (Path(args.output_dir).resolve() if args.output_dir else get_format_dir(app_url)).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
     captured = await discover.discover_api(
         app_url,
         headless=args.headless,
         timeout_seconds=args.timeout,
         try_auto_trigger=not args.no_auto_trigger,
+        num_messages=getattr(args, "num_messages", 3),
         auth_state_path=auth_state,
         verbose=getattr(args, "verbose", False),
-        record_playwright_trace=True,
         output_dir=out_dir,
     )
 
@@ -64,7 +66,6 @@ async def _run(app_url: str, args: argparse.Namespace) -> int:
     get_endpoints = captured.get("get", [])
     trace_entries = captured.get("trace", [])
 
-    out_dir = Path(args.output_dir).resolve()
     trace_file = output.write_trace(trace_entries, out_dir, app_url=app_url)
     print(f"\n[+] Full trace written to {trace_file} ({len(trace_entries)} requests)")
 
@@ -85,6 +86,7 @@ async def _run(app_url: str, args: argparse.Namespace) -> int:
 
     if out_file:
         print(f"\n[+] Discovered API written to {out_file}")
+        print(f"[*] Format dir: {out_dir}")
         if args.update_config:
             print(f"[*] Updated TARGET_API_URL in .config")
         return 0
@@ -103,8 +105,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default=str(_root / "pre-discovery" / "format"),
-        help="Directory for discovered_api.json (default: pre-discovery/format/)",
+        default=None,
+        help="Directory for discovered_api.json (default: pre-discovery/<sitename>/<component>/format/ from APP_URL)",
     )
     parser.add_argument(
         "--update-config",
@@ -126,6 +128,12 @@ def main() -> int:
         type=float,
         default=120.0,
         help="Seconds to wait for first LLM request (default: 120)",
+    )
+    parser.add_argument(
+        "--num-messages",
+        type=int,
+        default=3,
+        help="Number of chat messages to capture for verified single/multi-turn format (default: 3)",
     )
     parser.add_argument(
         "--verbose",

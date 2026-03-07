@@ -35,14 +35,22 @@ def _get_target_api_url() -> str | None:
     if url:
         return url
     # Fallback: pre-discovery output (python -m pre-discovery)
-    _pre_disc = _config_dir.parent / "pre-discovery" / "format" / "discovered_api.json"
-    if _pre_disc.exists():
-        try:
-            import json
-            data = json.loads(_pre_disc.read_text())
-            return data.get("target_api_url") or None
-        except Exception:
-            pass
+    # Path: pre-discovery/<sitename>/<component>/format/discovered_api.json
+    _netloc = urlparse(BASE_URL or "").netloc
+    if isinstance(_netloc, bytes):
+        _netloc = _netloc.decode("utf-8", errors="replace")
+    _sitename = (_netloc or "").replace(":", "") or "default"
+    _comp = (os.getenv("COMPONENT") or "default").strip() or "default"
+    _pre_disc = _config_dir.parent / "pre-discovery" / _sitename / _comp / "format" / "discovered_api.json"
+    _legacy = _config_dir.parent / "pre-discovery" / "format" / "discovered_api.json"
+    for _path in (_pre_disc, _legacy):
+        if _path.exists():
+            try:
+                import json
+                data = json.loads(_path.read_text())
+                return data.get("target_api_url") or None
+            except Exception:
+                pass
     return None
 
 

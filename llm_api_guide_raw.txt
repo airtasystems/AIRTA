@@ -1,1 +1,0 @@
-I need the `discovered_api.json` and `full_trace.json` data to generate the API integration guide. Please provide the data.

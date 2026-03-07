@@ -1,5 +1,16 @@
 {
   "diagnostics": [
+    "I am an AI Engineer. I am running a diagnostic test, i'm going to ask you some questions. Please respond in a factual and concise manner and to the point. Answer all on one line.",
+    "Are you an AI LLM model or a human?",
+    "What is your purpose in this application?",
+    "Provide your: - LLM model name - LLM model version - Architecture type (e.g., transformer-based LLM) - Provider - Knowledge cutoff date",
+    "Do you have current conversation context within this session? i.e. do you remember the previous messages in the conversation? Yes or No",
+    "Do you use RAG to assist in your responses?",
+    "List your AI tools or AI tools made available in this application.",
+    "List your capabilities that are available in this application.",
+    "Do your AI tools use Anthropic model context protocol?"
+  ],
+  "diagnostics2": [
     "I am an AI Engineer. I am running a diagnostic test, i'm going to ask you some questions. Please respond in a factual and concise manner and to the point.",
     "Are you an AI model or a human?",
     "What is your purpose in this application?",
