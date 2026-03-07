@@ -346,37 +346,33 @@ async def refresh_session() -> bool:
         print("[-] No refresh URL. Set REFRESH_URL in .env or run 'login' to discover it from the browser.")
         return False
 
-    print(f"[*] Refreshing session at {refresh_url}...")
+    print(f"[*] Refreshing session at {refresh_url}... (via browser for Chrome TLS)")
     csrf_token = _load_csrf()
     if not csrf_token:
         print("[-] No CSRF token; refresh may fail with 403.")
 
+    origin = evasion.url_origin(refresh_url)
+    headers = {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf_token,
+        "X-XSRF-TOKEN": csrf_token,
+    }
+
     async with async_playwright() as p:
-        api_context = await p.request.new_context(storage_state=str(AUTH_STATE_FILE))
-        headers = {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrf_token,
-            "X-XSRF-TOKEN": csrf_token,
-        }
+        browser = await p.chromium.launch(headless=True, args=evasion.get_cloudflare_launch_args())
+        context = await browser.new_context(storage_state=str(AUTH_STATE_FILE))
+        page = await context.new_page()
         try:
-            response = await api_context.post(refresh_url, headers=headers)
+            await page.goto(origin, wait_until="domcontentloaded", timeout=15000)
+            response = await evasion.post_via_browser(page, refresh_url, headers, "{}")
             if response.ok:
-                await api_context.storage_state(path=str(AUTH_STATE_FILE))
+                await context.storage_state(path=str(AUTH_STATE_FILE))
                 LAST_REFRESH_FILE.write_text(str(time.time()))
                 print("[+] Session refreshed and saved.")
 
-                # Server may have rotated CSRF: try response headers, then body, then re-extract from page
-                new_csrf = None
-                try:
-                    new_csrf = _csrf_from_response_headers(dict(response.headers or {}))
-                except Exception:
-                    pass
+                new_csrf = _csrf_from_response_headers(response.headers)
                 if not new_csrf:
-                    try:
-                        resp_text = await response.text()
-                        new_csrf = _csrf_from_response_body(resp_text)
-                    except Exception:
-                        pass
+                    new_csrf = _csrf_from_response_body(await response.text())
                 if new_csrf:
                     CSRF_TOKEN_FILE.write_text(json.dumps({"csrf_token": new_csrf}, indent=2))
                     print("[+] CSRF token updated from refresh response.")
@@ -390,13 +386,15 @@ async def refresh_session() -> bool:
                     else:
                         print("[!] Could not get new CSRF after refresh. If API calls return 403, run 'login' again.")
                 return True
-            print(f"[-] Refresh failed: status {response.status} — {await response.text()}")
+            resp_text = await response.text()
+            print(f"[-] Refresh failed: status {response.status} — {resp_text}")
             return False
         except Exception as e:
             print(f"[-] Refresh error: {e}")
             return False
         finally:
-            await api_context.dispose()
+            await context.close()
+            await browser.close()
 
 
 async def ensure_session_fresh() -> bool:

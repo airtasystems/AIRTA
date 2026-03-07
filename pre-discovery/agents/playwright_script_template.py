@@ -147,6 +147,7 @@ def render_playwright_script(
 import argparse
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -232,10 +233,21 @@ async def main(*, prompts: list[str], log_path: Path | None = None, headless: bo
         print(f"[*] Log file: {{log_path}}", flush=True)
     print("[*] Launching browser...", flush=True)
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        )
+        launch_args = _evasion.get_cloudflare_launch_args() if _evasion else []
+        launch_opts = {{"headless": headless, "args": launch_args}}
+        if _evasion and (os.environ.get("EVASION_USE_CHROMIUM") or "").strip().lower() not in ("1", "true", "yes"):
+            launch_opts["channel"] = "chrome"
+        try:
+            browser = await p.chromium.launch(**launch_opts)
+        except Exception as e:
+            if _evasion and "channel" in str(e).lower():
+                del launch_opts["channel"]
+                print("[*] Chrome not found, using Chromium.", flush=True)
+                browser = await p.chromium.launch(**launch_opts)
+            else:
+                raise
+        context_opts = _evasion.get_browser_context_options() if _evasion else {{"user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}}
+        context = await browser.new_context(**context_opts)
         page = await context.new_page()
 {stealth_block}
         print("[*] Navigating to app...", flush=True)

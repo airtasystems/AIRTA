@@ -190,6 +190,8 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
+from pipeline import evasion
+
 _here = Path(__file__).resolve().parent
 # Layout: package_dir / sitename / component / send_payloads.py -> package is 2 levels up
 _pkg_dir = _here.parent.parent
@@ -257,10 +259,14 @@ async def send_payloads() -> None:
         headers["X-CSRF-Token"] = csrf
         headers["X-XSRF-TOKEN"] = csrf
 
+    origin = evasion.url_origin(url)
     results = []
     async with async_playwright() as p:
-        api_context = await p.request.new_context(storage_state=str(AUTH_STATE_FILE))
+        browser = await p.chromium.launch(headless=True, args=evasion.get_cloudflare_launch_args())
+        context = await browser.new_context(storage_state=str(AUTH_STATE_FILE))
+        page = await context.new_page()
         try:
+            await page.goto(origin, wait_until="domcontentloaded", timeout=15000)
             for i, p_item in enumerate(payloads):
                 overrides = {}
                 for k, v in p_item.items():
@@ -278,7 +284,7 @@ async def send_payloads() -> None:
                 body, content_type = payload_format_module.build_body(payload_format, overrides)
                 req_headers = {**headers, "Content-Type": content_type}
                 try:
-                    response = await api_context.post(url, headers=req_headers, data=body)
+                    response = await evasion.post_via_browser(page, url, req_headers, body)
                     resp_text = await response.text()
                     results.append({"title": label, "status": response.status, "ok": response.ok, "response": resp_text})
                     if not response.ok:
@@ -290,7 +296,8 @@ async def send_payloads() -> None:
                     results.append({"title": label, "status": None, "ok": False, "error": str(e), "response": None})
                     print(f"  [error] {label} — {e}")
         finally:
-            await api_context.dispose()
+            await context.close()
+            await browser.close()
 
     ok_count = sum(1 for r in results if r.get("ok"))
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")

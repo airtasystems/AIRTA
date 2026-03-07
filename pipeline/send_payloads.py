@@ -164,6 +164,7 @@ async def send_payloads_from_list(
         parts.append("header rotation")
         if proxy:
             parts.append("proxy=" + proxy["server"])
+        parts.append("via browser (Chrome TLS)")
         print("[*] Evasion: " + ", ".join(parts) + ".")
 
     gap_lock = asyncio.Lock() if concurrency > 1 else None
@@ -189,7 +190,7 @@ async def send_payloads_from_list(
         body, content_type = build_body_fn(payload_format, overrides)
         req_headers = {**headers, "Content-Type": content_type, **evasion.rotated_headers()}
         try:
-            response = await evasion.post_with_retry_429(api_context, url, req_headers, body)
+            response = await evasion.post_with_retry_429(page, url, req_headers, body)
             resp_text = await response.text()
             out = {"title": title, "status": response.status, "ok": response.ok, "response": resp_text}
             if verbose and concurrency == 1:
@@ -212,11 +213,18 @@ async def send_payloads_from_list(
                 print(f"  [error] {title} — {e}")
             return (idx, {"title": title, "status": None, "ok": False, "error": str(e), "response": None})
 
+    origin = evasion.url_origin(url)
+
     async with async_playwright() as p:
-        api_context = await p.request.new_context(
-            storage_state=str(AUTH_STATE_FILE),
-            proxy=proxy,
-        )
+        context_opts = {"storage_state": str(AUTH_STATE_FILE)}
+        if proxy:
+            context_opts["proxy"] = proxy
+        browser = await p.chromium.launch(headless=True, args=evasion.get_cloudflare_launch_args())
+        context = await browser.new_context(**context_opts)
+        page = await context.new_page()
+        # Load origin so fetch() has same-origin cookies; uses browser TLS fingerprint
+        await page.goto(origin, wait_until="domcontentloaded", timeout=15000)
+
         async def run_multiturn_async(i: int, p_item: dict) -> dict:
             """Run sequential multi-turn: send each prompt, capture response, append to history, repeat."""
             prompts = p_item.get("prompts") or []
@@ -297,7 +305,8 @@ async def send_payloads_from_list(
                             else:
                                 print(f"  [{status}] {title}")
         finally:
-            await api_context.dispose()
+            await context.close()
+            await browser.close()
     return results
 
 

@@ -6,6 +6,7 @@ Records full request trace for the entire LLM interaction session.
 No TARGET_API_URL required — discovers it dynamically.
 """
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -178,14 +179,43 @@ async def discover_api(
             })
 
     async with async_playwright() as p:
-        launch_args = [f"--window-position={evasion.WINDOW_POSITION_RIGHT_HALF[0]},{evasion.WINDOW_POSITION_RIGHT_HALF[1]}"]
         viewport = {"width": evasion.HALF_VIEWPORT_WIDTH, "height": evasion.VIEWPORT_HEIGHT}
+        remote_url = evasion.get_remote_browser_url()
 
-        browser = await p.chromium.launch(headless=headless, args=launch_args)
+        if remote_url:
+            # Technique 8: Use remote browser (Browserless, Scrappey) for Cloudflare bypass
+            print("[*] Connecting to remote browser (Cloudflare evasion)...")
+            browser = await p.chromium.connect_over_cdp(remote_url)
+        else:
+            # Techniques 1 & 2: Cloudflare launch args + real Chrome
+            launch_args = evasion.get_cloudflare_launch_args(
+                window_position=evasion.WINDOW_POSITION_RIGHT_HALF,
+            )
+            use_chrome = (
+                (os.environ.get("EVASION_USE_CHROMIUM") or "").strip().lower()
+                not in ("1", "true", "yes")
+            )
+            launch_opts = {"headless": headless, "args": launch_args}
+            if use_chrome:
+                launch_opts["channel"] = "chrome"
+            try:
+                browser = await p.chromium.launch(**launch_opts)
+            except Exception as e:
+                if use_chrome and "channel" in str(e).lower():
+                    # Chrome not installed; fall back to Chromium
+                    del launch_opts["channel"]
+                    print("[*] Chrome not found, using Chromium.")
+                    browser = await p.chromium.launch(**launch_opts)
+                else:
+                    raise
 
-        context_options = {"viewport": viewport}
+        # Technique 3: Realistic context (user_agent, locale, timezone)
+        context_options = evasion.get_browser_context_options(viewport=viewport)
         if auth_state_path and auth_state_path.exists():
             context_options["storage_state"] = str(auth_state_path)
+        proxy = evasion.get_playwright_proxy()
+        if proxy:
+            context_options["proxy"] = proxy
 
         context = await browser.new_context(**context_options)
         page = await context.new_page()
@@ -232,8 +262,15 @@ async def discover_api(
 
         page.on("websocket", handle_websocket)
 
+        # Technique 5: Longer human-like delay before navigation (reduces bot-like timing)
+        await asyncio.sleep(evasion.human_delay_long(500, 1200))
+
         print(f"[*] Opening app at {app_url}...")
         await page.goto(app_url)
+        # Technique 5: Warm-up with human-like mouse movement and scroll
+        await evasion.warm_up_page_human_like(
+            page, evasion.HALF_VIEWPORT_WIDTH, evasion.VIEWPORT_HEIGHT
+        )
         # Some sites have chat at /chat, /chatbot, etc.; try each until we find one with a chat input
         parsed = urlparse(app_url)
         if parsed.path in ("", "/"):

@@ -41,6 +41,28 @@ python -m pre-discovery --app-url http://localhost:3000 --update-config
 | `--timeout` | Seconds to wait for first LLM request (default: 120) |
 | `--verbose` | Log every GET/POST/WebSocket seen and its score (for debugging) |
 
+## Cloudflare / Anti-bot Evasion
+
+Pre-discovery applies multiple evasion techniques for Cloudflare-protected sites (e.g. chatgpt.com):
+
+1. **Launch args** — `--disable-blink-features=AutomationControlled` and related flags to hide automation
+2. **Real Chrome** — Uses installed Chrome (`channel="chrome"`) instead of bundled Chromium. Set `EVASION_USE_CHROMIUM=1` to fall back to Chromium
+3. **Context fingerprint** — Rotated User-Agent, `locale`, `timezone_id` for realistic browser fingerprint
+4. **Human-like behavior** — Longer delays before navigation, mouse movement and scroll warm-up after page load
+5. **Remote browser (Technique 8)** — Use a managed browser service (Browserless, Scrappey) that handles Cloudflare:
+
+   ```bash
+   # Browserless (browserless.io) or similar
+   export REMOTE_BROWSER_URL="wss://chrome.browserless.io?token=YOUR_TOKEN"
+   # or
+   export BROWSERLESS_URL="wss://chrome.browserless.io?token=YOUR_TOKEN"
+   python -m pre-discovery --app-url https://chatgpt.com
+   ```
+
+   When set, Playwright connects to the remote browser instead of launching locally. These services use residential proxies and anti-detection infrastructure.
+
+Optional: `PROXY_LIST=http://host:port` for proxy (e.g. residential proxy). `pip install playwright-stealth` for additional WAF evasion.
+
 ## Flow
 
 1. Launches Playwright, loads app at APP_URL

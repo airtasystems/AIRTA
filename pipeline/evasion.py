@@ -42,6 +42,19 @@ VIEWPORT_HEIGHT = 1080
 HALF_VIEWPORT_WIDTH = 960
 WINDOW_POSITION_RIGHT_HALF = (960, 0)
 
+# Cloudflare / anti-bot evasion: launch args to hide automation indicators
+CLOUDFLARE_LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",  # Hides navigator.webdriver
+    "--disable-dev-shm-usage",
+    "--disable-infobars",
+    "--no-first-run",
+    "--no-default-browser-check",
+]
+
+# Context options for realistic browser fingerprint (Cloudflare evasion)
+DEFAULT_LOCALE = "en-GB"
+DEFAULT_TIMEZONE_ID = "Europe/London"
+
 # Rate limit and server-error retry
 MAX_ATTEMPTS_429 = 4
 MAX_ATTEMPTS_5XX = 4  # 500, 502, 503, 504
@@ -150,6 +163,52 @@ def get_playwright_proxy() -> dict[str, str] | None:
     return {"server": first}
 
 
+def url_origin(url: str) -> str:
+    """Return origin (scheme + netloc) for loading a page before fetch. E.g. https://chatgpt.com/backend/... -> https://chatgpt.com"""
+    from urllib.parse import urlparse
+    p = urlparse(url)
+    scheme = p.scheme or "https"
+    netloc = p.netloc or "localhost"
+    return f"{scheme}://{netloc}"
+
+
+def get_remote_browser_url() -> str | None:
+    """
+    Return WebSocket URL for remote browser (Browserless, Scrappey, etc.) if configured.
+    Set REMOTE_BROWSER_URL or BROWSERLESS_URL (e.g. wss://chrome.browserless.io?token=...).
+    When set, pre-discovery uses this instead of launching a local browser.
+    """
+    url = (os.getenv("REMOTE_BROWSER_URL") or os.getenv("BROWSERLESS_URL") or "").strip()
+    return url if url else None
+
+
+def get_cloudflare_launch_args(*, window_position: tuple[int, int] | None = None) -> list[str]:
+    """
+    Return launch args for Cloudflare/anti-bot evasion.
+    Optionally prepend window position for right-half placement.
+    """
+    args = list(CLOUDFLARE_LAUNCH_ARGS)
+    if window_position is not None:
+        args.insert(0, f"--window-position={window_position[0]},{window_position[1]}")
+    return args
+
+
+def get_browser_context_options(viewport: dict[str, int] | None = None) -> dict[str, Any]:
+    """
+    Return context options for realistic browser fingerprint (Cloudflare evasion).
+    Includes rotated User-Agent, locale, timezone. Merge with viewport/storage_state as needed.
+    """
+    opts: dict[str, Any] = {
+        "user_agent": random.choice(USER_AGENTS),
+        "locale": DEFAULT_LOCALE,
+        "timezone_id": DEFAULT_TIMEZONE_ID,
+        "permissions": [],
+    }
+    if viewport:
+        opts["viewport"] = viewport
+    return opts
+
+
 def human_delay(min_ms: float = 80, max_ms: float = 250) -> float:
     """Return a random delay in seconds to mimic human reaction time."""
     return random.uniform(min_ms / 1000.0, max_ms / 1000.0)
@@ -175,6 +234,29 @@ async def scroll_human_like(page, delta_y: float, steps: int = 5) -> None:
     for _ in range(steps):
         await page.mouse.wheel(0, step)
         await asyncio.sleep(random.uniform(0.1, 0.28))
+
+
+def human_delay_long(min_ms: float = 800, max_ms: float = 1800) -> float:
+    """Return a longer random delay in seconds (e.g. before page load) to mimic human hesitation."""
+    return random.uniform(min_ms / 1000.0, max_ms / 1000.0)
+
+
+async def warm_up_page_human_like(page, viewport_width: int, viewport_height: int) -> None:
+    """
+    Simulate human-like behavior after page load: move mouse to center, small scroll.
+    Reduces bot-like "instant interaction" patterns that Cloudflare detects.
+    """
+    center_x = viewport_width / 2
+    center_y = viewport_height / 2
+    # Start from upper-left area (natural cursor position when tab opens)
+    from_x = random.uniform(80, 180)
+    from_y = random.uniform(80, 180)
+    to_x = center_x + random.uniform(-40, 40)
+    to_y = center_y + random.uniform(-40, 40)
+    await move_mouse_human_like(page, (from_x, from_y), (to_x, to_y), steps=12)
+    await asyncio.sleep(human_delay(150, 350))
+    await scroll_human_like(page, random.uniform(-60, 60), steps=3)
+    await asyncio.sleep(human_delay(200, 500))
 
 
 async def apply_stealth(page) -> bool:
@@ -265,13 +347,65 @@ def _log_retry(retry_state) -> None:
     print(f"    [{status}] waiting {secs}s then retry {n}/{max_attempts}")
 
 
+class _BrowserResponse:
+    """Response-like object for post_via_browser (compatible with retry logic)."""
+
+    def __init__(self, status: int, ok: bool, text: str, headers: dict | None = None):
+        self.status = status
+        self.ok = ok
+        self._text = text
+        self.headers = dict(headers) if headers else {}
+
+    async def text(self) -> str:
+        return self._text
+
+
+async def post_via_browser(page, url: str, headers: dict, data: str) -> _BrowserResponse:
+    """
+    POST via page.evaluate(fetch) — uses browser's TLS fingerprint instead of
+    Python's OpenSSL. Requires page to be loaded on same origin (or CORS-allowed).
+    credentials: 'include' sends cookies.
+    """
+    # Drop headers that fetch will set or that break serialization
+    headers_copy = {k: v for k, v in headers.items() if k.lower() not in ("content-length",)}
+    headers_json = json.dumps(headers_copy)
+    result = await page.evaluate(
+        """
+        async ({url, headersJson, body}) => {
+            const headers = JSON.parse(headersJson);
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: body,
+                credentials: 'include'
+            });
+            const headersObj = {};
+            res.headers.forEach((v, k) => { headersObj[k] = v; });
+            return { status: res.status, ok: res.ok, text: await res.text(), headers: headersObj };
+        }
+        """,
+        {"url": url, "headersJson": headers_json, "body": data},
+    )
+    return _BrowserResponse(
+        status=result["status"],
+        ok=result["ok"],
+        text=result["text"],
+        headers=result.get("headers"),
+    )
+
+
 def post_with_retry_429(api_context, url: str, headers: dict, data: str):
     """
     POST once; on 429 or 5xx (500, 502, 503, 504) raise so tenacity can wait and retry.
     When tenacity is not available, does a single attempt (no retry).
+    Pass api_context (APIRequestContext) for request API, or a page for browser-based POST.
     """
     async def _post():
-        response = await api_context.post(url, headers=headers, data=data)
+        if hasattr(api_context, "evaluate"):
+            # It's a page — use browser-based POST (Chrome TLS fingerprint)
+            response = await post_via_browser(api_context, url, headers, data)
+        else:
+            response = await api_context.post(url, headers=headers, data=data)
         try:
             body_text = await response.text()
         except Exception:
@@ -283,7 +417,6 @@ def post_with_retry_429(api_context, url: str, headers: dict, data: str):
         return response
 
     if _TENACITY_AVAILABLE:
-        # Retry up to max(429, 5xx) attempts; tenacity retries on either exception type
         max_attempts = max(MAX_ATTEMPTS_429, MAX_ATTEMPTS_5XX)
         decorated = retry(
             stop=stop_after_attempt(max_attempts),
