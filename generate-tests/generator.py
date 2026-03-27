@@ -66,12 +66,12 @@ def main() -> None:
         "--run-type",
         choices=["framework", "tools", "capabilities"],
         default="framework",
-        help="framework: use --framework/--rubric and generate mandate prompts. tools/capabilities: use --component-rubric and generate 8 prompts for tools or capabilities.",
+        help="framework: use --framework/--rubric and generate mandate prompts (8 per mandate). tools/capabilities: use --component-rubric; prompt count scales with verified items.",
     )
     parser.add_argument(
         "--component-rubric",
         metavar="PATH",
-        help="Path to component rubric JSON. When --run-type is framework: after writing the suite, append tools and capabilities mandates (8 prompts each) to the same file. When --run-type is tools or capabilities: required.",
+        help="Path to component rubric JSON. When --run-type is framework: after writing the suite, append tools and capabilities mandates to the same file. When --run-type is tools or capabilities: required.",
     )
     parser.add_argument(
         "--append-to",
@@ -165,7 +165,7 @@ def main() -> None:
             suite_path = _gen_dir / strategy.output_subdir / Path(output_path).name
             if suite_path.exists():
                 for run_type in ("tools", "capabilities"):
-                    print(f"[*] Appending {run_type} prompts (8) to {suite_path.name} (same experts as main)...")
+                    print(f"[*] Appending {run_type} prompts to {suite_path.name} (same experts as main)...")
                     core.generate_tools_or_capabilities_suite(
                         str(comp_path.resolve()),
                         run_type,

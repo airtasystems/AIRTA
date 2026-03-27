@@ -31,6 +31,8 @@ def get_frameworks() -> list[str]:
         return []
     names = []
     for p in sorted(rubrics_dir.glob("*.json")):
+        if p.stem in ("company", "component"):
+            continue  # context rubrics for judge/adapter, not compliance frameworks
         names.append(p.stem.replace("-", "_"))
     return names
 

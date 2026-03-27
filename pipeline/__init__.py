@@ -1,1 +1,1 @@
-# Pipeline: run compliance tests and risk assessment.
+# Pipeline: risk assessment and Genbounty export.

@@ -1,76 +1,154 @@
 # AIRTA — AI Red Team Attack Suite
 
-Unified pipeline for discovery, diagnostics, compliance testing, and risk assessment of LLM endpoints (e.g. EU AI Act, OWASP, FRIA). Discovers the app’s API and auth, sends adversarial prompts, and scores results with a multi-expert risk-level agent.
+Generate adversarial test suites from compliance rubrics, run them against live targets via browser automation, and assess risk with multi-expert analysis.
 
 ## Requirements
 
 - Python 3.10+
-- [Playwright](https://playwright.dev/python/) (browser for discovery)
 
 ```bash
 pip install -r requirements.txt
-playwright install chromium
 ```
 
 ## Configuration
 
-- **`.config`** — Non-sensitive settings (loaded first): `APP_URL`, `TARGET_API_URL`, `COMPONENT`, `GEMINI_MODEL`, `REFRESH_URL`, etc. Same format as `.env` (KEY=value, `#` comments).
+- **`.config`** — Non-sensitive settings: `GEMINI_MODEL`, `GEMINI_JUDGE`. Same format as `.env` (`KEY=value`, `#` comments).
 - **`.env`** — Secrets only (e.g. `GEMINI_API_KEY`). Loaded after `.config` so it can override.
 
-Example `.config`:
-
-```ini
-APP_URL=http://localhost:3000
-TARGET_API_URL=http://localhost:3000/api/chat
-COMPONENT=chat
-GEMINI_MODEL=gemini-2.5-flash
-REFRESH_URL=http://localhost:3000/api/v2/auth/refresh
-```
-
-## Run the pipeline (CLI)
-
-From project root:
+## Quick start (interactive menu)
 
 ```bash
-python main.py [options]
+python main.py
 ```
 
-### Flags
+This launches the interactive menu: select a site, then a component, then choose from the pipeline steps. You can also create new sites and components from the menu.
 
-| Flag | Default | Description |
-|------|--------|-------------|
-| `--skip-discovery` | — | Skip discovery; assume endpoint and auth already exist. |
-| `--skip-diagnostics` | — | Skip diagnostics (send + analyze_log) before compliance tests. |
-| `--force-discovery` | — | Run discovery even if endpoint and auth exist. |
-| `--strategy` | `zero_shot` | Strategy subdir under `generate-tests/` (e.g. `zero_shot`, `multi_shot`, `few_shot`). Hyphens auto-corrected to underscores. |
-| `--framework` | `eu_ai_act` | Framework name for test file; resolves to `generate-tests/<strategy>/<framework>.json`. |
-| `--test-file` | — | Override: path to test prompts JSON. If unset, uses strategy/framework path above. |
-| `--component` | `COMPONENT` env or `default` | Component name for discovery state. |
-| `--report-dir` | — | Also copy `pipeline_report.json` to this directory. |
-| `--speed` | `1` | Request concurrency: `1` = sequential with evasion (throttle + tenacity); `2`–`8` = up to N concurrent requests (token-bucket + 0.3s gap between starts). |
+## Commands (direct CLI)
 
-Flow: optional discovery → diagnostics (if not skipped) → compliance tests → risk assessment → report under `component-discovery/<site>/<component>/logs/<timestamp>/`.
+All commands are also available as direct subcommands for scripting and CI.
 
-## Discovery (first-time setup)
+### Generate tests
 
-1. Set `APP_URL` and (optionally) `COMPONENT` in `.config`. If `TARGET_API_URL` is unknown (subdomain, 3rd party, or non-obvious path), run **pre-discovery** first:
-   ```bash
-   python -m pre-discovery --update-config
-   ```
-   This loads the app, captures network traffic when you send a chat message, and infers the LLM API URL. See `pre-discovery/README.md`.
-2. Otherwise, set `TARGET_API_URL` in `.config` directly.
-3. **Capture login** — Browser opens; log in (and MFA if required), then press Enter in the terminal when done.
-4. **Discover endpoint** — Make one request to the LLM in the app; the pipeline intercepts it and saves URL, headers, and payload shape.
-5. **Generate site payload** — Produces site-specific `payload_format.py` and `send_payloads.py` from the discovered schema.
+Generate adversarial test prompts from rubrics using a configurable prompting strategy.
 
-After that, use **Skip discovery** for normal pipeline runs.
+```bash
+# One strategy + one framework
+python main.py generate --strategy zero_shot --framework oecd
 
-## Project layout (high level)
+# All frameworks for a strategy
+python main.py generate --strategy zero_shot --all-frameworks
 
-- `main.py` — CLI entry point; calls `run_pipeline()`.
-- `pre-discovery/` — Infer `TARGET_API_URL` from `APP_URL` when endpoint is unknown (subdomain, 3rd party, etc.). Run `python -m pre-discovery`.
-- `component-discovery/` — Auth, discovery, payload format, send payloads, diagnostics; state under `component-discovery/<site>/<component>/`.
-- `diagnostics/` — Diagnostic prompts and `analyze_log` (writes `discovery.json`).
-- `generate-tests/` — Compliance test prompts by strategy (e.g. zero-shot) and framework (e.g. eu_ai_act). Use `generator.py --strategy X --framework Y` for one pair, or `generate_all.py` to create all missing strategy×framework files (from `strategies/` and `rubrics/`). Each file is written as it’s generated, so if a run fails you can re-run and only missing files will be generated.
-- `pipeline/` — Runs compliance tests and risk assessment.
-- `risk-level-agent/` — Multi-expert + judge for risk levels (local file cache can be disabled via `LOCAL_CACHE_ENABLED`).
+# All strategies for a framework
+python main.py generate --framework eu_ai_act --all-strategies
+
+# Everything: all strategies x all frameworks
+python main.py generate --all
+
+# With component rubric context
+python main.py generate --strategy zero_shot --framework eu_ai_act --component-rubric path/to/rubric.json
+```
+
+Output is written to `generate-tests/<strategy>/<framework>.json`.
+
+### Discover (browser-bot setup)
+
+Interactive terminal menu for browser-bot: log in to a target site, create component configs (input/submit selectors), and manage saved sites.
+
+```bash
+python main.py discover
+```
+
+This opens the browser-bot menu where you can:
+1. Add login (open browser, log in, save auth state)
+2. Create component config (record input fields and submit button)
+3. Remove sites
+4. Manage tokens and site/component selection
+
+### Run tests
+
+Run a generated test suite against a configured browser target. Copies the suite into browser-bot's posts directory, executes via Playwright, and converts the run log into a compliance log for risk assessment.
+
+```bash
+# Run tests with interactive site/component picker
+python main.py run generate-tests/zero-shot/eu-ai-act.json
+
+# Specify site and component directly
+python main.py run generate-tests/zero-shot/oecd.json --site chatgpt.com --component chat
+
+# Run tests and immediately assess risk
+python main.py run generate-tests/zero-shot/eu-ai-act.json --assess
+```
+
+The command auto-detects single-shot vs multi-shot suites. After the run, a `compliance_log.json` is written next to the browser-bot run log. With `--assess`, a `pipeline_report.json` is also generated.
+
+### Risk assessment
+
+Run multi-expert + judge risk assessment on a compliance log.
+
+```bash
+python main.py risk-assess path/to/compliance_log.json
+
+# Also copy the report elsewhere
+python main.py risk-assess path/to/compliance_log.json --report-dir ./reports
+```
+
+Writes `pipeline_report.json` alongside the compliance log.
+
+### Export to Genbounty
+
+Export a pipeline report to Genbounty via the bulk-import API.
+
+```bash
+python main.py export path/to/pipeline_report.json \
+  --host app.genbounty.com \
+  --api-key YOUR_KEY \
+  --program-id PROGRAM_ID
+```
+
+Credentials can also be set via `GENBOUNTY_HOST`, `GENBOUNTY_API_KEY`, `GENBOUNTY_PROGRAM_ID` env vars.
+
+### Direct generator usage
+
+The generator can also be run directly with more options:
+
+```bash
+python generate-tests/generator.py --strategy zero_shot --framework eu_ai_act
+python generate-tests/generate_all.py  # generate all missing strategy x framework files
+```
+
+## Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `zero_shot` | Single-prompt adversarial tests |
+| `multi_shot` | Multi-turn sequential conversations |
+| `few_shot` | Example-based prompts |
+| `iterative` | Multi-turn refinement |
+| `chain_of_thought` | CoT-style reasoning prompts |
+| `prompt_chaining` | Multi-step chained prompts |
+| `tree_of_thoughts` | ToT-style exploration |
+| `self_consistency` | Multiple runs for consistency |
+| `self_reflection` | Review/revise pattern |
+| `directional_stimulus` | Steering/hint-based prompts |
+
+## Pipeline flow
+
+```
+generate  →  discover  →  run  →  risk-assess  →  export
+(rubrics)    (auth+config)  (browser)  (multi-expert)   (Genbounty)
+```
+
+1. **Generate** creates adversarial test suites from compliance rubrics.
+2. **Discover** sets up browser-bot: login, record input/submit selectors.
+3. **Run** submits the generated prompts to the live target and captures responses.
+4. **Risk-assess** evaluates each prompt/response pair with multi-expert analysis.
+5. **Export** pushes the pipeline report to Genbounty.
+
+## Project layout
+
+- `main.py` — CLI entry point: `generate`, `discover`, `run`, `risk-assess`, `export`.
+- `generate-tests/` — Test generation: `generator.py`, `core.py`, `strategies/`.
+- `browser-bot/` — Browser automation: Playwright-based test runner with tiered fetchers.
+- `risk-level-agent/` — Multi-expert + judge LangGraph agent for risk levels.
+- `pipeline/` — `risk_assess.py`, `convert_log.py`, `export_genbounty.py`.
+- `rubrics/` — Compliance framework rubrics (EU AI Act, OWASP, FRIA, MITRE, NIST, etc.).

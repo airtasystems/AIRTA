@@ -1,5 +1,0 @@
-# Per-site state (e.g. localhost3000/auth_state.json)
-*/auth_state.json
-*/csrf_token.json
-*/discovered_endpoint.json
-*/last_refresh.txt

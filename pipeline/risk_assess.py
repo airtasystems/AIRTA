@@ -1,7 +1,7 @@
 """
 Run risk-level-agent on each adversarial result in a compliance log.
-Builds evaluation record with default EU AI Act criteria, invokes agent,
-returns per-result risk level and judge reasoning.
+Builds an evaluation record, invokes the single framework expert + judge,
+and returns per-result risk level and judge reasoning.
 Assumes risk_level_agent is already loadable (main.py adds path).
 """
 import json
@@ -49,9 +49,8 @@ def _build_test_record(entry: dict, framework: str = "EU AI Act") -> dict:
 def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
     """
     For each entry in the compliance log, run risk-level-agent and collect risk level and
-    judge reasoning. The judge uses 3 experts per response: 1 framework-specific (from the
-    test file's framework) + 2 related. Returns list of {id, mandate, prompt,
-    risk_level, judge_reasoning, experts_summary}.
+    judge reasoning. Uses a single framework-specific expert + judge per response.
+    Returns list of {id, mandate, prompt, risk_level, judge_reasoning, experts_summary}.
     """
     from risk_level_agent import (  # noqa: PLC0415
         build_evaluation_input,
@@ -75,7 +74,7 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
     expert_ids = get_experts_for_framework(framework)
     total = len(adversarial)
     print(f"[*] Framework: {framework}")
-    print(f"[*] Experts: {', '.join(expert_ids)}")
+    print(f"[*] Expert: {expert_ids[0]}")
     print(f"[*] Assessing {total} adversarial entries...")
     app = build_graph(selected_expert_ids=expert_ids)
     out: list[dict] = []
