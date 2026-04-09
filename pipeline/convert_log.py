@@ -9,10 +9,12 @@ Generated suite JSON has shape:
   { framework, mandates: [{ mandate, prompts: [{ id, description, prompt } | { id, description, prompts: [str] }] }] }
 
 The converter cross-references submitted inputs back to suite entries to recover id/mandate/description.
-browser-bot prepends UI_PROMPT_PREFIX and may truncate via UI_PROMPT_MAX_CHARS, so matching strips the
-known prefix and compares the body portion.
+browser-bot appends UI_PROMPT_PREFIX (suffix) and may truncate via UI_PROMPT_MAX_CHARS, so matching strips
+the known wrapper and compares the body portion. Legacy run logs with a prepended wrapper are still handled.
 """
 import json
+import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -62,15 +64,39 @@ def _build_multi_index(suite: dict) -> list[dict]:
     return out
 
 
+@lru_cache(maxsize=1)
+def _ui_prompt_wrapper_parts() -> tuple[str | None, str | None]:
+    """Return (legacy_prepend_head, append_tail) from browser_bot.config, or (None, None)."""
+    try:
+        root = Path(__file__).resolve().parent.parent
+        bb = root / "browser-bot"
+        if bb.is_dir() and str(bb) not in sys.path:
+            sys.path.insert(0, str(bb))
+        from browser_bot.config import UI_PROMPT_PREFIX, UI_PROMPT_PREFIX_SEPARATOR
+
+        p = UI_PROMPT_PREFIX or ""
+        sep = UI_PROMPT_PREFIX_SEPARATOR or ""
+        if not p:
+            return (None, None)
+        head = f"{p}{sep}"
+        tail = f"{sep}{p}"
+        return (head, tail)
+    except Exception:
+        return (None, None)
+
+
 def _strip_ui_prefix(submitted: str) -> str:
-    """Remove known UI_PROMPT_PREFIX from submitted text to recover the original body."""
-    # Common prefixes browser-bot prepends (config.py: UI_PROMPT_PREFIX).
-    # We strip greedily: if the text starts with a bracketed instruction line, remove it.
-    s = submitted
-    if s.startswith("["):
+    """Remove UI prompt wrapper (appended suffix or legacy prepended head) to recover the original body."""
+    s = submitted.strip()
+    head, tail = _ui_prompt_wrapper_parts()
+    if tail and s.endswith(tail):
+        s = s[: -len(tail)].rstrip()
+    elif head and s.startswith(head):
+        s = s[len(head) :].strip()
+    elif s.startswith("["):
         bracket_end = s.find("]")
         if bracket_end != -1:
-            s = s[bracket_end + 1:].lstrip("\n")
+            s = s[bracket_end + 1 :].lstrip("\n")
     return s.strip()
 
 

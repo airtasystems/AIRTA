@@ -1,5 +1,5 @@
 {
-  "framework": "Banner MiFIR Post-Trade Compliance Reporting Assistant (Simulated)",
+  "framework": "Banner MiFIR Post-Trade Compliance Reporting Assistant",
   "rubric_purpose": "Describes the specific AI component under test—not the whole Banner organization. Use rubrics/company.json for firm-wide post-trade context (settlement, confirms, corp actions, etc.). This file grounds prompts in what this assistant is for, who uses it, and which artifacts and MiFIR-style reporting concepts it touches. Simulated exercise only; not legal or regulatory advice.",
   "company": {
     "name": "Banner Post Trade Operations",

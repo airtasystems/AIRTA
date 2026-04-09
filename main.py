@@ -98,15 +98,25 @@ def _run_generate(args) -> None:
         env["COMPONENT_RUBRIC_CACHE_JSON"] = str(Path(args.component_rubric).resolve())
         component_rubric_args = ["--component-rubric", str(Path(args.component_rubric).resolve())]
 
+    site_args: list[str] = []
+    site = getattr(args, "site", "") or ""
+    component = getattr(args, "component", "") or ""
+    if site and component:
+        site_args = ["--site", site, "--component", component]
+
     def gen_one(strategy: str, framework: str) -> None:
         cmd = [
             sys.executable, str(generator_py),
             "--strategy", strategy, "--framework", framework,
-        ] + component_rubric_args
+        ] + component_rubric_args + site_args
         print(f"[*] Generating: strategy={strategy}, framework={framework}...")
         result = subprocess.run(cmd, cwd=str(_root), env=env)
         if result.returncode == 0:
-            print(f"[+] Done: generate-tests/{strategy.replace('_', '-')}/{framework.replace('_', '-')}.json")
+            if site and component:
+                out = f"browser-bot/sites/{site}/{component}/tests/{strategy.replace('_', '-')}/{framework.replace('_', '-')}.json"
+            else:
+                out = f"generate-tests/{strategy.replace('_', '-')}/{framework.replace('_', '-')}.json"
+            print(f"[+] Done: {out}")
         else:
             print(f"[!] Generator exited {result.returncode} for {strategy}/{framework}.")
 
@@ -248,15 +258,6 @@ def _run_tests(args) -> None:
 
     _setup_browser_bot()
 
-    posts_dir = _browser_bot_dir / "posts"
-    posts_dir.mkdir(parents=True, exist_ok=True)
-    if mode == "multi":
-        dest = posts_dir / "posts_multi.json"
-    else:
-        dest = posts_dir / "posts_single.json"
-    shutil.copy2(suite_path, dest)
-    print(f"[*] Copied suite to {dest.relative_to(_root)} (mode={mode})")
-
     site = args.site
     component = args.component
     if not site or not component:
@@ -268,12 +269,12 @@ def _run_tests(args) -> None:
         site = menu.current_site
         component = menu.current_component
 
-    print(f"[*] Running tests: {site}/{component} ({suite_path.name})...")
+    print(f"[*] Running tests: {site}/{component} ({suite_path.name}, mode={mode})...")
     bb_main_path = _browser_bot_dir / "main.py"
     bb_spec = importlib.util.spec_from_file_location("browser_bot_main", bb_main_path)
     bb_main = importlib.util.module_from_spec(bb_spec)
     bb_spec.loader.exec_module(bb_main)
-    asyncio.run(bb_main.run_posts(site=site, component=component, mode=mode))
+    asyncio.run(bb_main.run_posts(site=site, component=component, mode=mode, suite_path=suite_path))
 
     run_log = _latest_run_log(site, component)
     if not run_log:
@@ -379,14 +380,23 @@ _session_site: str | None = None
 _session_component: str | None = None
 
 
-def _pick_numbered(label: str, items: list[str], *, create_label: str | None = None) -> str | None:
-    """Show a numbered list and return the chosen item, or None on cancel.
+def _pick_numbered(
+    label: str,
+    items: list[str],
+    *,
+    create_label: str | None = None,
+    display: list[str] | None = None,
+) -> str | None:
+    """Show a numbered list and return the chosen item from *items*, or None on cancel.
+
     Accepts a number or the item text (case-insensitive, partial prefix match).
+    If *display* is set (same length as *items*), those strings are shown instead of *items*.
     If create_label is given, an extra option is appended for creating a new entry."""
+    shown = display if display is not None and len(display) == len(items) else items
     total = len(items) + (1 if create_label else 0)
     print(f"\n  {label}")
     for i, item in enumerate(items, 1):
-        print(f"    [{i}] {item}")
+        print(f"    [{i}] {shown[i - 1]}")
     if create_label:
         print(f"    [{len(items) + 1}] {create_label}")
     choice = input(f"  Choice [1-{total}]: ").strip()
@@ -404,8 +414,14 @@ def _pick_numbered(label: str, items: list[str], *, create_label: str | None = N
     for item in items:
         if item.lower() == lower or item.lower().replace("-", "_") == lower.replace("-", "_"):
             return item
+    for i, item in enumerate(items):
+        if shown[i].lower() == lower or shown[i].lower().replace("-", "_") == lower.replace("-", "_"):
+            return item
     for item in items:
         if item.lower().startswith(lower):
+            return item
+    for i, item in enumerate(items):
+        if shown[i].lower().startswith(lower):
             return item
     print(f"  '{choice}' not recognised.")
     return None
@@ -455,12 +471,63 @@ def _select_site_component() -> bool:
     return True
 
 
-def _list_suites() -> list[Path]:
-    """Return all generated suite JSON files sorted by modification time."""
-    gen_dir = _root / "generate-tests"
-    if not gen_dir.is_dir():
+def _pretty_strategy_dir(slug: str) -> str:
+    """Directory name e.g. zero-shot -> Zero-shot."""
+    return "-".join(part.capitalize() for part in slug.split("-") if part)
+
+
+def _pretty_framework_stem(stem: str) -> str:
+    """Suite file stem e.g. eu-ai-act -> EU AI Act."""
+    parts = stem.replace("_", "-").split("-")
+    short_upper = {"eu", "ai", "uk", "us"}
+    long_upper = {"oecd", "gdpr", "iso"}
+    words: list[str] = []
+    for p in parts:
+        if not p:
+            continue
+        pl = p.lower()
+        if pl in short_upper:
+            words.append(p.upper())
+        elif pl in long_upper:
+            words.append(p.upper())
+        else:
+            words.append(p.capitalize())
+    return " ".join(words)
+
+
+def _discover_strategy_dirs(site: str, component: str) -> list[Path]:
+    """Subdirs of tests/ that contain at least one JSON suite file."""
+    tests = _browser_bot_dir / "sites" / site / component / "tests"
+    if not tests.is_dir():
         return []
-    return sorted(gen_dir.rglob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return sorted(
+        [p for p in tests.iterdir() if p.is_dir() and any(p.glob("*.json"))],
+        key=lambda p: p.name.lower(),
+    )
+
+
+def _list_suites(site: str | None = None, component: str | None = None) -> list[Path]:
+    """Return generated suite JSON files sorted by modification time (newest first).
+
+    When *site* and *component* are set (interactive session), only suites under
+    ``browser-bot/sites/<site>/<component>/tests/`` are listed.
+
+    Otherwise scans ``generate-tests/`` and all ``browser-bot/sites/*/*/tests/``.
+    """
+    found: list[Path] = []
+    sites_dir = _browser_bot_dir / "sites"
+    if site and component:
+        comp_tests = sites_dir / site / component / "tests"
+        if comp_tests.is_dir():
+            found.extend(comp_tests.rglob("*.json"))
+        return sorted(set(found), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    gen_dir = _root / "generate-tests"
+    if gen_dir.is_dir():
+        found.extend(gen_dir.rglob("*.json"))
+    if sites_dir.is_dir():
+        found.extend(sites_dir.glob("*/*/tests/**/*.json"))
+    return sorted(set(found), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 def _list_compliance_logs() -> list[Path]:
@@ -503,6 +570,8 @@ def _menu_generate() -> None:
         all=False,
         all_frameworks=False,
         all_strategies=False,
+        site=_session_site or "",
+        component=_session_component or "",
     )
     _run_generate(args)
 
@@ -516,22 +585,46 @@ def _menu_discover() -> None:
 
 
 def _menu_run() -> None:
-    suites = _list_suites()
-    if not suites:
-        print("  [-] No generated suites found. Run 'Generate tests' first.")
+    site = _session_site or ""
+    comp = _session_component or ""
+    strategy_dirs = _discover_strategy_dirs(site, comp)
+    if not strategy_dirs:
+        print(
+            f"  [-] No test suites under browser-bot/sites/{site}/{comp}/tests/. "
+            "Run 'Generate tests' first."
+        )
         return
-    labels = [str(s.relative_to(_root)) for s in suites]
-    choice = _pick_numbered("Select test suite:", labels)
-    if not choice:
+
+    strat_slugs = [p.name for p in strategy_dirs]
+    strat_labels = [_pretty_strategy_dir(s) for s in strat_slugs]
+    choice_strat = _pick_numbered("Select strategy:", strat_slugs, display=strat_labels)
+    if not choice_strat:
         return
-    suite_path = _root / choice
+
+    strategy_path = next(p for p in strategy_dirs if p.name == choice_strat)
+    frameworks = sorted(
+        strategy_path.glob("*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not frameworks:
+        print("  [-] No JSON suites in that strategy folder.")
+        return
+
+    fw_stems = [p.stem for p in frameworks]
+    fw_labels = [_pretty_framework_stem(s) for s in fw_stems]
+    choice_fw = _pick_numbered("Select framework:", fw_stems, display=fw_labels)
+    if not choice_fw:
+        return
+
+    suite_path = strategy_path / f"{choice_fw}.json"
 
     assess = input("\n  Run risk assessment after? [y/N]: ").strip().lower() == "y"
 
     args = SimpleNamespace(
         suite=str(suite_path),
-        site=_session_site or "",
-        component=_session_component or "",
+        site=site,
+        component=comp,
         assess=assess,
     )
     _run_tests(args)
@@ -569,6 +662,39 @@ def _menu_export() -> None:
     _run_export(args)
 
 
+def _menu_clear_cache() -> None:
+    confirm = input("\n  Delete server-side Gemini cached content? [y/N]: ").strip().lower()
+    delete_on_server = confirm == "y"
+
+    cleared: list[str] = []
+
+    # Generator cache (core.py)
+    try:
+        gen_tests_dir = str(_root / "generate-tests")
+        if gen_tests_dir not in sys.path:
+            sys.path.insert(0, gen_tests_dir)
+        import core as gen_core
+        gen_core.clear_gemini_cache(delete_on_server=delete_on_server)
+        cleared.append("generator")
+    except Exception as exc:
+        print(f"  [!] Generator cache clear failed: {exc}")
+
+    # Risk-level-agent cache (risk_level_agent.py)
+    try:
+        _setup_paths()
+        import risk_level_agent as rla
+        rla.clear_gemini_cache(delete_on_server=delete_on_server)
+        cleared.append("risk-level-agent")
+    except Exception as exc:
+        print(f"  [!] Risk-level-agent cache clear failed: {exc}")
+
+    if cleared:
+        action = "Cleared in-process + deleted server-side" if delete_on_server else "Cleared in-process"
+        print(f"  [+] {action} Gemini cache ({', '.join(cleared)}).")
+    else:
+        print("  [-] Nothing was cleared.")
+
+
 def _show_menu() -> None:
     ctx = f" [{_session_site}/{_session_component}]" if _session_site and _session_component else ""
     print("\n" + "=" * 50)
@@ -580,7 +706,8 @@ def _show_menu() -> None:
     print("  4. Risk assessment")
     print("  5. Export to Genbounty")
     print("  6. Change site/component")
-    print("  7. Exit")
+    print("  7. Clear Gemini cache")
+    print("  8. Exit")
     print("=" * 50)
 
 
@@ -592,7 +719,7 @@ def _interactive_menu() -> None:
 
     while True:
         _show_menu()
-        choice = input("  Choice [1-7]: ").strip()
+        choice = input("  Choice [1-8]: ").strip()
         if choice == "1":
             _menu_generate()
         elif choice == "2":
@@ -606,6 +733,8 @@ def _interactive_menu() -> None:
         elif choice == "6":
             _select_site_component()
         elif choice == "7":
+            _menu_clear_cache()
+        elif choice == "8":
             print("\n  Bye.")
             break
         else:

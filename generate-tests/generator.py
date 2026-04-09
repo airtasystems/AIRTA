@@ -78,6 +78,18 @@ def main() -> None:
         metavar="PATH",
         help="When --run-type is tools or capabilities: append the new mandate to this existing suite JSON (e.g. generate-tests/zero-shot/eu-ai-act.json) instead of writing a separate file.",
     )
+    parser.add_argument(
+        "--site",
+        metavar="DOMAIN",
+        default="",
+        help="Site domain (e.g. chatgpt.com). When combined with --component, output goes under browser-bot/sites/<site>/<component>/tests/.",
+    )
+    parser.add_argument(
+        "--component",
+        metavar="NAME",
+        default="",
+        help="Component name (e.g. chat). When combined with --site, output goes under browser-bot/sites/<site>/<component>/tests/.",
+    )
     args = parser.parse_args()
 
     strategy = get_strategy(args.strategy)
@@ -138,18 +150,30 @@ def main() -> None:
                 if candidate.exists():
                     rubric_path = str(candidate)
                     break
-        output_path = args.output or (Path(rubric_path).stem.replace("_", "-") + ".json")
+        filename = args.output or (Path(rubric_path).stem.replace("_", "-") + ".json")
     else:
         framework = args.framework  # already normalized by type
         rubric_path = str(rubrics_dir / f"{framework}.json")
         if not Path(rubric_path).exists():
             parser.error(f"Rubric not found: {rubric_path} (use --framework <name> for e.g. eu_ai_act, owasp_llm, fria_core)")
-        output_path = args.output or f"{framework.replace('_', '-')}.json"
+        filename = args.output or f"{framework.replace('_', '-')}.json"
 
-    # Core writes to generate-tests/<strategy.output_subdir>/<filename>
+    # Resolve the final output path — component-scoped when --site/--component provided
+    if args.site and args.component:
+        browser_bot_dir = project_root / "browser-bot"
+        output_path = str(
+            browser_bot_dir / "sites" / args.site / args.component / "tests"
+            / strategy.output_subdir / Path(filename).name
+        )
+    else:
+        output_path = filename
+
     print(f"Strategy: {args.strategy}")
     print(f"Rubric: {rubric_path}")
-    print(f"Output: {_gen_dir / strategy.output_subdir / Path(output_path).name}")
+    if Path(output_path).is_absolute():
+        print(f"Output: {output_path}")
+    else:
+        print(f"Output: {_gen_dir / strategy.output_subdir / Path(output_path).name}")
     core.generate_compliance_suite(rubric_path, output_path, strategy)
     # If --component-rubric was passed, append tools and capabilities to the file we just wrote (same process)
     if args.component_rubric:
@@ -162,7 +186,10 @@ def main() -> None:
                     break
         comp_path = Path(comp)
         if comp_path.exists():
-            suite_path = _gen_dir / strategy.output_subdir / Path(output_path).name
+            if Path(output_path).is_absolute():
+                suite_path = Path(output_path)
+            else:
+                suite_path = _gen_dir / strategy.output_subdir / Path(output_path).name
             if suite_path.exists():
                 for run_type in ("tools", "capabilities"):
                     print(f"[*] Appending {run_type} prompts to {suite_path.name} (same experts as main)...")
