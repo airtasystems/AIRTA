@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIRTA</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-card: #181b24;
+  --bg-input: #23272f;
+  --bg-hover: #262b36;
+  --border: #2d3340;
+  --text: #e1e4ea;
+  --text-dim: #8b919e;
+  --accent: #6c8cff;
+  --accent-dim: #4a6ad4;
+  --green: #3dcf8e;
+  --red: #f0506e;
+  --orange: #f5a623;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #app { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+}
+#app {
+  display: flex;
+  flex-direction: column;
+}
+a { color: var(--accent); text-decoration: none; }
+
+/* Layout */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+.app-header .context { color: var(--accent); font-size: 14px; font-weight: 500; }
+.header-selects { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+
+.app-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+}
+.sidebar button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sidebar button:hover { background: var(--bg-hover); color: var(--text); }
+.sidebar button.active { color: var(--accent); background: var(--bg-hover); border-right: 2px solid var(--accent); }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.view { flex: 1; overflow-y: auto; padding: 24px; min-height: 0; }
+.view h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+
+/* Forms */
+select, input, textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.15s;
+}
+select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+select { cursor: pointer; }
+
+.form-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.form-row label { font-size: 13px; color: var(--text-dim); min-width: 100px; }
+.form-row select, .form-row input { flex: 1; min-width: 160px; max-width: 320px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dim); }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { opacity: 0.85; }
+.btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+.btn-ghost:hover { color: var(--text); border-color: var(--text-dim); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.checkbox-row label { font-size: 13px; color: var(--text-dim); }
+
+/* Output console */
+.console {
+  background: #0a0c10;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-top: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.console .line-ok { color: var(--green); }
+.console .line-err { color: var(--red); }
+.console .line-info { color: var(--accent); }
+
+/* Jobs drawer */
+.jobs-drawer {
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+}
+.jobs-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.jobs-header span { margin-left: auto; font-weight: 400; color: var(--text-dim); }
+.jobs-body { overflow-y: auto; flex: 1; }
+.jobs-body table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.jobs-body th { text-align: left; padding: 6px 12px; color: var(--text-dim); font-weight: 500; border-bottom: 1px solid var(--border); }
+.jobs-body td { padding: 6px 12px; border-bottom: 1px solid var(--border); }
+.jobs-body tr:hover { background: var(--bg-hover); }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-running { background: rgba(108,140,255,0.15); color: var(--accent); }
+.badge-done { background: rgba(61,207,142,0.15); color: var(--green); }
+.badge-failed { background: rgba(240,80,110,0.15); color: var(--red); }
+.badge-pending { background: rgba(139,145,158,0.15); color: var(--text-dim); }
+.badge-cancelled { background: rgba(139,145,158,0.15); color: var(--text-dim); }
+
+/* Empty state */
+.empty { color: var(--text-dim); font-size: 13px; padding: 20px 0; }
+
+/* Export tab */
+.export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 800px) { .export-grid { grid-template-columns: 1fr; } }
+.export-left { display: flex; flex-direction: column; gap: 16px; }
+.export-right { display: flex; flex-direction: column; }
+.export-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+.badge-neutral { background: var(--bg-hover); color: var(--text-dim); }
+.badge-info { background: rgba(59,130,246,0.18); color: #60a5fa; }
+.cfg-note { font-size: 12px; color: var(--text-dim); margin: 0 0 10px; }
+.export-result { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.export-result-badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.export-stat { background: var(--bg-hover); border-radius: 6px; padding: 8px 12px; text-align: center; border: 1px solid var(--border); }
+.export-stat.stat-ok { border-color: var(--green); }
+.export-stat.stat-err { border-color: var(--red); }
+.stat-label { display: block; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-value { display: block; font-size: 20px; font-weight: 700; margin-top: 2px; }
+.export-result-placeholder { background: var(--bg-card); border: 1px dashed var(--border); border-radius: 8px; padding: 32px 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
+.export-errors { margin-top: 8px; }
+.export-error-line { font-size: 12px; color: var(--red); padding: 2px 0; font-family: monospace; }
+.creds-status { background: var(--bg-hover); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.creds-row { display: flex; gap: 10px; font-size: 13px; }
+.creds-label { color: var(--text-dim); min-width: 80px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 1px; }
+
+/* Startup modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+.modal-logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; margin-bottom: 4px; }
+.modal-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 28px; }
+.modal-field { margin-bottom: 16px; }
+.modal-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.modal-field select, .modal-field input { width: 100%; padding: 10px 12px; font-size: 14px; }
+.modal-field .new-input { margin-top: 8px; display: none; }
+.modal-field .new-input.show { display: block; }
+.modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+.modal-actions .btn { flex: 1; justify-content: center; padding: 10px; font-size: 14px; }
+
+/* Onboarding hint banner */
+.hint-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  background: rgba(245, 166, 35, 0.06);
+  border: 1px solid rgba(245, 166, 35, 0.22);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.hint-banner strong { display: block; margin-bottom: 4px; color: var(--orange); font-size: 13px; }
+.hint-banner p { color: var(--text-dim); margin: 0; }
+.hint-dismiss { white-space: nowrap; flex-shrink: 0; }
+
+/* Discovery prompt banner */
+.discovery-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: rgba(108, 140, 255, 0.08);
+  border: 1px solid rgba(108, 140, 255, 0.3);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.discovery-prompt strong { color: var(--accent); }
+
+/* Results table */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.results-table th {
+  text-align: left;
+  padding: 7px 12px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+.results-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.results-table tr:last-child td { border-bottom: none; }
+.results-table tr:hover td { background: var(--bg-hover); }
+.cell-prompt { color: var(--text); }
+.cell-response { color: var(--text-dim); white-space: pre-wrap; word-break: break-word; }
+
+/* Config sections */
+.cfg-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.cfg-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.cfg-section .form-row { margin-bottom: 8px; }
+.cfg-section .checkbox-row { margin-bottom: 6px; }
+
+/* Responsive */
+@media (max-width: 700px) {
+  .sidebar { width: 56px; }
+  .sidebar button { font-size: 0; padding: 12px; }
+  .sidebar button::first-letter { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Startup modal -->
+  <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
+    <div class="modal">
+      <div class="modal-logo">AIRTA</div>
+      <div class="modal-sub">AI Red Team Automation — select a site and component to get started</div>
+
+      <div class="modal-field">
+        <label>Site</label>
+        <select v-model="modalSite" @change="onModalSiteChange">
+          <option value="">Select site…</option>
+          <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
+          <option value="__new__">+ New site</option>
+        </select>
+        <div :class="['new-input', modalSite === '__new__' ? 'show' : '']">
+          <input v-model="modalNewSite" placeholder="domain (e.g. example.com)" @keyup.enter="confirmModal">
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>Component</label>
+        <select v-model="modalComponent" :disabled="!modalSite">
+          <option value="">Select component…</option>
+          <option v-for="c in modalComponents" :key="c" :value="c">{{ c }}</option>
+          <option value="__new__">+ New component</option>
+        </select>
+        <div :class="['new-input', modalComponent === '__new__' ? 'show' : '']">
+          <input v-model="modalNewComponent" placeholder="component name (e.g. chat)" @keyup.enter="confirmModal">
+        </div>
+      </div>
+
+      <p v-if="modalError" style="color:var(--red);font-size:13px;margin-top:-8px;">{{ modalError }}</p>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" @click="confirmModal">Continue</button>
+        <button class="btn btn-ghost" @click="showModal = false">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <h1>AIRTA</h1>
+    <span class="context" v-if="site && component">{{ site }} / {{ component }}</span>
+    <button v-if="site && component" class="btn btn-ghost btn-sm" style="margin-left:4px;" @click="openModal" title="Switch site/component">⇄</button>
+    <div class="header-selects">
+      <select v-model="site" @change="onSiteChange">
+        <option value="">Select site...</option>
+        <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
+        <option value="__new__">+ New site</option>
+      </select>
+      <select v-model="component" @change="loadContext" :disabled="!site">
+        <option value="">Select component...</option>
+        <option v-for="c in components" :key="c" :value="c">{{ c }}</option>
+        <option value="__new__">+ New component</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- Body -->
+  <div class="app-body">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <button v-for="t in tabs" :key="t.id" :class="{active: tab === t.id}" @click="tab = t.id">{{ t.label }}</button>
+    </nav>
+
+    <!-- Main -->
+    <div class="main">
+      <div class="view">
+
+        <!-- Generate -->
+        <template v-if="tab === 'generate'">
+          <h2>Generate Tests</h2>
+          <div v-if="!hintDismissed['generate']" class="hint-banner">
+            <div><strong>{{ HINTS.generate.title }}</strong><p>{{ HINTS.generate.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('generate')">Got it</button>
+          </div>
+          <div class="form-row">
+            <label>Strategy</label>
+            <select v-model="gen.strategy">
+              <option v-for="s in allStrategies" :key="s" :value="s">{{ pretty(s) }}</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Framework</label>
+            <select v-model="gen.framework">
+              <option v-for="f in allFrameworks" :key="f" :value="f">{{ pretty(f) }}</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" @click="startGenerate" :disabled="!site || !component || !gen.strategy || !gen.framework">Generate</button>
+          <div class="console" v-if="activeOutput('generate').length" ref="genConsole">
+            <div v-for="(line, i) in activeOutput('generate')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+        </template>
+
+        <!-- Discovery -->
+        <template v-if="tab === 'discover'">
+          <h2>Discovery (Browser-Bot)</h2>
+          <div v-if="!hintDismissed['discover']" class="hint-banner">
+            <div><strong>{{ HINTS.discover.title }}</strong><p>{{ HINTS.discover.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('discover')">Got it</button>
+          </div>
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">
+            Opens a browser for interactive selector recording. Output streams below.
+          </p>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" @click="startDiscover" :disabled="!site || !component || discoverRunning">Start Discovery</button>
+            <button class="btn btn-ghost" @click="sendEnter" :disabled="!discoverJobId">Press Enter</button>
+          </div>
+          <div class="console" v-if="activeOutput('discover').length" ref="discoverConsole">
+            <div v-for="(line, i) in activeOutput('discover')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+        </template>
+
+        <!-- Run Tests -->
+        <template v-if="tab === 'run'">
+          <h2>Run Tests</h2>
+          <div v-if="!hintDismissed['run']" class="hint-banner">
+            <div><strong>{{ HINTS.run.title }}</strong><p>{{ HINTS.run.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('run')">Got it</button>
+          </div>
+          <div class="form-row">
+            <label>Strategy</label>
+            <select v-model="run.strategy" @change="loadRunFrameworks">
+              <option value="">Select...</option>
+              <option v-for="s in runStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Framework</label>
+            <select v-model="run.framework" :disabled="!run.strategy">
+              <option value="">Select...</option>
+              <option v-for="f in runFrameworks" :key="f.slug" :value="f.path">{{ f.label }}</option>
+            </select>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="assess" v-model="run.assess">
+            <label for="assess">Run risk assessment after</label>
+          </div>
+          <button class="btn btn-primary" @click="startRunTests" :disabled="!run.framework">Run</button>
+          <div class="console" v-if="activeOutput('run_tests').length" ref="runConsole">
+            <div v-for="(line, i) in activeOutput('run_tests')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+
+          <div v-if="runResultsLoading" style="color:var(--text-dim);font-size:13px;margin-top:16px;">Loading results…</div>
+          <template v-else-if="runResults.length">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px;margin-bottom:8px;">
+              <span style="font-size:13px;font-weight:600;">Results <span style="color:var(--text-dim);font-weight:400;">({{ runResults.length }})</span></span>
+            </div>
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th style="width:60px;">#</th>
+                  <th style="width:40%;">Prompt</th>
+                  <th>Response</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(r, i) in runResults" :key="i" @click="toggleRunRow(i)" style="cursor:pointer;">
+                  <td style="color:var(--text-dim);">{{ r.label }}</td>
+                  <td class="cell-prompt">{{ r.input }}</td>
+                  <td class="cell-response">
+                    <template v-if="expandedRunRows[i] || !r.response || r.response.length <= 200">
+                      {{ r.response || '—' }}
+                    </template>
+                    <template v-else>
+                      {{ r.response.slice(0, 200) }}<span style="color:var(--accent);">… ▼</span>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+        </template>
+
+        <!-- Risk Assessment -->
+        <template v-if="tab === 'risk'">
+          <h2>Risk Assessment</h2>
+          <div v-if="!hintDismissed['risk']" class="hint-banner">
+            <div><strong>{{ HINTS.risk.title }}</strong><p>{{ HINTS.risk.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('risk')">Got it</button>
+          </div>
+          <div class="form-row">
+            <label>Compliance Log</label>
+            <select v-model="risk.log">
+              <option value="">Select...</option>
+              <option v-for="l in logs.compliance" :key="l.path" :value="l.path">{{ l.name }}</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" @click="startRiskAssess" :disabled="!risk.log">Assess</button>
+          <div class="console" v-if="activeOutput('risk_assess').length" ref="riskConsole">
+            <div v-for="(line, i) in activeOutput('risk_assess')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+        </template>
+
+        <!-- Export -->
+        <template v-if="tab === 'export'">
+          <h2>Export to Genbounty</h2>
+          <div v-if="!hintDismissed['export']" class="hint-banner">
+            <div><strong>{{ HINTS.export.title }}</strong><p>{{ HINTS.export.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('export')">Got it</button>
+          </div>
+
+          <div class="export-grid">
+            <!-- Left: report + credentials -->
+            <div class="export-left">
+              <div class="cfg-section">
+                <div class="cfg-section-title">Report</div>
+                <div class="form-row">
+                  <label>Pipeline Report</label>
+                  <select v-model="exp.report">
+                    <option value="">Select...</option>
+                    <option v-for="r in logs.reports" :key="r.path" :value="r.path">{{ r.name }}</option>
+                  </select>
+                </div>
+                <div v-if="expPreview" class="export-preview">
+                  <span class="badge badge-neutral">{{ expPreview.count }} finding(s)</span>
+                  <span v-if="expPreview.framework" class="badge badge-info">{{ expPreview.framework }}</span>
+                  <span v-if="expPreview.timestamp" class="badge badge-neutral" style="font-family:monospace;font-size:11px;">{{ expPreview.timestamp }}</span>
+                </div>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Genbounty Credentials</div>
+                <p class="cfg-note">Credentials are saved to <code>.env</code> on the server — the API key is never sent to your browser.</p>
+
+                <!-- Saved state summary -->
+                <div v-if="expCreds.host || expCreds.has_api_key" class="creds-status">
+                  <span class="creds-row"><span class="creds-label">Host</span><span>{{ expCreds.host || '—' }}</span></span>
+                  <span class="creds-row"><span class="creds-label">API Key</span><span>{{ expCreds.has_api_key ? '●●●●●●●●●●●●' : '—' }}</span></span>
+                  <button class="btn btn-ghost btn-sm" style="margin-top:8px;" @click="clearExpCreds">Remove credentials</button>
+                </div>
+
+                <!-- Edit form -->
+                <details :open="!expCreds.has_api_key" style="margin-top:10px;">
+                  <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none;">
+                    {{ expCreds.has_api_key ? 'Update credentials' : 'Enter credentials' }}
+                  </summary>
+                  <div style="margin-top:10px;">
+                    <div class="form-row"><label>Host</label><input v-model="expCredsEdit.host" placeholder="app.genbounty.com"></div>
+                    <div class="form-row"><label>API Key</label><input v-model="expCredsEdit.api_key" type="password" placeholder="gb_live_… (leave blank to keep existing)"></div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                      <button class="btn btn-secondary btn-sm" @click="saveExpCreds" :disabled="expCredsSaving">
+                        {{ expCredsSaving ? 'Saving…' : 'Save to .env' }}
+                      </button>
+                      <span v-if="expCredsMsg" style="font-size:12px;color:var(--text-dim);">{{ expCredsMsg }}</span>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Program</div>
+                <div class="form-row">
+                  <label>Program ID</label>
+                  <input v-model="exp.program_id" placeholder="MongoDB ObjectId">
+                </div>
+                <p class="cfg-note">Each export targets one program. Change this between submissions to send results to different programs.</p>
+              </div>
+
+              <button class="btn btn-primary" @click="startExport" :disabled="!exp.report || !expCreds.has_api_key || !expCreds.host || !exp.program_id">
+                Export to Genbounty
+              </button>
+            </div>
+
+            <!-- Right: result summary -->
+            <div class="export-right">
+              <div v-if="expResult" class="export-result">
+                <div class="cfg-section-title">Last Export Result</div>
+                <div class="export-result-badges">
+                  <div class="export-stat" :class="expResult.status === 'done' ? 'stat-ok' : 'stat-err'">
+                    <span class="stat-label">Status</span>
+                    <span class="stat-value">{{ expResult.status }}</span>
+                  </div>
+                  <div class="export-stat">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value">{{ expResult.total }}</span>
+                  </div>
+                  <div class="export-stat stat-ok">
+                    <span class="stat-label">Created</span>
+                    <span class="stat-value">{{ expResult.created }}</span>
+                  </div>
+                  <div class="export-stat" :class="expResult.failed > 0 ? 'stat-err' : ''">
+                    <span class="stat-label">Failed</span>
+                    <span class="stat-value">{{ expResult.failed }}</span>
+                  </div>
+                </div>
+                <div v-if="expResult.errors && expResult.errors.length" class="export-errors">
+                  <div class="cfg-section-title" style="margin-top:12px;">Errors</div>
+                  <div v-for="(e, i) in expResult.errors" :key="i" class="export-error-line">{{ e }}</div>
+                </div>
+              </div>
+              <div v-else class="export-result-placeholder">
+                <p>Export results will appear here after a successful submission.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="console" v-if="activeOutput('export').length" ref="exportConsole" style="margin-top:16px;">
+            <div v-for="(line, i) in activeOutput('export')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+        </template>
+
+        <!-- Clear Cache -->
+        <template v-if="tab === 'cache'">
+          <h2>Clear Gemini Cache</h2>
+          <div v-if="!hintDismissed['cache']" class="hint-banner">
+            <div><strong>{{ HINTS.cache.title }}</strong><p>{{ HINTS.cache.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('cache')">Got it</button>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="delServer" v-model="cache.deleteOnServer">
+            <label for="delServer">Also delete server-side cached content</label>
+          </div>
+          <button class="btn btn-primary" @click="startClearCache">Clear</button>
+          <div class="console" v-if="activeOutput('clear_cache').length" ref="cacheConsole">
+            <div v-for="(line, i) in activeOutput('clear_cache')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+        </template>
+
+        <!-- Component -->
+        <template v-if="tab === 'component'">
+          <h2>Component Config
+            <span v-if="site && component" style="font-size:12px;color:var(--text-dim);font-weight:400;">
+              (browser-bot/sites/{{ site }}/{{ component }}/config.yaml)
+            </span>
+          </h2>
+          <div v-if="!site || !component" class="empty">Select a site and component first.</div>
+          <template v-else>
+
+            <div v-if="!hintDismissed['component']" class="hint-banner">
+              <div><strong>{{ HINTS.component.title }}</strong><p>{{ HINTS.component.text }}</p></div>
+              <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('component')">Got it</button>
+            </div>
+
+            <div v-if="compCfgEmpty" class="discovery-prompt">
+              <div>
+                <strong>No submission config found.</strong>
+                Run Discovery to record the UI selectors for this component automatically.
+              </div>
+              <button class="btn btn-primary" @click="tab = 'discover'; startDiscover()">
+                ▶ Start Discovery
+              </button>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Auth</div>
+              <div class="form-row">
+                <label>Login URL</label>
+                <input v-model="compCfg.login_url" placeholder="https://example.com/login" style="flex:1;max-width:none;">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Submission</div>
+              <div class="form-row">
+                <label>Start URL</label>
+                <input v-model="compCfg.submission.start_url" placeholder="https://example.com/chat" style="flex:1;max-width:none;">
+              </div>
+              <div class="form-row">
+                <label>Submit selector</label>
+                <input v-model="compCfg.submission.submit_selector" placeholder="button[type='submit']" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+              </div>
+              <div class="form-row">
+                <label>Response selector</label>
+                <input v-model="compCfg.submission.response_selector" placeholder=".assistant-bubble" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+              </div>
+              <div class="form-row">
+                <label>Submit via</label>
+                <select v-model="compCfg.submission.submit_via" style="max-width:160px;">
+                  <option value="click">click</option>
+                  <option value="enter">enter</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Response wait (ms)</label>
+                <input type="number" v-model.number="compCfg.submission.response_wait_ms" min="500" step="500" style="max-width:160px;">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+                Inputs
+                <button class="btn btn-ghost btn-sm" @click="addInput">+ Add input</button>
+              </div>
+              <div v-if="compCfg.submission.inputs.length === 0" class="empty" style="padding:8px 0;">No inputs defined.</div>
+              <div v-for="(inp, i) in compCfg.submission.inputs" :key="i" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                <span style="color:var(--text-dim);font-size:12px;min-width:20px;">{{ i + 1 }}.</span>
+                <input v-model="inp.selector" placeholder="CSS selector" style="flex:1;font-family:var(--mono);font-size:12px;">
+                <select v-model="inp.type" style="max-width:160px;">
+                  <option v-for="t in INPUT_TYPES" :key="t" :value="t">{{ t }}</option>
+                </select>
+                <button class="btn btn-ghost btn-sm" @click="removeInput(i)" style="color:var(--red);border-color:var(--red);">✕</button>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+              <button class="btn btn-primary" @click="saveCompCfg">Save</button>
+              <span v-if="compCfgSaved" style="color:var(--green);font-size:13px;">Saved</span>
+              <span v-if="compCfgError" style="color:var(--red);font-size:13px;">{{ compCfgError }}</span>
+            </div>
+          </template>
+        </template>
+
+        <!-- Config -->
+        <template v-if="tab === 'config'">
+          <h2>Config <span style="font-size:12px;color:var(--text-dim);font-weight:400;">(browser-bot/browser_bot/config.py)</span></h2>
+          <div v-if="!hintDismissed['config']" class="hint-banner">
+            <div><strong>{{ HINTS.config.title }}</strong><p>{{ HINTS.config.text }}</p></div>
+            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('config')">Got it</button>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-title">Fetcher</div>
+            <div class="form-row">
+              <label>Fetch Method</label>
+              <select v-model="cfg.FETCH_METHOD">
+                <option v-for="m in FETCH_METHODS" :key="m" :value="m">{{ m }}</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Pool Size</label>
+              <input type="number" v-model.number="cfg.POOL_SIZE" min="1" max="32">
+            </div>
+            <div class="form-row">
+              <label>Cluster Contexts</label>
+              <input type="number" v-model.number="cfg.CONTEXT_COUNT" min="1" max="32">
+            </div>
+            <div class="form-row">
+              <label>Pages / Context</label>
+              <input type="number" v-model.number="cfg.PAGES_PER_CONTEXT" min="1" max="16">
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-title">Pool / Cluster Browser Enhancements</div>
+            <div class="checkbox-row"><input type="checkbox" v-model="cfg.POOL_CLUSTER_HUMAN_LIKE"><label>Human-like (enable all below)</label></div>
+            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_ALLOW_STYLES"><label>Allow stylesheets</label></div>
+            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_STEALTH"><label>Playwright-stealth</label></div>
+            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CHROME"><label>Human Chrome args</label></div>
+            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CONTEXT"><label>Human context (locale / viewport / geo)</label></div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-title">Evasion</div>
+            <div class="form-row">
+              <label>Request delay (s)</label>
+              <input type="number" v-model.number="cfg.EVASION_REQUEST_DELAY_S" min="0" step="0.1">
+            </div>
+            <div class="form-row">
+              <label>Retry wait (s)</label>
+              <input type="number" v-model.number="cfg.EVASION_RETRY_WAIT_S" min="0" step="1">
+            </div>
+            <div class="form-row">
+              <label>Max retries</label>
+              <input type="number" v-model.number="cfg.EVASION_MAX_RETRIES" min="0" max="10">
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-title">Human Tier</div>
+            <div class="form-row">
+              <label>Country</label>
+              <select v-model="cfg.HUMAN_COUNTRY">
+                <option v-for="c in COUNTRIES" :key="c" :value="c">{{ c }}</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Read delay (ms)</label>
+              <input type="number" v-model.number="cfg.HUMAN_READ_DELAY_MS" min="0" step="100">
+            </div>
+            <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_ALLOW_STYLES"><label>Allow stylesheets</label></div>
+            <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_SCROLL_AFTER_LOAD"><label>Scroll after load</label></div>
+            <div class="form-row" style="align-items:flex-start">
+              <label style="padding-top:6px">User Agent</label>
+              <input v-model="cfg.HUMAN_USER_AGENT" style="max-width:100%;flex:1;font-family:var(--mono);font-size:11px;">
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <div class="cfg-section-title">Browser</div>
+            <div class="checkbox-row"><input type="checkbox" v-model="cfg.HEADLESS"><label>Headless</label></div>
+            <div class="form-row">
+              <label>Chrome channel</label>
+              <select v-model="cfg.CHROME_CHANNEL">
+                <option v-for="ch in CHANNELS" :key="ch" :value="ch">{{ ch }}</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Chromium path</label>
+              <input v-model="cfg.CHROMIUM_EXECUTABLE_PATH" style="font-family:var(--mono);font-size:11px;">
+            </div>
+            <div class="form-row" style="align-items:flex-start">
+              <label style="padding-top:4px">Block types</label>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <label v-for="t in BLOCKED_OPTIONS" :key="t" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                  <input type="checkbox" :checked="cfg.BLOCKED_TYPES && cfg.BLOCKED_TYPES.includes(t)" @change="toggleBlocked(t)"> {{ t }}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+            <button class="btn btn-primary" @click="saveConfig">Save</button>
+            <span v-if="cfgSaved" style="color:var(--green);font-size:13px;">Configuration saved.</span>
+            <span v-if="cfgError" style="color:var(--red);font-size:13px;">{{ cfgError }}</span>
+          </div>
+        </template>
+
+      </div>
+
+      <!-- Jobs drawer -->
+      <div class="jobs-drawer" v-if="jobs.length">
+        <div class="jobs-header" @click="jobsOpen = !jobsOpen">
+          Jobs <span>{{ jobs.filter(j => j.status === 'running').length }} running</span>
+        </div>
+        <div class="jobs-body" v-show="jobsOpen">
+          <table>
+            <thead><tr><th>ID</th><th>Type</th><th>Site</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="j in jobs" :key="j.id">
+                <td style="font-family:var(--mono);font-size:11px;">{{ j.id }}</td>
+                <td>{{ j.type }}</td>
+                <td>{{ j.site }}/{{ j.component }}</td>
+                <td><span class="badge" :class="'badge-' + j.status">{{ j.status }}</span></td>
+                <td>
+                  <button v-if="j.status === 'running'" class="btn btn-danger btn-sm" @click="cancelJob(j.id)">Cancel</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, watch, nextTick, onMounted } = Vue;
+
+const API = '';
+
+async function api(path, opts) {
+  const res = await fetch(API + path, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+createApp({
+  setup() {
+    const site = ref('');
+    const component = ref('');
+    const sites = ref([]);
+    const components = ref([]);
+    const tab = ref('generate');
+    const jobsOpen = ref(true);
+    const jobs = ref([]);
+
+    const tabs = [
+      { id: 'generate', label: 'Generate' },
+      { id: 'discover', label: 'Discovery' },
+      { id: 'run', label: 'Run Tests' },
+      { id: 'risk', label: 'Risk Assess' },
+      { id: 'export', label: 'Export' },
+      { id: 'cache', label: 'Cache' },
+      { id: 'component', label: 'Component' },
+      { id: 'config', label: 'Config' },
+    ];
+
+    const allStrategies = ref([]);
+    const allFrameworks = ref([]);
+    const runStrategies = ref([]);
+    const runFrameworks = ref([]);
+    const logs = reactive({ runs: [], compliance: [], reports: [] });
+
+    const gen = reactive({ strategy: 'zero_shot', framework: 'eu_ai_act' });
+    const run = reactive({ strategy: '', framework: '', assess: false });
+    const risk = reactive({ log: '' });
+    const exp = reactive({ report: '', program_id: '' });
+    const expResult = ref(null);
+    const expPreview = ref(null);
+    // host + api_key stored server-side in .env; program_id is per-export
+    const expCreds = reactive({ host: '', has_api_key: false });
+    const expCredsEdit = reactive({ host: '', api_key: '' });
+    const expCredsSaving = ref(false);
+    const expCredsMsg = ref('');
+
+    async function loadExpCreds() {
+      try {
+        const c = await api('/api/credentials');
+        expCreds.host = c.host || '';
+        expCreds.has_api_key = c.has_api_key || false;
+        expCredsEdit.host = c.host || '';
+        expCredsEdit.api_key = '';
+        // Pre-fill program_id from .env if not already set by the user
+        if (c.program_id && !exp.program_id) exp.program_id = c.program_id;
+      } catch { /* ignore */ }
+    }
+
+    async function saveExpCreds() {
+      expCredsSaving.value = true;
+      expCredsMsg.value = '';
+      try {
+        const result = await api('/api/credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host: expCredsEdit.host, api_key: expCredsEdit.api_key }),
+        });
+        expCreds.host = result.host;
+        expCreds.has_api_key = result.has_api_key;
+        expCredsEdit.api_key = '';
+        expCredsMsg.value = 'Saved to .env';
+      } catch (e) {
+        expCredsMsg.value = 'Save failed: ' + e.message;
+      } finally {
+        expCredsSaving.value = false;
+      }
+    }
+
+    async function clearExpCreds() {
+      if (!confirm('Remove Genbounty host and API key from .env?')) return;
+      await api('/api/credentials', { method: 'DELETE' });
+      expCreds.host = '';
+      expCreds.has_api_key = false;
+      expCredsEdit.host = expCredsEdit.api_key = '';
+      expCredsMsg.value = 'Credentials cleared';
+    }
+
+    watch(() => exp.report, async (path) => {
+      expPreview.value = null;
+      expResult.value = null;
+      if (!path) return;
+      try {
+        const data = await api(`/api/log?path=${encodeURIComponent(path)}`);
+        expPreview.value = {
+          count: (data.adversarial_results || []).length,
+          framework: data.framework || '',
+          timestamp: data.timestamp || '',
+        };
+      } catch { /* ignore */ }
+    });
+    const cache = reactive({ deleteOnServer: false });
+
+    // Component config
+    const INPUT_TYPES = ['text', 'textarea', 'contenteditable', 'password', 'email', 'search', 'select', 'combobox', 'checkbox', 'radio'];
+    const compCfg = reactive({
+      login_url: '',
+      submission: { start_url: '', inputs: [], submit_selector: '', response_selector: '', submit_via: 'click', response_wait_ms: 5000 },
+    });
+    const compCfgSaved = ref(false);
+    const compCfgError = ref('');
+    const compCfgEmpty = ref(false);
+
+    async function loadCompCfg() {
+      if (!site.value || !component.value) return;
+      compCfgError.value = '';
+      try {
+        const data = await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`);
+        compCfg.login_url = data.login_url || '';
+        const sub = data.submission || {};
+        compCfg.submission.start_url = sub.start_url || '';
+        compCfg.submission.submit_selector = sub.submit_selector || '';
+        compCfg.submission.response_selector = sub.response_selector || '';
+        compCfg.submission.submit_via = sub.submit_via || 'click';
+        compCfg.submission.response_wait_ms = sub.response_wait_ms ?? 5000;
+        compCfg.submission.inputs = (sub.inputs || []).map(inp => ({ ...inp }));
+        compCfgEmpty.value = !data.submission;
+      } catch (e) { compCfgError.value = String(e); }
+    }
+
+    async function saveCompCfg() {
+      compCfgError.value = '';
+      compCfgSaved.value = false;
+      try {
+        const payload = {
+          login_url: compCfg.login_url,
+          submission: {
+            start_url: compCfg.submission.start_url,
+            inputs: compCfg.submission.inputs.map(i => ({ ...i })),
+            submit_selector: compCfg.submission.submit_selector,
+            response_selector: compCfg.submission.response_selector,
+            submit_via: compCfg.submission.submit_via,
+            response_wait_ms: Number(compCfg.submission.response_wait_ms),
+          },
+        };
+        await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: payload }),
+        });
+        compCfgSaved.value = true;
+        setTimeout(() => { compCfgSaved.value = false; }, 3000);
+        await loadContext();
+      } catch (e) { compCfgError.value = String(e); }
+    }
+
+    function addInput() {
+      compCfg.submission.inputs.push({ selector: '', type: 'text' });
+    }
+    function removeInput(i) {
+      compCfg.submission.inputs.splice(i, 1);
+    }
+
+    const cfg = reactive({});
+    const cfgSaved = ref(false);
+    const cfgError = ref('');
+    const BLOCKED_OPTIONS = ['image', 'font', 'media', 'stylesheet'];
+    const COUNTRIES = ['US', 'UK', 'DE', 'FR', 'JP', 'CA', 'AU', 'NL', 'ES', 'IT'];
+    const CHANNELS = ['chromium', 'chrome', 'chrome-beta', 'msedge'];
+    const FETCH_METHODS = ['auto', 'cdp', 'pool', 'cluster', 'human'];
+
+    async function loadConfig() {
+      try {
+        const data = await api('/api/config');
+        Object.assign(cfg, data);
+        // Ensure BLOCKED_TYPES is always an array for checkbox binding
+        if (!Array.isArray(cfg.BLOCKED_TYPES)) cfg.BLOCKED_TYPES = [];
+      } catch (e) {
+        cfgError.value = String(e);
+      }
+    }
+
+    async function saveConfig() {
+      cfgError.value = '';
+      cfgSaved.value = false;
+      try {
+        await api('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ changes: { ...cfg } }),
+        });
+        cfgSaved.value = true;
+        setTimeout(() => { cfgSaved.value = false; }, 3000);
+      } catch (e) {
+        cfgError.value = String(e);
+      }
+    }
+
+    function toggleBlocked(type) {
+      const idx = cfg.BLOCKED_TYPES.indexOf(type);
+      if (idx === -1) cfg.BLOCKED_TYPES.push(type);
+      else cfg.BLOCKED_TYPES.splice(idx, 1);
+    }
+
+    // --- Startup modal ---
+    const showModal = ref(false);
+    const modalSite = ref('');
+    const modalComponent = ref('');
+    const modalComponents = ref([]);
+    const modalNewSite = ref('');
+    const modalNewComponent = ref('');
+    const modalError = ref('');
+
+    async function onModalSiteChange() {
+      modalComponent.value = '';
+      modalComponents.value = [];
+      modalNewSite.value = '';
+      modalNewComponent.value = '';
+      if (modalSite.value && modalSite.value !== '__new__') {
+        modalComponents.value = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`);
+      }
+    }
+
+    async function confirmModal() {
+      modalError.value = '';
+      let s = modalSite.value, c = modalComponent.value;
+      if (s === '__new__') {
+        s = modalNewSite.value.trim();
+        if (!s) { modalError.value = 'Enter a domain.'; return; }
+        await api('/api/sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: s }) });
+        await loadSites();
+      }
+      if (c === '__new__') {
+        c = modalNewComponent.value.trim();
+        if (!c) { modalError.value = 'Enter a component name.'; return; }
+        const res = await api(`/api/sites/${encodeURIComponent(s)}/components`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: c })
+        });
+        c = res.name;
+      }
+      if (!s) { modalError.value = 'Select or create a site.'; return; }
+      if (!c) { modalError.value = 'Select or create a component.'; return; }
+      site.value = s;
+      components.value = await api(`/api/sites/${encodeURIComponent(s)}/components`);
+      component.value = c;
+      await loadContext();
+      showModal.value = false;
+    }
+
+    // --- Onboarding hints ---
+    const HINTS = {
+      generate: {
+        title: 'Generate Tests',
+        text: 'Create adversarial test suites by choosing a strategy (e.g. Zero-shot) and framework (e.g. EU AI Act). Tests are generated via LLM and saved to the component\'s tests/ directory, ready to run.',
+      },
+      discover: {
+        title: 'Browser Discovery',
+        text: 'Records how browser-bot interacts with the target UI. A real browser opens and walks through each recording step. Click "Press Enter" here to advance through each stage. Recorded selectors are saved automatically to the component config.',
+      },
+      run: {
+        title: 'Run Tests',
+        text: 'Submits each adversarial prompt to the target UI using the configured browser tier. Select a strategy then a framework from your generated tests and click Run. Results appear in the table below and are saved to a timestamped log directory.',
+      },
+      risk: {
+        title: 'Risk Assessment',
+        text: 'Runs each entry in a compliance log through an AI judge to determine risk level (compliant → informational → low → medium → high → critical). Select a compliance log from a previous test run. Results are saved as a pipeline_report.json.',
+      },
+      export: {
+        title: 'Export to Genbounty',
+        text: 'Sends a pipeline report to a Genbounty instance via the bulk-import API. Select a report, enter your host, API key, and program ID. Each adversarial result is submitted as a finding.',
+      },
+      cache: {
+        title: 'Clear Gemini Cache',
+        text: 'Clears the local Gemini API response cache used by the test generator and risk-level agent. Use this to force fresh LLM responses. "Delete server-side" also removes cached content from Google\'s servers.',
+      },
+      component: {
+        title: 'Component Config',
+        text: 'Configures how browser-bot interacts with this component\'s UI — the page URL, input selector, submit button, and where to read the AI response from. If no config exists yet, use Discovery to auto-record these selectors.',
+      },
+      config: {
+        title: 'Global Config',
+        text: 'Controls browser-bot\'s global behaviour. Changes are written directly to config.py and take effect on the next test run. Key settings: Fetch Method selects the browser tier, Pool/Cluster enhancements add stealth, and Evasion controls retry behaviour on rate limits.',
+      },
+    };
+
+    const _storedHints = JSON.parse(localStorage.getItem('airta_hints_dismissed') || '{}');
+    const hintDismissed = ref({ ..._storedHints });
+
+    function dismissHint(key) {
+      hintDismissed.value = { ...hintDismissed.value, [key]: true };
+      localStorage.setItem('airta_hints_dismissed', JSON.stringify(hintDismissed.value));
+    }
+
+    const runResults = ref([]);
+    const runResultsLoading = ref(false);
+    const expandedRunRows = ref({});
+
+    async function loadLatestRunLog() {
+      if (!site.value || !component.value) return;
+      runResultsLoading.value = true;
+      try {
+        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
+        const l = await api(`/api/sites/${s}/${c}/logs`);
+        logs.runs = l.runs; logs.compliance = l.compliance; logs.reports = l.reports;
+        if (!l.runs.length) return;
+        const data = await api(`/api/files?path=${encodeURIComponent(l.runs[0].path)}`);
+        expandedRunRows.value = {};
+        if (data.mode === 'multi') {
+          runResults.value = (data.batches || []).flatMap(b =>
+            (b.turns || []).map((t, ti) => ({
+              label: `Batch ${b.batch_index + 1} / Turn ${ti + 1}`,
+              input: t.input, response: t.response,
+            }))
+          );
+        } else {
+          runResults.value = (data.entries || []).map((e, i) => ({
+            label: `#${i + 1}`, input: e.input, response: e.response,
+          }));
+        }
+      } catch (e) { console.error(e); }
+      finally { runResultsLoading.value = false; }
+    }
+
+    function toggleRunRow(i) {
+      expandedRunRows.value = { ...expandedRunRows.value, [i]: !expandedRunRows.value[i] };
+    }
+
+    const activeJobs = reactive({});
+    const sseConnections = {};
+
+    function pretty(slug) {
+      const short = new Set(['eu','ai','uk','us','oecd','gdpr','iso']);
+      return (slug || '').replace(/_/g, '-').split('-').filter(Boolean).map(p =>
+        short.has(p.toLowerCase()) ? p.toUpperCase() : p.charAt(0).toUpperCase() + p.slice(1)
+      ).join(' ');
+    }
+
+    function lineClass(line) {
+      if (line.startsWith('[+]') || line.startsWith('[*]')) return 'line-ok';
+      if (line.startsWith('[!]') || line.startsWith('[-]') || line.startsWith('[error]')) return 'line-err';
+      if (line.startsWith('  ')) return 'line-info';
+      return '';
+    }
+
+    async function loadSites() {
+      sites.value = await api('/api/sites');
+      allStrategies.value = await api('/api/strategies');
+      allFrameworks.value = await api('/api/frameworks');
+    }
+
+    async function onSiteChange() {
+      if (site.value === '__new__') {
+        const domain = prompt('Enter domain (e.g. example.com):');
+        if (!domain) { site.value = ''; return; }
+        await api('/api/sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
+        await loadSites();
+        site.value = domain;
+      }
+      component.value = '';
+      if (site.value && site.value !== '__new__') {
+        components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
+      } else {
+        components.value = [];
+      }
+    }
+
+    async function loadContext() {
+      if (component.value === '__new__') {
+        const name = prompt('Component name:');
+        if (!name) { component.value = ''; return; }
+        const res = await api(`/api/sites/${encodeURIComponent(site.value)}/components`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+        });
+        components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
+        component.value = res.name;
+      }
+      if (site.value && component.value && component.value !== '__new__') {
+        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
+        runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
+        const l = await api(`/api/sites/${s}/${c}/logs`);
+        logs.runs = l.runs; logs.compliance = l.compliance; logs.reports = l.reports;
+        if (tab.value === 'component') loadCompCfg();
+      }
+    }
+
+    async function loadRunFrameworks() {
+      runFrameworks.value = [];
+      run.framework = '';
+      if (run.strategy && site.value && component.value) {
+        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
+        runFrameworks.value = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(run.strategy)}/frameworks`);
+      }
+    }
+
+    // Lines to suppress in the run_tests console — individual prompt/response
+    // entries are shown in the results table instead.
+    function _isRunDetailLine(line) {
+      const t = line.trimStart();
+      return t.startsWith('Input: ') || t.startsWith('Response: ') || t.startsWith('Response:None');
+    }
+
+    function activeOutput(type) {
+      const jid = activeJobs[type];
+      if (!jid) return [];
+      const j = jobs.value.find(x => x.id === jid);
+      if (!j) return [];
+      const lines = j._output || [];
+      if (type === 'run_tests') return lines.filter(l => !_isRunDetailLine(l));
+      return lines;
+    }
+
+    function connectSSE(jobId) {
+      if (sseConnections[jobId]) return;
+      const j = jobs.value.find(x => x.id === jobId);
+      if (!j) return;
+      if (!j._output) j._output = [];
+      const src = new EventSource(`${API}/api/jobs/${jobId}/stream`);
+      sseConnections[jobId] = src;
+      src.onmessage = (e) => {
+        j._output.push(e.data);
+        nextTick(() => {
+          document.querySelectorAll('.console').forEach(el => { el.scrollTop = el.scrollHeight; });
+        });
+      };
+      src.addEventListener('done', (e) => {
+        j.status = e.data || 'done';
+        src.close();
+        delete sseConnections[jobId];
+        refreshJobs();
+        if (j.type === 'run_tests') loadLatestRunLog();
+      });
+      src.onerror = () => {
+        src.close();
+        delete sseConnections[jobId];
+      };
+    }
+
+    async function refreshJobs() {
+      const list = await api('/api/jobs');
+      for (const j of list) {
+        const existing = jobs.value.find(x => x.id === j.id);
+        if (existing) {
+          existing.status = j.status;
+        } else {
+          j._output = [];
+          jobs.value.unshift(j);
+        }
+      }
+    }
+
+    async function startJob(type, params = {}) {
+      const res = await api('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, site: site.value, component: component.value, params })
+      });
+      res._output = [];
+      jobs.value.unshift(res);
+      activeJobs[type] = res.id;
+      connectSSE(res.id);
+      _schedulePoll();
+      return res;
+    }
+
+    async function cancelJob(id) {
+      await api(`/api/jobs/${id}`, { method: 'DELETE' });
+      refreshJobs();
+    }
+
+    const discoverJobId = ref(null);
+    const discoverRunning = computed(() => {
+      if (!discoverJobId.value) return false;
+      const j = jobs.value.find(x => x.id === discoverJobId.value);
+      return j && j.status === 'running';
+    });
+
+    async function startGenerate() {
+      await startJob('generate', { strategy: gen.strategy, framework: gen.framework });
+    }
+
+    async function startDiscover() {
+      const j = await startJob('discover');
+      discoverJobId.value = j.id;
+    }
+
+    async function sendEnter() {
+      if (discoverJobId.value) {
+        await api(`/api/jobs/${discoverJobId.value}/stdin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: '\n' })
+        });
+      }
+    }
+
+    async function startRunTests() {
+      await startJob('run_tests', { suite: run.framework, assess: run.assess });
+    }
+
+    async function startRiskAssess() {
+      await startJob('risk_assess', { compliance_log: risk.log });
+    }
+
+    async function startExport() {
+      expResult.value = null;
+      const job = await startJob('export', { report: exp.report, program_id: exp.program_id });
+      if (job && job.id) {
+        const poll = setInterval(async () => {
+          const j = await api(`/api/jobs/${job.id}`);
+          if (j.status !== 'running' && j.status !== 'pending') {
+            clearInterval(poll);
+            try { expResult.value = await api(`/api/jobs/${job.id}/export-result`); } catch { /* ignore */ }
+          }
+        }, 2000);
+      }
+    }
+
+    async function startClearCache() {
+      await startJob('clear_cache', { delete_on_server: cache.deleteOnServer });
+    }
+
+    let _pollTimer = null;
+
+    function _schedulePoll() {
+      if (_pollTimer) return;
+      _pollTimer = setInterval(async () => {
+        const hasRunning = jobs.value.some(j => j.status === 'running' || j.status === 'pending');
+        if (hasRunning) {
+          await refreshJobs();
+        } else {
+          clearInterval(_pollTimer);
+          _pollTimer = null;
+        }
+      }, 10000);
+    }
+
+    async function openModal() {
+      modalError.value = '';
+      modalNewSite.value = '';
+      modalNewComponent.value = '';
+      if (site.value) {
+        modalSite.value = site.value;
+        modalComponents.value = components.value.length ? [...components.value] : await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
+        modalComponent.value = component.value || '';
+      } else {
+        // Pre-fill from .env defaults if available
+        try {
+          const defaults = await api('/api/env-defaults');
+          if (defaults.target) {
+            modalSite.value = defaults.target;
+            modalComponents.value = await api(`/api/sites/${encodeURIComponent(defaults.target)}/components`);
+            if (defaults.component) modalComponent.value = defaults.component;
+          } else {
+            modalSite.value = '';
+            modalComponent.value = '';
+            modalComponents.value = [];
+          }
+        } catch {
+          modalSite.value = '';
+          modalComponent.value = '';
+          modalComponents.value = [];
+        }
+      }
+      showModal.value = true;
+    }
+
+    onMounted(async () => {
+      await loadSites();
+      await refreshJobs();
+      if (!site.value) {
+        // Check .env for TARGET / COMPONENT defaults — skip modal if both are set
+        try {
+          const defaults = await api('/api/env-defaults');
+          if (defaults.target && defaults.component) {
+            const s = defaults.target;
+            const comps = await api(`/api/sites/${encodeURIComponent(s)}/components`);
+            if (comps.includes(defaults.component)) {
+              site.value = s;
+              components.value = comps;
+              component.value = defaults.component;
+              await loadContext();
+              return; // skip modal entirely
+            }
+          }
+        } catch { /* fall through to modal */ }
+        openModal();
+      }
+    });
+
+    watch(tab, () => {
+      if (tab.value === 'config') loadConfig();
+      else if (tab.value === 'component') loadCompCfg();
+      else if (tab.value === 'export') loadExpCreds();
+      else if (site.value && component.value) loadContext();
+    });
+
+    return {
+      site, component, sites, components, tab, tabs, jobsOpen, jobs,
+      allStrategies, allFrameworks, runStrategies, runFrameworks, logs,
+      gen, run, risk, exp, cache,
+      showModal, modalSite, modalComponent, modalComponents, modalNewSite, modalNewComponent, modalError,
+      onModalSiteChange, confirmModal, openModal,
+      HINTS, hintDismissed, dismissHint,
+      runResults, runResultsLoading, expandedRunRows, toggleRunRow,
+      compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES,
+      loadCompCfg, saveCompCfg, addInput, removeInput,
+      cfg, cfgSaved, cfgError,
+      BLOCKED_OPTIONS, COUNTRIES, CHANNELS, FETCH_METHODS,
+      discoverJobId, discoverRunning,
+      pretty, lineClass, activeOutput,
+      onSiteChange, loadContext, loadRunFrameworks,
+      startGenerate, startDiscover, sendEnter,
+      startRunTests, startRiskAssess, startExport, startClearCache,
+      expResult, expPreview, expCreds, expCredsEdit, expCredsSaving, expCredsMsg,
+      loadExpCreds, saveExpCreds, clearExpCreds,
+      cancelJob, saveConfig, toggleBlocked,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
