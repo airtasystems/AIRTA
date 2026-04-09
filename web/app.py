@@ -171,6 +171,27 @@ async def api_strategy_frameworks(site: str, component: str, strategy: str):
     ]
 
 
+@app.get("/api/sites/{site}/{component}/tests/{strategy}/{framework}")
+async def api_get_test_file(site: str, component: str, strategy: str, framework: str):
+    p = _bb_dir / "sites" / site / component / "tests" / strategy / f"{framework}.json"
+    if not p.exists():
+        raise HTTPException(404, "Test file not found")
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+class TestFileBody(BaseModel):
+    data: dict
+
+
+@app.put("/api/sites/{site}/{component}/tests/{strategy}/{framework}")
+async def api_put_test_file(site: str, component: str, strategy: str, framework: str, body: TestFileBody):
+    p = _bb_dir / "sites" / site / component / "tests" / strategy / f"{framework}.json"
+    if not p.exists():
+        raise HTTPException(404, "Test file not found")
+    p.write_text(json.dumps(body.data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True}
+
+
 @app.get("/api/sites/{site}/{component}/logs")
 async def api_component_logs(site: str, component: str):
     logs_dir = get_component_path(site, component) / "logs"
