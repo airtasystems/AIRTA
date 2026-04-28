@@ -10,7 +10,7 @@ POST /api/v2/imported-reports/company
 
 | Header | Value |
 |---|---|
-| `Authorization` | `Bearer gb_live_<your-api-key>` |
+| `Authorization` | `Bearer <AIRTASYSTEMS_API_KEY>` |
 | `X-Program-Id` | `<mongodb-program-id>` |
 | `Content-Type` | `application/json` |
 
@@ -20,7 +20,7 @@ The API key must have the `write:bulk_import` scope assigned.
 
 ## Request Body
 
-Send the pipeline report JSON file directly as the request body. No modifications to the file are required.
+Send the export-safe subset of `pipeline_report.json` as the request body. Local-only fields such as file paths, mandate rollups, UI status fields, and rendered `response_html` should not be included.
 
 ### Expected top-level fields
 
@@ -29,10 +29,6 @@ Send the pipeline report JSON file directly as the request body. No modification
 | `adversarial_results` | array | Yes | Test result items (max 5,000) |
 | `framework` | string | No | e.g. `"EU AI Act"` |
 | `timestamp` | string | No | ISO-format report timestamp |
-| `source_file` | string | No | Path to source test file |
-| `run_log_dir` | string | No | Path to run log directory |
-| `compliance_log` | string | No | Path to compliance log |
-| `mandate_rollup` | object | No | Top-level mandate summary |
 
 ### Each `adversarial_results` item
 
@@ -44,7 +40,7 @@ Send the pipeline report JSON file directly as the request body. No modification
 | `response` | string | AI response captured |
 | `risk_level` | string | e.g. `critical`, `high`, `informational`, `compliant` |
 | `judge_reasoning` | string | Expert assessment rationale |
-| `experts_summary` | array | `[{ framework, risk_level }]` |
+| `experts_summary` | array | `[{ framework, risk_level, reasoning }]` |
 | `description` | string | Test description |
 | `ok` | boolean | Whether test passed |
 | `error` | string\|null | Import error if any |
@@ -57,7 +53,7 @@ Send the pipeline report JSON file directly as the request body. No modification
 
 ```bash
 curl -X POST https://<host>/api/v2/imported-reports/company \
-  -H "Authorization: Bearer gb_live_<your-api-key>" \
+  -H "Authorization: Bearer <AIRTASYSTEMS_API_KEY>" \
   -H "X-Program-Id: <programId>" \
   -H "Content-Type: application/json" \
   -d @pipeline_report.json
@@ -74,7 +70,7 @@ with open("pipeline_report.json") as f:
 response = requests.post(
     "https://<host>/api/v2/imported-reports/company",
     headers={
-        "Authorization": "Bearer gb_live_<your-api-key>",
+        "Authorization": "Bearer <AIRTASYSTEMS_API_KEY>",
         "X-Program-Id": "<programId>",
         "Content-Type": "application/json",
     },
@@ -93,7 +89,7 @@ const payload = JSON.parse(fs.readFileSync("pipeline_report.json", "utf8"));
 const res = await fetch("https://<host>/api/v2/imported-reports/company", {
   method: "POST",
   headers: {
-    "Authorization": "Bearer gb_live_<your-api-key>",
+    "Authorization": "Bearer <AIRTASYSTEMS_API_KEY>",
     "X-Program-Id": "<programId>",
     "Content-Type": "application/json",
   },
@@ -139,7 +135,6 @@ Partial failures are reported in an `errors` array alongside successful inserts:
 |---|---|---|
 | `400` | `invalid_body` | Request body is not valid JSON |
 | `400` | `validation_error` | Missing/invalid `X-Program-Id` or empty `adversarial_results` |
-| `401` | `invalid_api_key_format` | Key does not start with `gb_live_` |
 | `401` | `invalid_api_key` | Key not found or inactive |
 | `403` | `ip_not_allowed` | Client IP not on key's allowlist |
 | `403` | `forbidden` | Key missing `write:bulk_import` scope, or program not owned by your company |

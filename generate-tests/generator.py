@@ -15,6 +15,7 @@ Example:
 
 Output is written under generate-tests/<strategy.output_subdir>/<filename>.
 """
+import os
 import sys
 import argparse
 import json
@@ -27,6 +28,30 @@ if str(_gen_dir) not in sys.path:
 
 from strategies import get_strategy
 import core
+
+
+def _apply_site_component_rubric_env(project_root: Path, site: str, component: str) -> None:
+    """
+    Point judge/adapter context at per-site company.json and per-component component.json
+    (browser-bot/sites/<site>/company.json and .../<site>/<component>/component.json).
+    Uses setdefault so explicit COMPONENT_* / AIRTA_* env vars still win.
+    """
+    site = (site or "").strip()
+    component = (component or "").strip()
+    if site:
+        os.environ.setdefault("AIRTA_SITE", site)
+    if component:
+        os.environ.setdefault("AIRTA_COMPONENT", component)
+    sites_root = project_root / "browser-bot" / "sites"
+    if site:
+        company_p = sites_root / site / "company.json"
+        if company_p.is_file():
+            os.environ.setdefault("COMPONENT_RUBRIC_JSON", str(company_p.resolve()))
+            os.environ.setdefault("COMPONENT_RUBRIC_CACHE_JSON", str(company_p.resolve()))
+    if site and component:
+        spec_p = sites_root / site / component / "component.json"
+        if spec_p.is_file():
+            os.environ.setdefault("COMPONENT_SPEC_RUBRIC_JSON", str(spec_p.resolve()))
 
 
 def main() -> None:
@@ -94,10 +119,22 @@ def main() -> None:
 
     strategy = get_strategy(args.strategy)
 
+    if args.site and args.component:
+        _apply_site_component_rubric_env(project_root, args.site, args.component)
+
     if args.run_type in ("tools", "capabilities"):
         comp = args.component_rubric
+        if not comp and args.site and args.component:
+            default_spec = (
+                project_root / "browser-bot" / "sites" / args.site / args.component / "component.json"
+            )
+            if default_spec.is_file():
+                comp = str(default_spec.resolve())
         if not comp:
-            parser.error("--component-rubric PATH is required when --run-type is tools or capabilities")
+            parser.error(
+                "--component-rubric PATH is required when --run-type is tools or capabilities "
+                "(or use --site and --component with sites/<site>/<component>/component.json present)"
+            )
         if not Path(comp).is_absolute():
             for base in (project_root, Path.cwd()):
                 candidate = base / comp
@@ -175,9 +212,14 @@ def main() -> None:
     else:
         print(f"Output: {_gen_dir / strategy.output_subdir / Path(output_path).name}")
     core.generate_compliance_suite(rubric_path, output_path, strategy)
-    # If --component-rubric was passed, append tools and capabilities to the file we just wrote (same process)
-    if args.component_rubric:
-        comp = args.component_rubric
+    # Append tools/capabilities when --component-rubric is set, or per-site component.json exists
+    comp_for_append = args.component_rubric
+    if not comp_for_append and args.site and args.component:
+        p = project_root / "browser-bot" / "sites" / args.site / args.component / "component.json"
+        if p.is_file():
+            comp_for_append = str(p.resolve())
+    if comp_for_append:
+        comp = comp_for_append
         if not Path(comp).is_absolute():
             for base in (project_root, Path.cwd()):
                 candidate = base / comp

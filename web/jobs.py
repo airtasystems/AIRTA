@@ -63,6 +63,12 @@ class _OutputCapture(io.TextIOBase):
 
 _jobs: dict[str, Job] = {}
 
+_ALL_STRATEGIES = [
+    "zero_shot", "multi_shot", "few_shot", "iterative", "chain_of_thought",
+    "prompt_chaining", "tree_of_thoughts", "self_consistency", "self_reflection",
+    "directional_stimulus",
+]
+
 
 def list_jobs() -> list[dict]:
     return [j.to_dict() for j in _jobs.values()]
@@ -203,10 +209,18 @@ async def start_job(job_type: str, site: str, component: str, params: dict | Non
 
     if job_type == "generate":
         job._task = asyncio.create_task(_start_generate(job))
+    elif job_type == "login":
+        job._task = asyncio.create_task(_start_login(job))
+    elif job_type == "company_discovery":
+        job._task = asyncio.create_task(_start_company_discovery(job))
     elif job_type == "discover":
         job._task = asyncio.create_task(_start_discover(job))
+    elif job_type == "manual_discover":
+        job._task = asyncio.create_task(_start_manual_discover(job))
     elif job_type == "run_tests":
         job._task = asyncio.create_task(_start_run_tests(job))
+    elif job_type == "sample_request":
+        job._task = asyncio.create_task(_start_sample_request(job))
     elif job_type == "risk_assess":
         job._task = asyncio.create_task(_start_risk_assess(job))
     elif job_type == "export":
@@ -229,20 +243,92 @@ async def _start_generate(job: Job):
     generator_py = _root / "generate-tests" / "generator.py"
     strategy = job.params.get("strategy", "zero_shot")
     framework = job.params.get("framework", "eu_ai_act")
-    cmd = [
-        sys.executable, str(generator_py),
-        "--strategy", strategy,
-        "--framework", framework,
-    ]
-    if job.site and job.component:
-        cmd += ["--site", job.site, "--component", job.component]
-    component_rubric = _root / "rubrics" / "component.json"
-    if component_rubric.exists():
-        cmd += ["--component-rubric", str(component_rubric)]
+
+    # Resolve per-site company rubric and per-component spec rubric, falling back to globals.
+    bb_dir = _root / "browser-bot"
+    if str(bb_dir) not in sys.path:
+        sys.path.insert(0, str(bb_dir))
+    try:
+        from browser_bot.sites import get_site_company_rubric_path, get_component_rubric_path
+        company_rubric = (
+            get_site_company_rubric_path(job.site) if job.site else None
+        ) or (_root / "rubrics" / "company.json" if (_root / "rubrics" / "company.json").exists() else None)
+        spec_rubric = (
+            get_component_rubric_path(job.site, job.component) if (job.site and job.component) else None
+        ) or (_root / "rubrics" / "component.json" if (_root / "rubrics" / "component.json").exists() else None)
+    except ImportError:
+        company_rubric = _root / "rubrics" / "company.json" if (_root / "rubrics" / "company.json").exists() else None
+        spec_rubric = _root / "rubrics" / "component.json" if (_root / "rubrics" / "component.json").exists() else None
+
     env = os.environ.copy()
-    if component_rubric.exists():
-        env["COMPONENT_RUBRIC_CACHE_JSON"] = str(component_rubric)
-    await _run_subprocess_job(job, cmd, env=env)
+    if company_rubric:
+        env["COMPONENT_RUBRIC_JSON"] = str(company_rubric)
+        env["COMPONENT_RUBRIC_CACHE_JSON"] = str(company_rubric)
+    if spec_rubric:
+        env["COMPONENT_SPEC_RUBRIC_JSON"] = str(spec_rubric)
+
+    def _build_cmd(strat: str) -> list[str]:
+        cmd = [sys.executable, str(generator_py), "--strategy", strat, "--framework", framework]
+        if job.site and job.component:
+            cmd += ["--site", job.site, "--component", job.component]
+        if spec_rubric:
+            cmd += ["--component-rubric", str(spec_rubric)]
+        return cmd
+
+    if strategy == "__all__":
+        job.status = "running"
+        job._event.set()
+        total = len(_ALL_STRATEGIES)
+        try:
+            for i, strat in enumerate(_ALL_STRATEGIES, 1):
+                job.output.append(f"[{i}/{total}] Generating: strategy={strat}, framework={framework}...")
+                job._event.set()
+                proc = await asyncio.create_subprocess_exec(
+                    *_build_cmd(strat),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.PIPE,
+                    cwd=str(_root),
+                    env=env,
+                )
+                job._process = proc
+                assert proc.stdout
+                async for raw_line in proc.stdout:
+                    line = raw_line.decode(errors="replace").rstrip("\n")
+                    job.output.append(line)
+                    job._event.set()
+                await proc.wait()
+                if proc.returncode != 0:
+                    job.output.append(f"[!] Generator exited {proc.returncode} for {strat}/{framework}")
+            job.output.append(f"[+] All {total} strategies complete for framework={framework}.")
+            job.status = "done"
+        except asyncio.CancelledError:
+            job.status = "cancelled"
+        except Exception as exc:
+            job.output.append(f"[error] {exc}")
+            job.status = "failed"
+        finally:
+            job._event.set()
+    else:
+        await _run_subprocess_job(job, _build_cmd(strategy), env=env)
+
+
+async def _start_login(job: Job):
+    worker = _root / "web" / "login_worker.py"
+    url = job.params.get("url", "")
+    if not url:
+        job.output.append("[!] No URL provided for login")
+        job.status = "failed"
+        job._event.set()
+        return
+    cmd = [sys.executable, "-u", str(worker), url]
+    await _run_subprocess_job(job, cmd)
+
+
+async def _start_company_discovery(job: Job):
+    worker = _root / "web" / "company_discovery_worker.py"
+    cmd = [sys.executable, "-u", str(worker), job.site]
+    await _run_subprocess_job(job, cmd)
 
 
 async def _start_discover(job: Job):
@@ -251,10 +337,18 @@ async def _start_discover(job: Job):
     await _run_subprocess_job(job, cmd)
 
 
-async def _start_run_tests(job: Job):
-    suite = job.params.get("suite", "")
+async def _start_manual_discover(job: Job):
+    worker = _root / "web" / "manual_discover_worker.py"
+    cmd = [sys.executable, "-u", str(worker), job.site, job.component]
+    await _run_subprocess_job(job, cmd)
 
-    def _do_run():
+
+async def _start_run_tests(job: Job):
+    suite_param = job.params.get("suite", "")
+    assess = bool(job.params.get("assess", False))
+
+    def _run_one_suite(suite_path_str: str) -> None:
+        """Run a single suite file. Must be called from a thread (uses asyncio.run internally)."""
         import importlib.util
         import json as _json
 
@@ -264,21 +358,34 @@ async def _start_run_tests(job: Job):
         if str(_root) not in sys.path:
             sys.path.insert(0, str(_root))
 
-        suite_path = Path(suite)
+        suite_path = Path(suite_path_str)
         if not suite_path.is_absolute():
             suite_path = _root / suite_path
         suite_data = _json.loads(suite_path.read_text(encoding="utf-8"))
 
-        for m in suite_data.get("mandates") or []:
-            for p in m.get("prompts") or []:
-                if isinstance(p.get("prompts"), list):
-                    mode = "multi"
-                    break
+        from browser_bot.config import infer_ui_mode_from_suite_raw
+        from browser_bot.sites import get_submission_config, load_component_config
+
+        mode = infer_ui_mode_from_suite_raw(suite_data) or "single"
+
+        if not get_submission_config(job.site, job.component):
+            config = load_component_config(job.site, job.component)
+            sub = config.get("submission")
+            if not isinstance(sub, dict):
+                reason = "missing submission block"
             else:
-                continue
-            break
-        else:
-            mode = "single"
+                missing = []
+                if not sub.get("start_url"):
+                    missing.append("submission.start_url")
+                if not (sub.get("inputs") or sub.get("input_selector")):
+                    missing.append("submission.inputs")
+                if not sub.get("submit_selector"):
+                    missing.append("submission.submit_selector")
+                reason = "missing " + ", ".join(missing) if missing else "invalid submission block"
+            raise RuntimeError(
+                f"Cannot run UI test suite for {job.site}/{job.component}: {reason}. "
+                "Run Discovery or complete the component submission config before running generated tests."
+            )
 
         bb_main_path = bb_dir / "main.py"
         spec = importlib.util.spec_from_file_location("browser_bot_main", bb_main_path)
@@ -289,7 +396,6 @@ async def _start_run_tests(job: Job):
 
         logs_dir = bb_dir / "sites" / job.site / job.component / "logs"
         if logs_dir.is_dir():
-            # New-style: logs/{timestamp}/run_log.json; old-style: logs/run_*.json
             logs = sorted(
                 list(logs_dir.glob("*/run_log.json")) + list(logs_dir.glob("run_*.json")),
                 key=lambda p: p.stat().st_mtime, reverse=True,
@@ -301,7 +407,7 @@ async def _start_run_tests(job: Job):
                 compliance_log = convert_run_log(run_log, suite_path)
                 print(f"[+] Compliance log: {compliance_log}")
 
-                if job.params.get("assess"):
+                if assess:
                     print("[*] Running risk assessment...")
                     from pipeline.risk_assess import run_risk_assessment
                     risk_results = run_risk_assessment(compliance_log)
@@ -313,6 +419,10 @@ async def _start_run_tests(job: Job):
                         for fld in ("description", "expected_behavior", "status", "ok", "error"):
                             if fld not in r:
                                 r[fld] = cl.get(fld)
+
+                    from pipeline.response_html import enrich_adversarial_results_with_response_html
+
+                    enrich_adversarial_results_with_response_html(risk_results)
 
                     severity_order = ("critical", "high", "medium", "low", "informational", "compliant", "indeterminate")
                     mandate_rollup = {}
@@ -342,7 +452,151 @@ async def _start_run_tests(job: Job):
                     print(f"[+] Pipeline report: {report_path}")
                     print(f"[+] Assessed: {len(risk_results)}")
 
-    await _run_thread_job(job, _do_run)
+    if suite_param == "__all__":
+        framework = job.params.get("framework", "")
+        bb_dir = _root / "browser-bot"
+        tests_dir = bb_dir / "sites" / job.site / job.component / "tests"
+        suites = sorted(tests_dir.glob(f"*/{framework}.json")) if tests_dir.is_dir() else []
+
+        if not suites:
+            job.output.append(f"[!] No test suites found for framework={framework}")
+            job.status = "failed"
+            job._event.set()
+            return
+
+        total = len(suites)
+
+        def _run_all():
+            import json as _json
+
+            for i, sp in enumerate(suites, 1):
+                strat_name = sp.parent.name
+                print(
+                    f"[airta_progress] {_json.dumps({'type': 'suite', 'current': i, 'total': total, 'strategy': strat_name}, ensure_ascii=False)}",
+                    flush=True,
+                )
+                print(f"[{i}/{total}] Running: strategy={strat_name}, framework={framework}...")
+                _run_one_suite(str(sp))
+            print(f"[+] All {total} strategy suites complete for framework={framework}.")
+
+        await _run_thread_job(job, _run_all)
+    else:
+        await _run_thread_job(job, lambda: _run_one_suite(suite_param))
+
+
+async def _start_sample_request(job: Job):
+    prompt = str(job.params.get("prompt") or "capital of england")
+
+    def _do():
+        import asyncio as _aio
+        import importlib.util
+        import time
+
+        bb_dir = _root / "browser-bot"
+        if str(bb_dir) not in sys.path:
+            sys.path.insert(0, str(bb_dir))
+
+        from browser_bot.sites import get_storage_state_path, get_submission_config, load_component_config
+        from browser_bot.submit.single import do_ui_submit_with_page
+
+        sub = get_submission_config(job.site, job.component)
+        if not sub:
+            config = load_component_config(job.site, job.component)
+            raw = config.get("submission")
+            if not isinstance(raw, dict):
+                reason = "missing submission block"
+            else:
+                missing = []
+                if not raw.get("start_url"):
+                    missing.append("submission.start_url")
+                if not (raw.get("inputs") or raw.get("input_selector")):
+                    missing.append("submission.inputs")
+                if not raw.get("submit_selector"):
+                    missing.append("submission.submit_selector")
+                reason = "missing " + ", ".join(missing) if missing else "invalid submission block"
+            raise RuntimeError(
+                f"Cannot send sample request for {job.site}/{job.component}: {reason}. "
+                "Run Discovery or complete the component submission config first."
+            )
+
+        storage_path = get_storage_state_path(job.site)
+        if not storage_path:
+            raise RuntimeError(f"No saved auth available for {job.site}. Run Add Login first.")
+
+        bb_main_path = bb_dir / "main.py"
+        spec = importlib.util.spec_from_file_location("browser_bot_main", bb_main_path)
+        bb_main = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bb_main)
+
+        async def _run():
+            from playwright.async_api import async_playwright
+
+            async with async_playwright() as p:
+                async def _submit(page):
+                    captured = []
+
+                    def _on_response(response):
+                        if response.request.method in ("POST", "PUT", "PATCH"):
+                            captured.append(response)
+
+                    page.on("response", _on_response)
+                    start = time.perf_counter()
+                    try:
+                        _, response_text = await do_ui_submit_with_page(
+                            page,
+                            sub["start_url"],
+                            sub["inputs"],
+                            sub["submit_selector"],
+                            prompt,
+                            response_selector=sub.get("response_selector") or "",
+                            submit_via=sub.get("submit_via", "click"),
+                            response_wait_ms=int(sub.get("response_wait_ms", 5000) or 5000),
+                            human_behavior=True,
+                        )
+                    finally:
+                        try:
+                            page.remove_listener("response", _on_response)
+                        except Exception:
+                            pass
+
+                    elapsed = time.perf_counter() - start
+                    origin_parts = page.url.split("/", 3)[:3]
+                    origin = "/".join(origin_parts) if len(origin_parts) >= 3 else ""
+                    same_origin = [
+                        resp for resp in captured
+                        if not origin or resp.request.url.startswith(origin)
+                    ]
+                    chosen = same_origin[-1] if same_origin else (captured[-1] if captured else None)
+                    return {
+                        "prompt": prompt,
+                        "response": response_text or "",
+                        "elapsed_sec": elapsed,
+                        "status": chosen.status if chosen else None,
+                        "status_url": chosen.request.url if chosen else "",
+                    }
+
+                return await bb_main.run_with_page_from_fetchers(
+                    p,
+                    job.site,
+                    _submit,
+                    storage_path=str(storage_path),
+                    interactive=False,
+                    human_only=False,
+                )
+
+        result = _aio.run(_run())
+        if not result:
+            raise RuntimeError("Sample request failed: browser submission returned no result.")
+
+        print("[sample] Prompt: " + result["prompt"])
+        print("[sample] Status: " + (str(result["status"]) if result["status"] is not None else "not captured"))
+        if result.get("status_url"):
+            print("[sample] Status URL: " + result["status_url"])
+        print(f"[sample] Timing: {result['elapsed_sec']:.2f}s")
+        print("[sample] Response:")
+        print(result["response"] or "(none)")
+
+    await _run_thread_job(job, _do)
 
 
 async def _start_risk_assess(job: Job):
@@ -378,6 +632,10 @@ async def _start_risk_assess(job: Job):
             for fld in ("description", "expected_behavior", "status", "ok", "error"):
                 if fld not in r:
                     r[fld] = cl_entry.get(fld)
+
+        from pipeline.response_html import enrich_adversarial_results_with_response_html
+
+        enrich_adversarial_results_with_response_html(risk_results)
 
         severity_order = ("critical", "high", "medium", "low", "informational", "compliant", "indeterminate")
         mandate_rollup = {}
@@ -434,11 +692,11 @@ async def _start_export(job: Job):
 
     # host + api_key come from .env; program_id is per-export from params
     env = _load_env_vars()
-    host = env.get("GENBOUNTY_HOST", "")
-    api_key = env.get("GENBOUNTY_API_KEY", "")
+    host = env.get("AIRTASYSTEMS_HOST", "")
+    api_key = env.get("AIRTASYSTEMS_API_KEY", "")
     program_id = job.params.get("program_id", "")
 
-    missing = [k for k, v in [("GENBOUNTY_HOST", host), ("GENBOUNTY_API_KEY", api_key), ("program_id", program_id)] if not v]
+    missing = [k for k, v in [("AIRTASYSTEMS_HOST", host), ("AIRTASYSTEMS_API_KEY", api_key), ("program_id", program_id)] if not v]
     if missing:
         job.output.append(f"[!] Missing credentials in .env: {', '.join(missing)}")
         job.status = "error"
@@ -447,7 +705,7 @@ async def _start_export(job: Job):
     def _do():
         if str(_root) not in sys.path:
             sys.path.insert(0, str(_root))
-        from pipeline.export_genbounty import export_pipeline_report
+        from pipeline.export_airta import export_pipeline_report
         rp = Path(report)
         if not rp.is_absolute():
             rp = _root / rp

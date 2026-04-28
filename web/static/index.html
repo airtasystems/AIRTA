@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AIRTA</title>
+<link rel="icon" href="/img/AIRTA Systems.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="/img/airtasystems-logo.png">
+<link rel="apple-touch-icon" href="/img/airtasystems-logo.png">
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,8 +15,16 @@
   <!-- Startup modal -->
   <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
     <div class="modal">
-      <div class="modal-logo">AIRTA</div>
+      <div class="modal-brand">
+        <img src="/img/airtasystems-logo.png" alt="" class="modal-brand-logo" width="100">
+        <div class="modal-logo"></div>
+      </div>
       <div class="modal-sub">AI Red Team Automation — select a site and component to get started</div>
+
+      <div class="modal-help">
+        <p><strong>Tip:</strong> Set <code>TARGET</code> and <code>COMPONENT</code> in the project root <code>.env</code> file to skip this dialog and keep the same site/component every session (including login discovery and rubrics).</p>
+        <p><strong>Site</strong> is the hostname you test (e.g. <code>chat.example.com</code> or <code>localhost:3000</code>). <strong>Component</strong> is a folder name for one UI surface (e.g. <code>chat</code>, <code>support-bot</code>) — configs, auth, and tests live under <code>sites/&lt;site&gt;/&lt;component&gt;/</code>.</p>
+      </div>
 
       <div class="modal-field">
         <label>Site</label>
@@ -42,16 +53,38 @@
       <p v-if="modalError" style="color:var(--red);font-size:13px;margin-top:-8px;">{{ modalError }}</p>
 
       <div class="modal-actions">
-        <button class="btn btn-primary" @click="confirmModal">Continue</button>
-        <button class="btn btn-ghost" @click="showModal = false">Skip</button>
+        <button type="button" class="btn btn-ghost" @click="showModal = false">Skip</button>
+        <button type="button" class="btn btn-primary" @click="confirmModal">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run troubleshooting modal -->
+  <div v-if="showRunTroubleshoot" class="modal-backdrop" @click.self="showRunTroubleshoot = false">
+    <div class="modal modal-wide">
+      <div class="modal-sub" style="margin-bottom:12px;">Run Tests Troubleshooting</div>
+      <div class="modal-help">
+        <p><strong>Start with a sample request.</strong> Use Send Sample Request to confirm the saved selectors, auth state, response selector, status, and timing before running a full suite.</p>
+        <p><strong>Try Human mode.</strong> In Settings -> Browser, set Fetch Method to <code>human</code> for targets that block pooled or clustered browsers.</p>
+        <p><strong>Disable headless.</strong> In Settings -> Browser, turn off Headless so you can watch the browser fill the prompt, click submit, and wait for the response.</p>
+        <p><strong>Increase timeout.</strong> In Settings -> Component, raise Response wait (ms), especially for slow model responses or streaming UIs.</p>
+        <p><strong>Check selectors.</strong> Re-run Connect Target -> Start Discovery if the prompt box, send button, or response container changed. Prefer stable selectors such as <code>#prompt-textarea</code>, <code>button[data-testid="send-button"]</code>, and <code>div[data-message-author-role="assistant"]</code>.</p>
+        <p><strong>Refresh auth.</strong> If the page opens logged out or gets redirected, run Add Login again for the site.</p>
+        <p><strong>Reduce concurrency.</strong> If you see rate limits or flaky responses, lower pool/cluster sizes or switch to Human mode before running larger suites.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" @click="showRunTroubleshoot = false">Close</button>
       </div>
     </div>
   </div>
 
   <!-- Header -->
   <header class="app-header">
-    <h1>AIRTA</h1>
-    <span class="context" v-if="site && component">{{ site }} / {{ component }}</span>
+    <a href="/" class="brand" title="AIRTA">
+      <img src="/img/airtasystems-logo.png" alt="" class="brand-logo" width="100">
+      <h1>AIRTA - AI Risk Testing Agent</h1>
+    </a>
+    <span class="context">Powered by <a href="https://airtasystems.com" target="_blank">AIRTA Systems</a></span>
     <button v-if="site && component" class="btn btn-ghost btn-sm" style="margin-left:4px;" @click="openModal" title="Switch site/component">⇄</button>
     <div class="header-selects">
       <select v-model="site" @change="onSiteChange">
@@ -59,7 +92,7 @@
         <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
         <option value="__new__">+ New site</option>
       </select>
-      <select v-model="component" @change="loadContext" :disabled="!site">
+      <select v-model="component" @change="onComponentChange" :disabled="!site" class="border-button">
         <option value="">Select component...</option>
         <option v-for="c in components" :key="c" :value="c">{{ c }}</option>
         <option value="__new__">+ New component</option>
@@ -86,18 +119,21 @@
             <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('generate')">Got it</button>
           </div>
           <div class="form-row">
-            <label>Strategy</label>
-            <select v-model="gen.strategy">
-              <option v-for="s in allStrategies" :key="s" :value="s">{{ pretty(s) }}</option>
-            </select>
-          </div>
-          <div class="form-row">
             <label>Framework</label>
             <select v-model="gen.framework">
               <option v-for="f in allFrameworks" :key="f" :value="f">{{ pretty(f) }}</option>
             </select>
           </div>
-          <button class="btn btn-primary" @click="startGenerate" :disabled="!site || !component || !gen.strategy || !gen.framework">Generate</button>
+          <div class="form-row">
+            <label>Strategy</label>
+            <select v-model="gen.strategy">
+              <option value="__all__">All strategies</option>
+              <option v-for="s in allStrategies" :key="s" :value="s">{{ pretty(s) }}</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" @click="startGenerate" :disabled="!site || !component || !gen.strategy || !gen.framework">
+            {{ gen.strategy === '__all__' ? 'Generate All Strategies' : 'Generate' }}
+          </button>
           <div class="console" v-if="activeOutput('generate').length" ref="genConsole">
             <div v-for="(line, i) in activeOutput('generate')" :key="i" :class="lineClass(line)">{{ line }}</div>
           </div>
@@ -105,20 +141,78 @@
 
         <!-- Discovery -->
         <template v-if="tab === 'discover'">
-          <h2>Discovery (Browser-Bot)</h2>
+          <h2>Connect Target</h2>
           <div v-if="!hintDismissed['discover']" class="hint-banner">
             <div><strong>{{ HINTS.discover.title }}</strong><p>{{ HINTS.discover.text }}</p></div>
             <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('discover')">Got it</button>
           </div>
-          <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">
-            Opens a browser for interactive selector recording. Output streams below.
-          </p>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary" @click="startDiscover" :disabled="!site || !component || discoverRunning">Start Discovery</button>
-            <button class="btn btn-ghost" @click="sendEnter" :disabled="!discoverJobId">Press Enter</button>
-          </div>
-          <div class="console" v-if="activeOutput('discover').length" ref="discoverConsole">
-            <div v-for="(line, i) in activeOutput('discover')" :key="i" :class="lineClass(line)">{{ line }}</div>
+
+          <div class="setup-steps">
+            <!-- Step 1: Login -->
+            <div class="setup-step">
+              <div class="setup-step-header">
+                <span class="step-num" :class="authConfigured ? 'done' : ''">{{ authConfigured ? '✓' : '1' }}</span>
+                Add Login
+                <span class="step-status" :class="authConfigured ? 'ok' : 'warn'">
+                  {{ authConfigured ? 'Auth configured' : 'Not configured' }}
+                </span>
+              </div>
+              <div class="setup-step-body">
+                <p>Open a browser, log in to the target app, then press Enter to save the auth state.</p>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input v-model="loginUrl" placeholder="https://example.com/login"
+                    style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-size:13px;">
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" @click="startLogin" :disabled="!site || !loginUrl || loginRunning">Start Login</button>
+                  <button class="btn btn-ghost" @click="sendLoginEnter" :disabled="!loginJobId || !loginRunning">Press Enter (done)</button>
+                </div>
+                <div class="console" v-if="activeOutput('login').length" ref="loginConsole">
+                  <div v-for="(line, i) in activeOutput('login')" :key="i" :class="lineClass(line)">{{ line }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 2: Company Discovery -->
+            <div class="setup-step">
+              <div class="setup-step-header">
+                <span class="step-num" :class="companyDiscoverDone ? 'done' : ''">{{ companyDiscoverDone ? '✓' : '2' }}</span>
+                Company Context
+                <span v-if="companyDiscoverDone" class="step-status ok">company.json saved</span>
+              </div>
+              <div class="setup-step-body">
+                <p>A browser will open. Navigate to a page that best describes the company — e.g. <code>/about</code>, home page, or wiki. Click <strong>Capture Page</strong> in the browser panel, or use the button below when the page is fully loaded. The page content is extracted and Gemini generates <code>company.json</code> grounding test prompts in the real company context.</p>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" @click="startCompanyDiscover" :disabled="!site || companyDiscoverRunning">Start Company Discovery</button>
+                  <button class="btn btn-ghost" @click="sendCompanyDiscoverEnter" :disabled="!companyDiscoverJobId || !companyDiscoverRunning">Capture Current Page</button>
+                </div>
+                <div class="console" v-if="activeOutput('company_discovery').length" ref="companyDiscoverConsole">
+                  <div v-for="(line, i) in activeOutput('company_discovery')" :key="i" :class="lineClass(line)">{{ line }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3: Component Discovery -->
+            <div class="setup-step">
+              <div class="setup-step-header">
+                <span class="step-num">3</span>
+                Configure Component
+              </div>
+              <div class="setup-step-body">
+                <p>Opens a browser with your auth loaded and records UI selectors for input, submit, and response elements. Use Start Discovery to click the elements yourself with an in-page guide, or Troubleshoot for automated selector detection.</p>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" @click="startManualDiscover" :disabled="!site || !component || manualDiscoverRunning">Start Discovery</button>
+                  <button class="btn btn-ghost" @click="startDiscover" :disabled="!site || !component || discoverRunning">Troubleshoot</button>
+                  <button class="btn btn-ghost" @click="sendEnter" :disabled="!discoverJobId">Press Enter</button>
+                </div>
+                <div class="console" v-if="activeOutput('discover').length" ref="discoverConsole">
+                  <div v-for="(line, i) in activeOutput('discover')" :key="i" :class="lineClass(line)">{{ line }}</div>
+                </div>
+                <div class="console" v-if="activeOutput('manual_discover').length">
+                  <div v-for="(line, i) in activeOutput('manual_discover')" :key="i" :class="lineClass(line)">{{ line }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -136,23 +230,55 @@
             <label>Strategy</label>
             <select v-model="run.strategy" @change="loadRunFrameworks">
               <option value="">Select...</option>
+              <option value="__all__">All strategies</option>
               <option v-for="s in runStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
             </select>
           </div>
           <div class="form-row">
             <label>Framework</label>
-            <select v-model="run.framework" :disabled="!run.strategy">
+            <select v-model="run.framework" @change="() => {}" :disabled="!runAllFrameworks.length && !runFrameworks.length">
               <option value="">Select...</option>
-              <option v-for="f in runFrameworks" :key="f.slug" :value="f.path">{{ f.label }}</option>
+              <template v-if="run.strategy === '__all__'">
+                <option v-for="f in runAllFrameworks" :key="f.slug" :value="f.slug">{{ f.label }}</option>
+              </template>
+              <template v-else>
+                <option v-for="f in runFrameworks" :key="f.slug" :value="f.path">{{ f.label }}</option>
+              </template>
             </select>
           </div>
           <div class="checkbox-row">
             <input type="checkbox" id="assess" v-model="run.assess">
             <label for="assess">Run risk assessment after</label>
           </div>
-          <button class="btn btn-primary" @click="startRunTests" :disabled="!run.framework">Run</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary" @click="startRunTests" :disabled="!run.framework">
+              {{ run.strategy === '__all__' ? 'Run All Strategies' : 'Run' }}
+            </button>
+            
+            <button class="btn btn-ghost" @click="startSampleRequest" :disabled="!site || !component || sampleRequestRunning">
+              {{ sampleRequestRunning ? 'Sending Sample…' : 'Send Sample Request' }}
+            </button>
+            <button class="btn btn-ghost" @click="showRunTroubleshoot = true">
+              Troubleshoot
+            </button>
+          </div>
+          <div
+            v-if="runProgress && activeJobs.run_tests"
+            class="run-progress-wrap"
+          >
+            <div class="run-progress-meta">
+              <span>{{ runProgressBarLabel }}</span>
+              <span class="run-progress-eta">{{ runProgressEtaText }}</span>
+            </div>
+            <div class="run-progress-track">
+              <div class="run-progress-fill" :style="{ width: (runProgress.pct || 0) + '%' }"></div>
+            </div>
+          </div>
           <div class="console" v-if="activeOutput('run_tests').length" ref="runConsole">
             <div v-for="(line, i) in activeOutput('run_tests')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          </div>
+          <div class="console" v-if="activeOutput('sample_request').length">
+            <div v-for="(line, i) in activeOutput('sample_request')" :key="i" :class="lineClass(line)">{{ line }}</div>
           </div>
 
           <div v-if="runResultsLoading" style="color:var(--text-dim);font-size:13px;margin-top:16px;">Loading results…</div>
@@ -333,6 +459,18 @@
             </select>
           </div>
           <button class="btn btn-primary" @click="startRiskAssess" :disabled="!risk.log">Assess</button>
+          <div
+            v-if="runProgress && riskTabProgressBarVisible"
+            class="run-progress-wrap"
+          >
+            <div class="run-progress-meta">
+              <span>{{ runProgressBarLabel }}</span>
+              <span class="run-progress-eta">{{ runProgressEtaText }}</span>
+            </div>
+            <div class="run-progress-track">
+              <div class="run-progress-fill" :style="{ width: (runProgress.pct || 0) + '%' }"></div>
+            </div>
+          </div>
           <div class="console" v-if="activeOutput('risk_assess').length" ref="riskConsole">
             <div v-for="(line, i) in activeOutput('risk_assess')" :key="i" :class="lineClass(line)">{{ line }}</div>
           </div>
@@ -340,7 +478,7 @@
 
         <!-- Export -->
         <template v-if="tab === 'export'">
-          <h2>Export to Genbounty</h2>
+          <h2>Export to AIRTA Systems</h2>
           <div v-if="!hintDismissed['export']" class="hint-banner">
             <div><strong>{{ HINTS.export.title }}</strong><p>{{ HINTS.export.text }}</p></div>
             <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('export')">Got it</button>
@@ -366,7 +504,7 @@
               </div>
 
               <div class="cfg-section">
-                <div class="cfg-section-title">Genbounty Credentials</div>
+                <div class="cfg-section-title">AIRTA Systems Credentials</div>
                 <p class="cfg-note">Credentials are saved to <code>.env</code> on the server — the API key is never sent to your browser.</p>
 
                 <!-- Saved state summary -->
@@ -382,8 +520,8 @@
                     {{ expCreds.has_api_key ? 'Update credentials' : 'Enter credentials' }}
                   </summary>
                   <div style="margin-top:10px;">
-                    <div class="form-row"><label>Host</label><input v-model="expCredsEdit.host" placeholder="app.genbounty.com"></div>
-                    <div class="form-row"><label>API Key</label><input v-model="expCredsEdit.api_key" type="password" placeholder="gb_live_… (leave blank to keep existing)"></div>
+                    <div class="form-row"><label>Host</label><input v-model="expCredsEdit.host" placeholder="app.airtasystems.com"></div>
+                    <div class="form-row"><label>API Key</label><input v-model="expCredsEdit.api_key" type="password" placeholder="AIRTASYSTEMS_API_KEY (leave blank to keep existing)"></div>
                     <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
                       <button class="btn btn-secondary btn-sm" @click="saveExpCreds" :disabled="expCredsSaving">
                         {{ expCredsSaving ? 'Saving…' : 'Save to .env' }}
@@ -404,7 +542,7 @@
               </div>
 
               <button class="btn btn-primary" @click="startExport" :disabled="!exp.report || !expCreds.has_api_key || !expCreds.host || !exp.program_id">
-                Export to Genbounty
+                Export to AIRTA Systems
               </button>
             </div>
 
@@ -447,209 +585,277 @@
         </template>
 
         <!-- Clear Cache -->
-        <template v-if="tab === 'cache'">
-          <h2>Clear Gemini Cache</h2>
-          <div v-if="!hintDismissed['cache']" class="hint-banner">
-            <div><strong>{{ HINTS.cache.title }}</strong><p>{{ HINTS.cache.text }}</p></div>
-            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('cache')">Got it</button>
-          </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="delServer" v-model="cache.deleteOnServer">
-            <label for="delServer">Also delete server-side cached content</label>
-          </div>
-          <button class="btn btn-primary" @click="startClearCache">Clear</button>
-          <div class="console" v-if="activeOutput('clear_cache').length" ref="cacheConsole">
-            <div v-for="(line, i) in activeOutput('clear_cache')" :key="i" :class="lineClass(line)">{{ line }}</div>
-          </div>
-        </template>
+        <!-- Settings (unified: Component Config, Rubrics, Browser Config, Cache) -->
+        <template v-if="tab === 'settings'">
+          <h2>Settings</h2>
 
-        <!-- Component -->
-        <template v-if="tab === 'component'">
-          <h2>Component Config
-            <span v-if="site && component" style="font-size:12px;color:var(--text-dim);font-weight:400;">
-              (browser-bot/sites/{{ site }}/{{ component }}/config.yaml)
-            </span>
-          </h2>
-          <div v-if="!site || !component" class="empty">Select a site and component first.</div>
-          <template v-else>
+          <!-- Inner sub-tab nav -->
+          <div class="settings-tabs">
+            <button :class="['settings-tab', settingsTab === 'component' && 'active']" @click="settingsTab = 'component'">Component Config</button>
+            <button :class="['settings-tab', settingsTab === 'rubrics'   && 'active']" @click="settingsTab = 'rubrics'">Rubrics</button>
+            <button :class="['settings-tab', settingsTab === 'browser'   && 'active']" @click="settingsTab = 'browser'">Browser Config</button>
+            <button :class="['settings-tab', settingsTab === 'cache'     && 'active']" @click="settingsTab = 'cache'">Cache Control</button>
+          </div>
 
-            <div v-if="!hintDismissed['component']" class="hint-banner">
-              <div><strong>{{ HINTS.component.title }}</strong><p>{{ HINTS.component.text }}</p></div>
-              <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('component')">Got it</button>
+          <!-- Component Config -->
+          <template v-if="settingsTab === 'component'">
+            <div class="settings-section-head">
+              <span v-if="site && component" style="font-size:12px;color:var(--text-dim);">browser-bot/sites/{{ site }}/{{ component }}/config.yaml</span>
             </div>
-
-            <div v-if="compCfgEmpty" class="discovery-prompt">
-              <div>
-                <strong>No submission config found.</strong>
-                Run Discovery to record the UI selectors for this component automatically.
+            <div v-if="!site || !component" class="empty">Select a site and component first.</div>
+            <template v-else>
+              <div v-if="!hintDismissed['component']" class="hint-banner">
+                <div><strong>{{ HINTS.component.title }}</strong><p>{{ HINTS.component.text }}</p></div>
+                <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('component')">Got it</button>
               </div>
-              <button class="btn btn-primary" @click="tab = 'discover'; startDiscover()">
-                ▶ Start Discovery
-              </button>
+
+              <div v-if="compCfgEmpty" class="discovery-prompt">
+                <div>
+                  <strong>No submission config found.</strong>
+                  Run Discovery to record the UI selectors for this component automatically.
+                </div>
+                <button class="btn btn-primary" @click="tab = 'discover'; startDiscover()">
+                  ▶ Start Discovery
+                </button>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Auth</div>
+                <div class="form-row">
+                  <label>Login URL</label>
+                  <input v-model="compCfg.login_url" placeholder="https://example.com/login or http://localhost:3000" style="flex:1;max-width:none;">
+                </div>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title">Submission</div>
+                <div class="form-row">
+                  <label>Start URL</label>
+                  <input v-model="compCfg.submission.start_url" placeholder="https://example.com/chat" style="flex:1;max-width:none;">
+                </div>
+                <div class="form-row">
+                  <label>Submit selector</label>
+                  <input v-model="compCfg.submission.submit_selector" placeholder="button[type='submit']" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Response selector</label>
+                  <input v-model="compCfg.submission.response_selector" placeholder=".assistant-bubble" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                </div>
+                <div class="form-row">
+                  <label>Submit via</label>
+                  <select v-model="compCfg.submission.submit_via" style="max-width:160px;">
+                    <option value="click">click</option>
+                    <option value="enter">enter</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label>Response wait (ms)</label>
+                  <input type="number" v-model.number="compCfg.submission.response_wait_ms" min="500" step="500" style="max-width:160px;">
+                </div>
+              </div>
+
+              <div class="cfg-section">
+                <div class="cfg-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+                  Inputs
+                  <button class="btn btn-ghost btn-sm" @click="addInput">+ Add input</button>
+                </div>
+                <div v-if="compCfg.submission.inputs.length === 0" class="empty" style="padding:8px 0;">No inputs defined.</div>
+                <div v-for="(inp, i) in compCfg.submission.inputs" :key="i" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                  <span style="color:var(--text-dim);font-size:12px;min-width:20px;">{{ i + 1 }}.</span>
+                  <input v-model="inp.selector" placeholder="CSS selector" style="flex:1;font-family:var(--mono);font-size:12px;">
+                  <select v-model="inp.type" style="max-width:160px;">
+                    <option v-for="t in INPUT_TYPES" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                  <button class="btn btn-ghost btn-sm" @click="removeInput(i)" style="color:var(--red);border-color:var(--red);">✕</button>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+                <button class="btn btn-primary" @click="saveCompCfg">Save</button>
+                <span v-if="compCfgSaved" style="color:var(--green);font-size:13px;">Saved</span>
+                <span v-if="compCfgError" style="color:var(--red);font-size:13px;">{{ compCfgError }}</span>
+              </div>
+            </template>
+          </template>
+
+          <!-- Rubrics -->
+          <template v-if="settingsTab === 'rubrics'">
+            <p style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">
+              Each site has a <strong>company.json</strong> (business context) and each component has a <strong>component.json</strong> (AI product spec). These ground test generation in the specific domain. Falls back to <code>rubrics/company.json</code> / <code>rubrics/component.json</code> when not set.<br>
+              Use <strong>Auto-populate</strong> to generate from a URL (e.g. an About page for company, or the component's own URL for the AI spec).
+            </p>
+
+            <template v-if="site">
+              <div class="cfg-section">
+                <div class="cfg-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>Company Rubric <span style="font-weight:400;font-size:12px;color:var(--text-dim);">sites/{{ site }}/company.json</span></span>
+                  <div style="display:flex;gap:8px;align-items:center;">
+                    <span v-if="companySaved" style="color:var(--green);font-size:12px;">Saved</span>
+                    <span v-if="companyError" style="color:var(--red);font-size:12px;">{{ companyError }}</span>
+                    <button class="btn btn-primary btn-sm" @click="saveCompanyRubric" :disabled="!site || companyGenerating">Save</button>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                  <input v-model="companyGenerateUrl" placeholder="https://example.com/about  — paste URL, click Auto-populate"
+                    style="flex:1;font-size:13px;" :disabled="companyGenerating">
+                  <button class="btn btn-ghost btn-sm" @click="generateCompanyRubric" :disabled="!companyGenerateUrl || companyGenerating || !site">
+                    <span v-if="companyGenerating">Generating…</span>
+                    <span v-else>Auto-populate</span>
+                  </button>
+                </div>
+                <textarea v-model="companyRubricText" spellcheck="false"
+                  style="width:100%;min-height:320px;font-family:var(--mono);font-size:12px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:10px;resize:vertical;box-sizing:border-box;margin-top:8px;"
+                  placeholder='{\n  "framework": "...",\n  "company": { ... }\n}'></textarea>
+              </div>
+
+              <div class="cfg-section" v-if="component">
+                <div class="cfg-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+                  <span>Component Rubric <span style="font-weight:400;font-size:12px;color:var(--text-dim);">sites/{{ site }}/{{ component }}/component.json</span></span>
+                  <div style="display:flex;gap:8px;align-items:center;">
+                    <span v-if="componentRubricSaved" style="color:var(--green);font-size:12px;">Saved</span>
+                    <span v-if="componentRubricError" style="color:var(--red);font-size:12px;">{{ componentRubricError }}</span>
+                    <button class="btn btn-primary btn-sm" @click="saveComponentRubric" :disabled="!site || !component || componentRubricGenerating">Save</button>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                  <input v-model="componentGenerateUrl" :placeholder="`https://${site}  — paste the AI component URL, click Auto-populate`"
+                    style="flex:1;font-size:13px;" :disabled="componentRubricGenerating">
+                  <button class="btn btn-ghost btn-sm" @click="generateComponentRubric" :disabled="!componentGenerateUrl || componentRubricGenerating || !site || !component">
+                    <span v-if="componentRubricGenerating">Generating…</span>
+                    <span v-else>Auto-populate</span>
+                  </button>
+                </div>
+                <textarea v-model="componentRubricText" spellcheck="false"
+                  style="width:100%;min-height:320px;font-family:var(--mono);font-size:12px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:10px;resize:vertical;box-sizing:border-box;margin-top:8px;"
+                  placeholder='{\n  "framework": "...",\n  "component": { ... }\n}'></textarea>
+              </div>
+              <div v-else class="empty" style="padding:16px 0;">Select a component to edit its rubric.</div>
+            </template>
+            <div v-else class="empty" style="padding:16px 0;">Select a site to edit its rubrics.</div>
+          </template>
+
+          <!-- Browser Config -->
+          <template v-if="settingsTab === 'browser'">
+            <div class="settings-section-head">
+              <span style="font-size:12px;color:var(--text-dim);">browser-bot/browser_bot/config.py</span>
+            </div>
+            <div v-if="!hintDismissed['config']" class="hint-banner">
+              <div><strong>{{ HINTS.config.title }}</strong><p>{{ HINTS.config.text }}</p></div>
+              <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('config')">Got it</button>
             </div>
 
             <div class="cfg-section">
-              <div class="cfg-section-title">Auth</div>
+              <div class="cfg-section-title">Fetcher</div>
               <div class="form-row">
-                <label>Login URL</label>
-                <input v-model="compCfg.login_url" placeholder="https://example.com/login" style="flex:1;max-width:none;">
-              </div>
-            </div>
-
-            <div class="cfg-section">
-              <div class="cfg-section-title">Submission</div>
-              <div class="form-row">
-                <label>Start URL</label>
-                <input v-model="compCfg.submission.start_url" placeholder="https://example.com/chat" style="flex:1;max-width:none;">
-              </div>
-              <div class="form-row">
-                <label>Submit selector</label>
-                <input v-model="compCfg.submission.submit_selector" placeholder="button[type='submit']" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
-              </div>
-              <div class="form-row">
-                <label>Response selector</label>
-                <input v-model="compCfg.submission.response_selector" placeholder=".assistant-bubble" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
-              </div>
-              <div class="form-row">
-                <label>Submit via</label>
-                <select v-model="compCfg.submission.submit_via" style="max-width:160px;">
-                  <option value="click">click</option>
-                  <option value="enter">enter</option>
+                <label>Fetch Method</label>
+                <select v-model="cfg.FETCH_METHOD">
+                  <option v-for="m in FETCH_METHODS" :key="m" :value="m">{{ m }}</option>
                 </select>
               </div>
               <div class="form-row">
-                <label>Response wait (ms)</label>
-                <input type="number" v-model.number="compCfg.submission.response_wait_ms" min="500" step="500" style="max-width:160px;">
+                <label>Pool Size</label>
+                <input type="number" v-model.number="cfg.POOL_SIZE" min="1" max="32">
+              </div>
+              <div class="form-row">
+                <label>Cluster Contexts</label>
+                <input type="number" v-model.number="cfg.CONTEXT_COUNT" min="1" max="32">
+              </div>
+              <div class="form-row">
+                <label>Pages / Context</label>
+                <input type="number" v-model.number="cfg.PAGES_PER_CONTEXT" min="1" max="16">
               </div>
             </div>
 
             <div class="cfg-section">
-              <div class="cfg-section-title" style="display:flex;align-items:center;justify-content:space-between;">
-                Inputs
-                <button class="btn btn-ghost btn-sm" @click="addInput">+ Add input</button>
+              <div class="cfg-section-title">Pool / Cluster Browser Enhancements</div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.POOL_CLUSTER_HUMAN_LIKE"><label>Human-like (enable all below)</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_ALLOW_STYLES"><label>Allow stylesheets</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_STEALTH"><label>Playwright-stealth</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CHROME"><label>Human Chrome args</label></div>
+              <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CONTEXT"><label>Human context (locale / viewport / geo)</label></div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Evasion</div>
+              <div class="form-row">
+                <label>Request delay (s)</label>
+                <input type="number" v-model.number="cfg.EVASION_REQUEST_DELAY_S" min="0" step="0.1">
               </div>
-              <div v-if="compCfg.submission.inputs.length === 0" class="empty" style="padding:8px 0;">No inputs defined.</div>
-              <div v-for="(inp, i) in compCfg.submission.inputs" :key="i" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                <span style="color:var(--text-dim);font-size:12px;min-width:20px;">{{ i + 1 }}.</span>
-                <input v-model="inp.selector" placeholder="CSS selector" style="flex:1;font-family:var(--mono);font-size:12px;">
-                <select v-model="inp.type" style="max-width:160px;">
-                  <option v-for="t in INPUT_TYPES" :key="t" :value="t">{{ t }}</option>
+              <div class="form-row">
+                <label>Retry wait (s)</label>
+                <input type="number" v-model.number="cfg.EVASION_RETRY_WAIT_S" min="0" step="1">
+              </div>
+              <div class="form-row">
+                <label>Max retries</label>
+                <input type="number" v-model.number="cfg.EVASION_MAX_RETRIES" min="0" max="10">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Human Tier</div>
+              <div class="form-row">
+                <label>Country</label>
+                <select v-model="cfg.HUMAN_COUNTRY">
+                  <option v-for="c in COUNTRIES" :key="c" :value="c">{{ c }}</option>
                 </select>
-                <button class="btn btn-ghost btn-sm" @click="removeInput(i)" style="color:var(--red);border-color:var(--red);">✕</button>
+              </div>
+              <div class="form-row">
+                <label>Read delay (ms)</label>
+                <input type="number" v-model.number="cfg.HUMAN_READ_DELAY_MS" min="0" step="100">
+              </div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_ALLOW_STYLES"><label>Allow stylesheets</label></div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_SCROLL_AFTER_LOAD"><label>Scroll after load</label></div>
+              <div class="form-row" style="align-items:flex-start">
+                <label style="padding-top:6px">User Agent</label>
+                <input v-model="cfg.HUMAN_USER_AGENT" style="max-width:100%;flex:1;font-family:var(--mono);font-size:11px;">
+              </div>
+            </div>
+
+            <div class="cfg-section">
+              <div class="cfg-section-title">Browser</div>
+              <div class="checkbox-row"><input type="checkbox" v-model="cfg.HEADLESS"><label>Headless</label></div>
+              <div class="form-row">
+                <label>Chrome channel</label>
+                <select v-model="cfg.CHROME_CHANNEL">
+                  <option v-for="ch in CHANNELS" :key="ch" :value="ch">{{ ch }}</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Chromium path</label>
+                <input v-model="cfg.CHROMIUM_EXECUTABLE_PATH" style="font-family:var(--mono);font-size:11px;">
+              </div>
+              <div class="form-row" style="align-items:flex-start">
+                <label style="padding-top:4px">Block types</label>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <label v-for="t in BLOCKED_OPTIONS" :key="t" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
+                    <input type="checkbox" :checked="cfg.BLOCKED_TYPES && cfg.BLOCKED_TYPES.includes(t)" @change="toggleBlocked(t)"> {{ t }}
+                  </label>
+                </div>
               </div>
             </div>
 
             <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-              <button class="btn btn-primary" @click="saveCompCfg">Save</button>
-              <span v-if="compCfgSaved" style="color:var(--green);font-size:13px;">Saved</span>
-              <span v-if="compCfgError" style="color:var(--red);font-size:13px;">{{ compCfgError }}</span>
+              <button class="btn btn-primary" @click="saveConfig">Save</button>
+              <span v-if="cfgSaved" style="color:var(--green);font-size:13px;">Configuration saved.</span>
+              <span v-if="cfgError" style="color:var(--red);font-size:13px;">{{ cfgError }}</span>
             </div>
           </template>
-        </template>
 
-        <!-- Config -->
-        <template v-if="tab === 'config'">
-          <h2>Config <span style="font-size:12px;color:var(--text-dim);font-weight:400;">(browser-bot/browser_bot/config.py)</span></h2>
-          <div v-if="!hintDismissed['config']" class="hint-banner">
-            <div><strong>{{ HINTS.config.title }}</strong><p>{{ HINTS.config.text }}</p></div>
-            <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('config')">Got it</button>
-          </div>
-
-          <div class="cfg-section">
-            <div class="cfg-section-title">Fetcher</div>
-            <div class="form-row">
-              <label>Fetch Method</label>
-              <select v-model="cfg.FETCH_METHOD">
-                <option v-for="m in FETCH_METHODS" :key="m" :value="m">{{ m }}</option>
-              </select>
+          <!-- Cache Control -->
+          <template v-if="settingsTab === 'cache'">
+            <div v-if="!hintDismissed['cache']" class="hint-banner">
+              <div><strong>{{ HINTS.cache.title }}</strong><p>{{ HINTS.cache.text }}</p></div>
+              <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('cache')">Got it</button>
             </div>
-            <div class="form-row">
-              <label>Pool Size</label>
-              <input type="number" v-model.number="cfg.POOL_SIZE" min="1" max="32">
+            <div class="checkbox-row">
+              <input type="checkbox" id="delServer" v-model="cache.deleteOnServer">
+              <label for="delServer">Also delete server-side cached content</label>
             </div>
-            <div class="form-row">
-              <label>Cluster Contexts</label>
-              <input type="number" v-model.number="cfg.CONTEXT_COUNT" min="1" max="32">
+            <button class="btn btn-primary" @click="startClearCache">Clear Cache</button>
+            <div class="console" v-if="activeOutput('clear_cache').length" ref="cacheConsole">
+              <div v-for="(line, i) in activeOutput('clear_cache')" :key="i" :class="lineClass(line)">{{ line }}</div>
             </div>
-            <div class="form-row">
-              <label>Pages / Context</label>
-              <input type="number" v-model.number="cfg.PAGES_PER_CONTEXT" min="1" max="16">
-            </div>
-          </div>
-
-          <div class="cfg-section">
-            <div class="cfg-section-title">Pool / Cluster Browser Enhancements</div>
-            <div class="checkbox-row"><input type="checkbox" v-model="cfg.POOL_CLUSTER_HUMAN_LIKE"><label>Human-like (enable all below)</label></div>
-            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_ALLOW_STYLES"><label>Allow stylesheets</label></div>
-            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_STEALTH"><label>Playwright-stealth</label></div>
-            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CHROME"><label>Human Chrome args</label></div>
-            <div class="checkbox-row" style="padding-left:16px"><input type="checkbox" v-model="cfg.POOL_CLUSTER_USE_HUMAN_CONTEXT"><label>Human context (locale / viewport / geo)</label></div>
-          </div>
-
-          <div class="cfg-section">
-            <div class="cfg-section-title">Evasion</div>
-            <div class="form-row">
-              <label>Request delay (s)</label>
-              <input type="number" v-model.number="cfg.EVASION_REQUEST_DELAY_S" min="0" step="0.1">
-            </div>
-            <div class="form-row">
-              <label>Retry wait (s)</label>
-              <input type="number" v-model.number="cfg.EVASION_RETRY_WAIT_S" min="0" step="1">
-            </div>
-            <div class="form-row">
-              <label>Max retries</label>
-              <input type="number" v-model.number="cfg.EVASION_MAX_RETRIES" min="0" max="10">
-            </div>
-          </div>
-
-          <div class="cfg-section">
-            <div class="cfg-section-title">Human Tier</div>
-            <div class="form-row">
-              <label>Country</label>
-              <select v-model="cfg.HUMAN_COUNTRY">
-                <option v-for="c in COUNTRIES" :key="c" :value="c">{{ c }}</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>Read delay (ms)</label>
-              <input type="number" v-model.number="cfg.HUMAN_READ_DELAY_MS" min="0" step="100">
-            </div>
-            <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_ALLOW_STYLES"><label>Allow stylesheets</label></div>
-            <div class="checkbox-row"><input type="checkbox" v-model="cfg.HUMAN_SCROLL_AFTER_LOAD"><label>Scroll after load</label></div>
-            <div class="form-row" style="align-items:flex-start">
-              <label style="padding-top:6px">User Agent</label>
-              <input v-model="cfg.HUMAN_USER_AGENT" style="max-width:100%;flex:1;font-family:var(--mono);font-size:11px;">
-            </div>
-          </div>
-
-          <div class="cfg-section">
-            <div class="cfg-section-title">Browser</div>
-            <div class="checkbox-row"><input type="checkbox" v-model="cfg.HEADLESS"><label>Headless</label></div>
-            <div class="form-row">
-              <label>Chrome channel</label>
-              <select v-model="cfg.CHROME_CHANNEL">
-                <option v-for="ch in CHANNELS" :key="ch" :value="ch">{{ ch }}</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>Chromium path</label>
-              <input v-model="cfg.CHROMIUM_EXECUTABLE_PATH" style="font-family:var(--mono);font-size:11px;">
-            </div>
-            <div class="form-row" style="align-items:flex-start">
-              <label style="padding-top:4px">Block types</label>
-              <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <label v-for="t in BLOCKED_OPTIONS" :key="t" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);">
-                  <input type="checkbox" :checked="cfg.BLOCKED_TYPES && cfg.BLOCKED_TYPES.includes(t)" @change="toggleBlocked(t)"> {{ t }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
-            <button class="btn btn-primary" @click="saveConfig">Save</button>
-            <span v-if="cfgSaved" style="color:var(--green);font-size:13px;">Configuration saved.</span>
-            <span v-if="cfgError" style="color:var(--red);font-size:13px;">{{ cfgError }}</span>
-          </div>
+          </template>
         </template>
 
       </div>
@@ -680,748 +886,6 @@
   </div>
 </div>
 
-<script>
-const { createApp, ref, reactive, computed, watch, nextTick, onMounted } = Vue;
-
-const API = '';
-
-async function api(path, opts) {
-  const res = await fetch(API + path, opts);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-createApp({
-  setup() {
-    const site = ref('');
-    const component = ref('');
-    const sites = ref([]);
-    const components = ref([]);
-    const tab = ref('generate');
-    const jobsOpen = ref(true);
-    const jobs = ref([]);
-
-    const tabs = [
-      { id: 'discover', label: 'Connect Target' },
-      { id: 'generate', label: 'Generate Tests' },
-      { id: 'tests', label: 'Test Management' },
-      { id: 'run', label: 'Run Tests' },
-      { id: 'risk', label: 'Risk Assessment' },
-      { id: 'export', label: 'Export' },
-      { id: 'cache', label: 'Cache Control' },
-      { id: 'component', label: 'Component Config' },
-      { id: 'config', label: 'Browser Config' },
-    ];
-
-    const allStrategies = ref([]);
-    const allFrameworks = ref([]);
-    const runStrategies = ref([]);
-    const runFrameworks = ref([]);
-    const logs = reactive({ runs: [], compliance: [], reports: [] });
-
-    // --- Test Management tab ---
-    const tmStrategy = ref('');
-    const tmFramework = ref('');
-    const tmStrategies = ref([]);
-    const tmFrameworks = ref([]);
-    const tmFile = ref(null);       // loaded test file { framework, description, mandates }
-    const tmDirty = ref(false);
-    const tmSaving = ref(false);
-    const tmSaveMsg = ref('');
-    const tmEditingId = ref(null);  // prompt id being inline-edited
-    const tmAddingMandate = ref('');// mandate slug for new-prompt form
-    const tmNewPrompt = reactive({ id: '', description: '', prompt: '' });
-
-    async function tmLoadStrategies() {
-      tmStrategies.value = [];
-      tmStrategy.value = '';
-      tmFrameworks.value = [];
-      tmFramework.value = '';
-      tmFile.value = null;
-      if (!site.value || !component.value) return;
-      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      tmStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
-    }
-
-    async function tmLoadFrameworks() {
-      tmFrameworks.value = [];
-      tmFramework.value = '';
-      tmFile.value = null;
-      tmDirty.value = false;
-      if (tmStrategy.value && site.value && component.value) {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        tmFrameworks.value = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(tmStrategy.value)}/frameworks`);
-      }
-    }
-
-    async function tmLoadFile() {
-      tmFile.value = null;
-      tmDirty.value = false;
-      tmEditingId.value = null;
-      tmAddingMandate.value = '';
-      if (!tmFramework.value || !tmStrategy.value) return;
-      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      const fw = encodeURIComponent(tmFramework.value);
-      const strat = encodeURIComponent(tmStrategy.value);
-      // tmFramework.value holds the full path; extract stem from it
-      const stem = tmFramework.value.split('/').pop().replace(/\.json$/, '');
-      tmFile.value = await api(`/api/sites/${s}/${c}/tests/${strat}/${encodeURIComponent(stem)}`);
-    }
-
-    async function tmSave() {
-      if (!tmFile.value) return;
-      tmSaving.value = true;
-      tmSaveMsg.value = '';
-      try {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        const strat = encodeURIComponent(tmStrategy.value);
-        const stem = tmFramework.value.split('/').pop().replace(/\.json$/, '');
-        await api(`/api/sites/${s}/${c}/tests/${strat}/${encodeURIComponent(stem)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: tmFile.value }),
-        });
-        tmDirty.value = false;
-        tmSaveMsg.value = 'Saved';
-        setTimeout(() => { tmSaveMsg.value = ''; }, 2000);
-      } catch (e) {
-        tmSaveMsg.value = 'Save failed: ' + e.message;
-      } finally {
-        tmSaving.value = false;
-      }
-    }
-
-    function tmDeletePrompt(mandateIdx, promptIdx) {
-      if (!confirm('Delete this prompt?')) return;
-      tmFile.value.mandates[mandateIdx].prompts.splice(promptIdx, 1);
-      tmDirty.value = true;
-    }
-
-    function tmStartAdd(mandateSlug) {
-      tmAddingMandate.value = mandateSlug;
-      tmNewPrompt.id = '';
-      tmNewPrompt.description = '';
-      tmNewPrompt.prompt = '';
-    }
-
-    function tmConfirmAdd(mandateIdx) {
-      const p = { id: tmNewPrompt.id.trim(), description: tmNewPrompt.description.trim(), prompt: tmNewPrompt.prompt.trim() };
-      if (!p.id || !p.prompt) return;
-      tmFile.value.mandates[mandateIdx].prompts.push(p);
-      tmDirty.value = true;
-      tmAddingMandate.value = '';
-    }
-
-    function tmMarkDirty() { tmDirty.value = true; }
-
-    const gen = reactive({ strategy: 'zero_shot', framework: 'eu_ai_act' });
-    const run = reactive({ strategy: '', framework: '', assess: false });
-    const risk = reactive({ log: '' });
-    const exp = reactive({ report: '', program_id: '' });
-    const expResult = ref(null);
-    const expPreview = ref(null);
-    // host + api_key stored server-side in .env; program_id is per-export
-    const expCreds = reactive({ host: '', has_api_key: false });
-    const expCredsEdit = reactive({ host: '', api_key: '' });
-    const expCredsSaving = ref(false);
-    const expCredsMsg = ref('');
-
-    async function loadExpCreds() {
-      try {
-        const c = await api('/api/credentials');
-        expCreds.host = c.host || '';
-        expCreds.has_api_key = c.has_api_key || false;
-        expCredsEdit.host = c.host || '';
-        expCredsEdit.api_key = '';
-        // Pre-fill program_id from .env if not already set by the user
-        if (c.program_id && !exp.program_id) exp.program_id = c.program_id;
-      } catch { /* ignore */ }
-    }
-
-    async function saveExpCreds() {
-      expCredsSaving.value = true;
-      expCredsMsg.value = '';
-      try {
-        const result = await api('/api/credentials', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ host: expCredsEdit.host, api_key: expCredsEdit.api_key }),
-        });
-        expCreds.host = result.host;
-        expCreds.has_api_key = result.has_api_key;
-        expCredsEdit.api_key = '';
-        expCredsMsg.value = 'Saved to .env';
-      } catch (e) {
-        expCredsMsg.value = 'Save failed: ' + e.message;
-      } finally {
-        expCredsSaving.value = false;
-      }
-    }
-
-    async function clearExpCreds() {
-      if (!confirm('Remove Genbounty host and API key from .env?')) return;
-      await api('/api/credentials', { method: 'DELETE' });
-      expCreds.host = '';
-      expCreds.has_api_key = false;
-      expCredsEdit.host = expCredsEdit.api_key = '';
-      expCredsMsg.value = 'Credentials cleared';
-    }
-
-    watch(() => exp.report, async (path) => {
-      expPreview.value = null;
-      expResult.value = null;
-      if (!path) return;
-      try {
-        const data = await api(`/api/log?path=${encodeURIComponent(path)}`);
-        expPreview.value = {
-          count: (data.adversarial_results || []).length,
-          framework: data.framework || '',
-          timestamp: data.timestamp || '',
-        };
-      } catch { /* ignore */ }
-    });
-    const cache = reactive({ deleteOnServer: false });
-
-    // Component config
-    const INPUT_TYPES = ['text', 'textarea', 'contenteditable', 'password', 'email', 'search', 'select', 'combobox', 'checkbox', 'radio'];
-    const compCfg = reactive({
-      login_url: '',
-      submission: { start_url: '', inputs: [], submit_selector: '', response_selector: '', submit_via: 'click', response_wait_ms: 5000 },
-    });
-    const compCfgSaved = ref(false);
-    const compCfgError = ref('');
-    const compCfgEmpty = ref(false);
-
-    async function loadCompCfg() {
-      if (!site.value || !component.value) return;
-      compCfgError.value = '';
-      try {
-        const data = await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`);
-        compCfg.login_url = data.login_url || '';
-        const sub = data.submission || {};
-        compCfg.submission.start_url = sub.start_url || '';
-        compCfg.submission.submit_selector = sub.submit_selector || '';
-        compCfg.submission.response_selector = sub.response_selector || '';
-        compCfg.submission.submit_via = sub.submit_via || 'click';
-        compCfg.submission.response_wait_ms = sub.response_wait_ms ?? 5000;
-        compCfg.submission.inputs = (sub.inputs || []).map(inp => ({ ...inp }));
-        compCfgEmpty.value = !data.submission;
-      } catch (e) { compCfgError.value = String(e); }
-    }
-
-    async function saveCompCfg() {
-      compCfgError.value = '';
-      compCfgSaved.value = false;
-      try {
-        const payload = {
-          login_url: compCfg.login_url,
-          submission: {
-            start_url: compCfg.submission.start_url,
-            inputs: compCfg.submission.inputs.map(i => ({ ...i })),
-            submit_selector: compCfg.submission.submit_selector,
-            response_selector: compCfg.submission.response_selector,
-            submit_via: compCfg.submission.submit_via,
-            response_wait_ms: Number(compCfg.submission.response_wait_ms),
-          },
-        };
-        await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ config: payload }),
-        });
-        compCfgSaved.value = true;
-        setTimeout(() => { compCfgSaved.value = false; }, 3000);
-        await loadContext();
-      } catch (e) { compCfgError.value = String(e); }
-    }
-
-    function addInput() {
-      compCfg.submission.inputs.push({ selector: '', type: 'text' });
-    }
-    function removeInput(i) {
-      compCfg.submission.inputs.splice(i, 1);
-    }
-
-    const cfg = reactive({});
-    const cfgSaved = ref(false);
-    const cfgError = ref('');
-    const BLOCKED_OPTIONS = ['image', 'font', 'media', 'stylesheet'];
-    const COUNTRIES = ['US', 'UK', 'DE', 'FR', 'JP', 'CA', 'AU', 'NL', 'ES', 'IT'];
-    const CHANNELS = ['chromium', 'chrome', 'chrome-beta', 'msedge'];
-    const FETCH_METHODS = ['auto', 'cdp', 'pool', 'cluster', 'human'];
-
-    async function loadConfig() {
-      try {
-        const data = await api('/api/config');
-        Object.assign(cfg, data);
-        // Ensure BLOCKED_TYPES is always an array for checkbox binding
-        if (!Array.isArray(cfg.BLOCKED_TYPES)) cfg.BLOCKED_TYPES = [];
-      } catch (e) {
-        cfgError.value = String(e);
-      }
-    }
-
-    async function saveConfig() {
-      cfgError.value = '';
-      cfgSaved.value = false;
-      try {
-        await api('/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ changes: { ...cfg } }),
-        });
-        cfgSaved.value = true;
-        setTimeout(() => { cfgSaved.value = false; }, 3000);
-      } catch (e) {
-        cfgError.value = String(e);
-      }
-    }
-
-    function toggleBlocked(type) {
-      const idx = cfg.BLOCKED_TYPES.indexOf(type);
-      if (idx === -1) cfg.BLOCKED_TYPES.push(type);
-      else cfg.BLOCKED_TYPES.splice(idx, 1);
-    }
-
-    // --- Startup modal ---
-    const showModal = ref(false);
-    const modalSite = ref('');
-    const modalComponent = ref('');
-    const modalComponents = ref([]);
-    const modalNewSite = ref('');
-    const modalNewComponent = ref('');
-    const modalError = ref('');
-
-    async function onModalSiteChange() {
-      modalComponent.value = '';
-      modalComponents.value = [];
-      modalNewSite.value = '';
-      modalNewComponent.value = '';
-      if (modalSite.value && modalSite.value !== '__new__') {
-        modalComponents.value = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`);
-      }
-    }
-
-    async function confirmModal() {
-      modalError.value = '';
-      let s = modalSite.value, c = modalComponent.value;
-      if (s === '__new__') {
-        s = modalNewSite.value.trim();
-        if (!s) { modalError.value = 'Enter a domain.'; return; }
-        await api('/api/sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: s }) });
-        await loadSites();
-      }
-      if (c === '__new__') {
-        c = modalNewComponent.value.trim();
-        if (!c) { modalError.value = 'Enter a component name.'; return; }
-        const res = await api(`/api/sites/${encodeURIComponent(s)}/components`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: c })
-        });
-        c = res.name;
-      }
-      if (!s) { modalError.value = 'Select or create a site.'; return; }
-      if (!c) { modalError.value = 'Select or create a component.'; return; }
-      site.value = s;
-      components.value = await api(`/api/sites/${encodeURIComponent(s)}/components`);
-      component.value = c;
-      await loadContext();
-      showModal.value = false;
-    }
-
-    // --- Onboarding hints ---
-    const HINTS = {
-      generate: {
-        title: 'Generate Tests',
-        text: 'Create adversarial test suites by choosing a strategy (e.g. Zero-shot) and framework (e.g. EU AI Act). Tests are generated via LLM and saved to the component\'s tests/ directory, ready to run.',
-      },
-      discover: {
-        title: 'Browser Discovery',
-        text: 'Records how browser-bot interacts with the target UI. A real browser opens and walks through each recording step. Click "Press Enter" here to advance through each stage. Recorded selectors are saved automatically to the component config.',
-      },
-      run: {
-        title: 'Run Tests',
-        text: 'Submits each adversarial prompt to the target UI using the configured browser tier. Select a strategy then a framework from your generated tests and click Run. Results appear in the table below and are saved to a timestamped log directory.',
-      },
-      tests: {
-        title: 'Test Management',
-        text: 'Open a generated test file by strategy, then edit mandates and prompts in place—add rows, refine wording, or remove items. Save writes changes back to the component\'s tests/ directory for the next run.',
-      },
-      risk: {
-        title: 'Risk Assessment',
-        text: 'Runs each entry in a compliance log through an AI judge to determine risk level (compliant → informational → low → medium → high → critical). Select a compliance log from a previous test run. Results are saved as a pipeline_report.json.',
-      },
-      export: {
-        title: 'Export to Genbounty',
-        text: 'Sends a pipeline report to a Genbounty instance via the bulk-import API. Select a report, enter your host, API key, and program ID. Each adversarial result is submitted as a finding.',
-      },
-      cache: {
-        title: 'Clear Gemini Cache',
-        text: 'Clears the local Gemini API response cache used by the test generator and risk-level agent. Use this to force fresh LLM responses. "Delete server-side" also removes cached content from Google\'s servers.',
-      },
-      component: {
-        title: 'Component Config',
-        text: 'Configures how browser-bot interacts with this component\'s UI — the page URL, input selector, submit button, and where to read the AI response from. If no config exists yet, use Discovery to auto-record these selectors.',
-      },
-      config: {
-        title: 'Global Config',
-        text: 'Controls browser-bot\'s global behaviour. Changes are written directly to config.py and take effect on the next test run. Key settings: Fetch Method selects the browser tier, Pool/Cluster enhancements add stealth, and Evasion controls retry behaviour on rate limits.',
-      },
-    };
-
-    const _storedHints = JSON.parse(localStorage.getItem('airta_hints_dismissed') || '{}');
-    const hintDismissed = ref({ ..._storedHints });
-
-    function dismissHint(key) {
-      hintDismissed.value = { ...hintDismissed.value, [key]: true };
-      localStorage.setItem('airta_hints_dismissed', JSON.stringify(hintDismissed.value));
-    }
-
-    const runResults = ref([]);
-    const runResultsLoading = ref(false);
-    const expandedRunRows = ref({});
-
-    async function loadLatestRunLog() {
-      if (!site.value || !component.value) return;
-      runResultsLoading.value = true;
-      try {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        const l = await api(`/api/sites/${s}/${c}/logs`);
-        logs.runs = l.runs; logs.compliance = l.compliance; logs.reports = l.reports;
-        if (!l.runs.length) return;
-        const data = await api(`/api/files?path=${encodeURIComponent(l.runs[0].path)}`);
-        expandedRunRows.value = {};
-        if (data.mode === 'multi') {
-          runResults.value = (data.batches || []).flatMap(b =>
-            (b.turns || []).map((t, ti) => ({
-              label: `Batch ${b.batch_index + 1} / Turn ${ti + 1}`,
-              input: t.input, response: t.response,
-            }))
-          );
-        } else {
-          runResults.value = (data.entries || []).map((e, i) => ({
-            label: `#${i + 1}`, input: e.input, response: e.response,
-          }));
-        }
-      } catch (e) { console.error(e); }
-      finally { runResultsLoading.value = false; }
-    }
-
-    function toggleRunRow(i) {
-      expandedRunRows.value = { ...expandedRunRows.value, [i]: !expandedRunRows.value[i] };
-    }
-
-    const activeJobs = reactive({});
-    const sseConnections = {};
-
-    function pretty(slug) {
-      const short = new Set(['eu','ai','uk','us','oecd','gdpr','iso']);
-      return (slug || '').replace(/_/g, '-').split('-').filter(Boolean).map(p =>
-        short.has(p.toLowerCase()) ? p.toUpperCase() : p.charAt(0).toUpperCase() + p.slice(1)
-      ).join(' ');
-    }
-
-    function lineClass(line) {
-      if (line.startsWith('[+]') || line.startsWith('[*]')) return 'line-ok';
-      if (line.startsWith('[!]') || line.startsWith('[-]') || line.startsWith('[error]')) return 'line-err';
-      if (line.startsWith('  ')) return 'line-info';
-      return '';
-    }
-
-    async function loadSites() {
-      sites.value = await api('/api/sites');
-      allStrategies.value = await api('/api/strategies');
-      allFrameworks.value = await api('/api/frameworks');
-    }
-
-    async function onSiteChange() {
-      if (site.value === '__new__') {
-        const domain = prompt('Enter domain (e.g. example.com):');
-        if (!domain) { site.value = ''; return; }
-        await api('/api/sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
-        await loadSites();
-        site.value = domain;
-      }
-      component.value = '';
-      if (site.value && site.value !== '__new__') {
-        components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
-      } else {
-        components.value = [];
-      }
-    }
-
-    async function loadContext() {
-      if (component.value === '__new__') {
-        const name = prompt('Component name:');
-        if (!name) { component.value = ''; return; }
-        const res = await api(`/api/sites/${encodeURIComponent(site.value)}/components`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
-        });
-        components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
-        component.value = res.name;
-      }
-      if (site.value && component.value && component.value !== '__new__') {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
-        const l = await api(`/api/sites/${s}/${c}/logs`);
-        logs.runs = l.runs; logs.compliance = l.compliance; logs.reports = l.reports;
-        if (tab.value === 'component') loadCompCfg();
-        if (tab.value === 'tests') await tmLoadStrategies();
-      }
-    }
-
-    async function loadRunFrameworks() {
-      runFrameworks.value = [];
-      run.framework = '';
-      if (run.strategy && site.value && component.value) {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        runFrameworks.value = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(run.strategy)}/frameworks`);
-      }
-    }
-
-    async function refreshRunTests() {
-      if (!site.value || !component.value) return;
-      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      const prevStrategy = run.strategy;
-      runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
-      // Keep current strategy selection if it still exists after refresh
-      if (prevStrategy && runStrategies.value.some(x => x.slug === prevStrategy)) {
-        run.strategy = prevStrategy;
-        await loadRunFrameworks();
-      } else {
-        run.strategy = '';
-        run.framework = '';
-        runFrameworks.value = [];
-      }
-    }
-
-    // Lines to suppress in the run_tests console — individual prompt/response
-    // entries are shown in the results table instead.
-    function _isRunDetailLine(line) {
-      const t = line.trimStart();
-      return t.startsWith('Input: ') || t.startsWith('Response: ') || t.startsWith('Response:None');
-    }
-
-    function activeOutput(type) {
-      const jid = activeJobs[type];
-      if (!jid) return [];
-      const j = jobs.value.find(x => x.id === jid);
-      if (!j) return [];
-      const lines = j._output || [];
-      if (type === 'run_tests') return lines.filter(l => !_isRunDetailLine(l));
-      return lines;
-    }
-
-    function connectSSE(jobId) {
-      if (sseConnections[jobId]) return;
-      const j = jobs.value.find(x => x.id === jobId);
-      if (!j) return;
-      if (!j._output) j._output = [];
-      const src = new EventSource(`${API}/api/jobs/${jobId}/stream`);
-      sseConnections[jobId] = src;
-      src.onmessage = (e) => {
-        j._output.push(e.data);
-        nextTick(() => {
-          document.querySelectorAll('.console').forEach(el => { el.scrollTop = el.scrollHeight; });
-        });
-      };
-      src.addEventListener('done', (e) => {
-        j.status = e.data || 'done';
-        src.close();
-        delete sseConnections[jobId];
-        refreshJobs();
-        if (j.type === 'run_tests') loadLatestRunLog();
-      });
-      src.onerror = () => {
-        src.close();
-        delete sseConnections[jobId];
-      };
-    }
-
-    async function refreshJobs() {
-      const list = await api('/api/jobs');
-      for (const j of list) {
-        const existing = jobs.value.find(x => x.id === j.id);
-        if (existing) {
-          existing.status = j.status;
-        } else {
-          j._output = [];
-          jobs.value.unshift(j);
-        }
-      }
-    }
-
-    async function startJob(type, params = {}) {
-      const res = await api('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, site: site.value, component: component.value, params })
-      });
-      res._output = [];
-      jobs.value.unshift(res);
-      activeJobs[type] = res.id;
-      connectSSE(res.id);
-      _schedulePoll();
-      return res;
-    }
-
-    async function cancelJob(id) {
-      await api(`/api/jobs/${id}`, { method: 'DELETE' });
-      refreshJobs();
-    }
-
-    const discoverJobId = ref(null);
-    const discoverRunning = computed(() => {
-      if (!discoverJobId.value) return false;
-      const j = jobs.value.find(x => x.id === discoverJobId.value);
-      return j && j.status === 'running';
-    });
-
-    async function startGenerate() {
-      await startJob('generate', { strategy: gen.strategy, framework: gen.framework });
-    }
-
-    async function startDiscover() {
-      const j = await startJob('discover');
-      discoverJobId.value = j.id;
-    }
-
-    async function sendEnter() {
-      if (discoverJobId.value) {
-        await api(`/api/jobs/${discoverJobId.value}/stdin`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: '\n' })
-        });
-      }
-    }
-
-    async function startRunTests() {
-      await startJob('run_tests', { suite: run.framework, assess: run.assess });
-    }
-
-    async function startRiskAssess() {
-      await startJob('risk_assess', { compliance_log: risk.log });
-    }
-
-    async function startExport() {
-      expResult.value = null;
-      const job = await startJob('export', { report: exp.report, program_id: exp.program_id });
-      if (job && job.id) {
-        const poll = setInterval(async () => {
-          const j = await api(`/api/jobs/${job.id}`);
-          if (j.status !== 'running' && j.status !== 'pending') {
-            clearInterval(poll);
-            try { expResult.value = await api(`/api/jobs/${job.id}/export-result`); } catch { /* ignore */ }
-          }
-        }, 2000);
-      }
-    }
-
-    async function startClearCache() {
-      await startJob('clear_cache', { delete_on_server: cache.deleteOnServer });
-    }
-
-    let _pollTimer = null;
-
-    function _schedulePoll() {
-      if (_pollTimer) return;
-      _pollTimer = setInterval(async () => {
-        const hasRunning = jobs.value.some(j => j.status === 'running' || j.status === 'pending');
-        if (hasRunning) {
-          await refreshJobs();
-        } else {
-          clearInterval(_pollTimer);
-          _pollTimer = null;
-        }
-      }, 10000);
-    }
-
-    async function openModal() {
-      modalError.value = '';
-      modalNewSite.value = '';
-      modalNewComponent.value = '';
-      if (site.value) {
-        modalSite.value = site.value;
-        modalComponents.value = components.value.length ? [...components.value] : await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
-        modalComponent.value = component.value || '';
-      } else {
-        // Pre-fill from .env defaults if available
-        try {
-          const defaults = await api('/api/env-defaults');
-          if (defaults.target) {
-            modalSite.value = defaults.target;
-            modalComponents.value = await api(`/api/sites/${encodeURIComponent(defaults.target)}/components`);
-            if (defaults.component) modalComponent.value = defaults.component;
-          } else {
-            modalSite.value = '';
-            modalComponent.value = '';
-            modalComponents.value = [];
-          }
-        } catch {
-          modalSite.value = '';
-          modalComponent.value = '';
-          modalComponents.value = [];
-        }
-      }
-      showModal.value = true;
-    }
-
-    onMounted(async () => {
-      await loadSites();
-      await refreshJobs();
-      if (!site.value) {
-        // Check .env for TARGET / COMPONENT defaults — skip modal if both are set
-        try {
-          const defaults = await api('/api/env-defaults');
-          if (defaults.target && defaults.component) {
-            const s = defaults.target;
-            const comps = await api(`/api/sites/${encodeURIComponent(s)}/components`);
-            if (comps.includes(defaults.component)) {
-              site.value = s;
-              components.value = comps;
-              component.value = defaults.component;
-              await loadContext();
-              return; // skip modal entirely
-            }
-          }
-        } catch { /* fall through to modal */ }
-        openModal();
-      }
-    });
-
-    watch(tab, () => {
-      if (tab.value === 'config') loadConfig();
-      else if (tab.value === 'component') loadCompCfg();
-      else if (tab.value === 'export') loadExpCreds();
-      else if (tab.value === 'tests') tmLoadStrategies();
-      else if (site.value && component.value) loadContext();
-    });
-
-    return {
-      site, component, sites, components, tab, tabs, jobsOpen, jobs,
-      allStrategies, allFrameworks, runStrategies, runFrameworks, logs,
-      gen, run, risk, exp, cache,
-      showModal, modalSite, modalComponent, modalComponents, modalNewSite, modalNewComponent, modalError,
-      onModalSiteChange, confirmModal, openModal,
-      HINTS, hintDismissed, dismissHint,
-      runResults, runResultsLoading, expandedRunRows, toggleRunRow,
-      compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES,
-      loadCompCfg, saveCompCfg, addInput, removeInput,
-      cfg, cfgSaved, cfgError,
-      BLOCKED_OPTIONS, COUNTRIES, CHANNELS, FETCH_METHODS,
-      discoverJobId, discoverRunning,
-      pretty, lineClass, activeOutput,
-      onSiteChange, loadContext, loadRunFrameworks, refreshRunTests,
-      tmStrategy, tmStrategies, tmFramework, tmFrameworks, tmFile, tmDirty, tmSaving, tmSaveMsg,
-      tmEditingId, tmAddingMandate, tmNewPrompt,
-      tmLoadStrategies, tmLoadFrameworks, tmLoadFile, tmSave, tmDeletePrompt, tmStartAdd, tmConfirmAdd, tmMarkDirty,
-      startGenerate, startDiscover, sendEnter,
-      startRunTests, startRiskAssess, startExport, startClearCache,
-      expResult, expPreview, expCreds, expCredsEdit, expCredsSaving, expCredsMsg,
-      loadExpCreds, saveExpCreds, clearExpCreds,
-      cancelJob, saveConfig, toggleBlocked,
-    };
-  }
-}).mount('#app');
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

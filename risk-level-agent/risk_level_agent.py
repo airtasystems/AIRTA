@@ -6,6 +6,7 @@ import re
 import logging
 import hashlib
 import time
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, List, Dict, TypedDict, Optional
@@ -56,6 +57,12 @@ llm = ChatGoogleGenerativeAI(
 
 # Low-level Gemini client for explicit prompt/context caching (experts + judge)
 GENAI_CLIENT = genai.Client(api_key=GEMINI_API_KEY)
+
+
+def _model_for_genai(model: str | None) -> str:
+    """Gemini cache APIs expect a models/ resource name."""
+    m = (model or "").strip()
+    return m if m.startswith("models/") else f"models/{m}"
 
 # =========================
 # Retry for transient Gemini API errors (503 UNAVAILABLE, 429 rate limit)
@@ -230,7 +237,13 @@ def _get_rubric_text(framework_name: str) -> str:
     return "\n\nCompliance rubric for reference:\n\n" + "\n\n".join(sections)
 
 
-def _create_gemini_cache(cache_key: str, cache_store: Dict[str, str], display_name: str, system_prompt: str) -> str:
+def _create_gemini_cache(
+    cache_key: str,
+    cache_store: Dict[str, str],
+    display_name: str,
+    system_prompt: str,
+    model: str,
+) -> str:
     """
     Ensure there is an explicit Gemini context cache for the given system_prompt.
     Stores the cache name in cache_store[cache_key]. Returns the cache name (empty string on failure).
@@ -240,7 +253,7 @@ def _create_gemini_cache(cache_key: str, cache_store: Dict[str, str], display_na
 
     try:
         cache = GENAI_CLIENT.caches.create(
-            model="models/gemini-2.5-flash-lite",
+            model=model,
             config=types.CreateCachedContentConfig(
                 display_name=display_name,
                 system_instruction=system_prompt,
@@ -269,26 +282,31 @@ def _create_gemini_cache(cache_key: str, cache_store: Dict[str, str], display_na
 EXPERT_CACHE_HANDLES: Dict[str, str] = {}
 # Explicit cached prompt handles per framework_name (judge)
 JUDGE_CACHE_HANDLES: Dict[str, str] = {}
+_CACHE_HANDLE_LOCK = threading.Lock()
 
 
 def _get_or_create_expert_cache(framework_name: str, system_prompt: str) -> str:
     """Ensure a Gemini context cache exists for this framework expert system prompt."""
-    return _create_gemini_cache(
-        cache_key=framework_name,
-        cache_store=EXPERT_CACHE_HANDLES,
-        display_name=f"risk-agent-expert-{framework_name}",
-        system_prompt=system_prompt,
-    )
+    with _CACHE_HANDLE_LOCK:
+        return _create_gemini_cache(
+            cache_key=framework_name,
+            cache_store=EXPERT_CACHE_HANDLES,
+            display_name=f"risk-agent-expert-{framework_name}",
+            system_prompt=system_prompt,
+            model=_model_for_genai(GEMINI_MODEL),
+        )
 
 
 def _get_or_create_judge_cache(framework_name: str, system_prompt: str) -> str:
     """Ensure a Gemini context cache exists for this framework's judge system prompt."""
-    return _create_gemini_cache(
-        cache_key=framework_name,
-        cache_store=JUDGE_CACHE_HANDLES,
-        display_name=f"risk-agent-judge-{framework_name}",
-        system_prompt=system_prompt,
-    )
+    with _CACHE_HANDLE_LOCK:
+        return _create_gemini_cache(
+            cache_key=framework_name,
+            cache_store=JUDGE_CACHE_HANDLES,
+            display_name=f"risk-agent-judge-{framework_name}",
+            system_prompt=system_prompt,
+            model=_model_for_genai(GEMINI_JUDGE_MODEL),
+        )
 
 
 class GraphState(TypedDict):
@@ -344,7 +362,7 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
         if cache_name:
             response = _gemini_call_with_retry(
                 GENAI_CLIENT.models.generate_content,
-                model="models/gemini-2.5-flash-lite",
+                model=_model_for_genai(GEMINI_MODEL),
                 contents=user_query,
                 config=types.GenerateContentConfig(
                     cached_content=cache_name,
@@ -557,7 +575,7 @@ def judge_node(state: GraphState) -> Dict:
     if cache_name:
         response = _gemini_call_with_retry(
             GENAI_CLIENT.models.generate_content,
-            model="models/gemini-2.5-flash-lite",
+            model=_model_for_genai(GEMINI_JUDGE_MODEL),
             contents=human_content,
             config=types.GenerateContentConfig(
                 cached_content=cache_name,

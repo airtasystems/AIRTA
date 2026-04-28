@@ -15,13 +15,26 @@ pip install -r requirements.txt
 - **`.config`** — Non-sensitive settings: `GEMINI_MODEL`, `GEMINI_JUDGE`. Same format as `.env` (`KEY=value`, `#` comments).
 - **`.env`** — Secrets only (e.g. `GEMINI_API_KEY`). Loaded after `.config` so it can override.
 
+## Quick start (web UI)
+
+```bash
+python -m web.app
+python web/app.py
+uvicorn web.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Then open http://localhost:8000. The web UI (FastAPI + SPA) wraps the full pipeline — generate, discover, run, risk-assess, export — with a browser-based interface. API docs are available at `/api/docs`.
+
+Run from the repo root so `.config` and `.env` are picked up.
+
+
 ## Quick start (interactive menu)
 
 ```bash
 python main.py
 ```
 
-This launches the interactive menu: select a site, then a component, then choose from the pipeline steps. You can also create new sites and components from the menu.
+This launches the interactive terminal menu: select a site, then a component, then choose from the pipeline steps. You can also create new sites and components from the menu.
 
 ## Commands (direct CLI)
 
@@ -94,18 +107,18 @@ python main.py risk-assess path/to/compliance_log.json --report-dir ./reports
 
 Writes `pipeline_report.json` alongside the compliance log.
 
-### Export to Genbounty
+### Export to AIRTA Systems
 
-Export a pipeline report to Genbounty via the bulk-import API.
+Export a pipeline report to AIRTA Systems via the bulk-import API.
 
 ```bash
 python main.py export path/to/pipeline_report.json \
-  --host app.genbounty.com \
+  --host app.airtasystems.com \
   --api-key YOUR_KEY \
   --program-id PROGRAM_ID
 ```
 
-Credentials can also be set via `GENBOUNTY_HOST`, `GENBOUNTY_API_KEY`, `GENBOUNTY_PROGRAM_ID` env vars.
+Credentials can also be set via `AIRTASYSTEMS_HOST`, `AIRTASYSTEMS_API_KEY`, `AIRTASYSTEMS_PROGRAM_ID` env vars.
 
 ### Direct generator usage
 
@@ -135,14 +148,14 @@ python generate-tests/generate_all.py  # generate all missing strategy x framewo
 
 ```
 generate  →  discover  →  run  →  risk-assess  →  export
-(rubrics)    (auth+config)  (browser)  (multi-expert)   (Genbounty)
+(rubrics)    (auth+config)  (browser)  (multi-expert)   (AIRTA Systems)
 ```
 
 1. **Generate** creates adversarial test suites from compliance rubrics.
 2. **Discover** sets up browser-bot: login, record input/submit selectors.
 3. **Run** submits the generated prompts to the live target and captures responses.
 4. **Risk-assess** evaluates each prompt/response pair with multi-expert analysis.
-5. **Export** pushes the pipeline report to Genbounty.
+5. **Export** pushes the pipeline report to AIRTA Systems.
 
 ## Project layout
 
@@ -150,5 +163,15 @@ generate  →  discover  →  run  →  risk-assess  →  export
 - `generate-tests/` — Test generation: `generator.py`, `core.py`, `strategies/`.
 - `browser-bot/` — Browser automation: Playwright-based test runner with tiered fetchers.
 - `risk-level-agent/` — Multi-expert + judge LangGraph agent for risk levels.
-- `pipeline/` — `risk_assess.py`, `convert_log.py`, `export_genbounty.py`.
+- `pipeline/` — `risk_assess.py`, `convert_log.py`, `export_airta.py`.
 - `rubrics/` — Compliance framework rubrics (EU AI Act, OWASP, FRIA, MITRE, NIST, etc.).
+
+# Troubleshooting
+- Port is taken? 
+
+```bash
+lsof -i :8000
+ss -tulnp | grep 8000
+sudo ss -tulnp | grep 8000
+kill -9 [pid]
+```

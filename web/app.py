@@ -7,6 +7,7 @@ import json
 import os
 import re as _re
 import sys
+import urllib.request
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,10 +24,14 @@ if str(_bb_dir) not in sys.path:
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
+from browser_bot.auth_state import auth_config_exists, load_auth_config
 from browser_bot.sites import (
     ensure_component_dir,
     ensure_site_dir,
     get_component_path,
+    get_component_rubric_path,
+    get_domain_from_url,
+    get_site_company_rubric_path,
     list_components,
     list_sites,
     load_component_config,
@@ -52,7 +57,10 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # ---------------------------------------------------------------------------
 
 _static_dir = Path(__file__).resolve().parent / "static"
+_img_dir = Path(__file__).resolve().parent / "IMG"
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+if _img_dir.is_dir():
+    app.mount("/img", StaticFiles(directory=str(_img_dir)), name="img")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -74,8 +82,10 @@ class CreateSiteBody(BaseModel):
 
 @app.post("/api/sites")
 async def api_create_site(body: CreateSiteBody):
-    ensure_site_dir(body.domain)
-    return {"ok": True, "domain": body.domain}
+    domain = get_domain_from_url(body.domain) if "://" in body.domain else body.domain
+    domain = domain.rstrip("/")
+    ensure_site_dir(domain)
+    return {"ok": True, "domain": domain}
 
 
 @app.delete("/api/sites/{site}")
@@ -83,6 +93,19 @@ async def api_delete_site(site: str):
     if remove_site(site):
         return {"ok": True}
     raise HTTPException(404, "Site not found")
+
+
+@app.get("/api/sites/{site}/auth-status")
+async def api_auth_status(site: str):
+    if not auth_config_exists(site):
+        return {"configured": False}
+    config = load_auth_config(site)
+    has_cookies = bool(config and config.get("cookies"))
+    has_storage = any(
+        o.get("localStorage") or o.get("sessionStorage")
+        for o in (config or {}).get("origins", [])
+    )
+    return {"configured": has_cookies or has_storage}
 
 
 @app.get("/api/sites/{site}/components")
@@ -112,6 +135,142 @@ class SaveComponentConfigBody(BaseModel):
 async def api_save_component_config(site: str, component: str, body: SaveComponentConfigBody):
     save_component_config(site, component, body.config)
     return {"ok": True}
+
+
+class RubricBody(BaseModel):
+    content: dict
+
+
+def _global_company_rubric() -> Path | None:
+    p = _root / "rubrics" / "company.json"
+    return p if p.is_file() else None
+
+
+def _global_component_rubric() -> Path | None:
+    p = _root / "rubrics" / "component.json"
+    return p if p.is_file() else None
+
+
+@app.get("/api/sites/{site}/company-rubric")
+async def api_get_company_rubric(site: str):
+    """Return per-site company.json, falling back to global rubrics/company.json."""
+    p = get_site_company_rubric_path(site) or _global_company_rubric()
+    if not p:
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.put("/api/sites/{site}/company-rubric")
+async def api_put_company_rubric(site: str, body: RubricBody):
+    """Save per-site company.json."""
+    ensure_site_dir(site)
+    p = _bb_dir / "sites" / site / "company.json"
+    p.write_text(json.dumps(body.content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "path": str(p)}
+
+
+@app.get("/api/sites/{site}/{component}/component-rubric")
+async def api_get_component_rubric(site: str, component: str):
+    """Return per-component component.json, falling back to global rubrics/component.json."""
+    p = get_component_rubric_path(site, component) or _global_component_rubric()
+    if not p:
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+@app.put("/api/sites/{site}/{component}/component-rubric")
+async def api_put_component_rubric(site: str, component: str, body: RubricBody):
+    """Save per-component component.json."""
+    ensure_component_dir(site, component)
+    p = _bb_dir / "sites" / site / component / "component.json"
+    p.write_text(json.dumps(body.content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "path": str(p)}
+
+
+def _fetch_url_html(url: str) -> str:
+    """Fetch a URL and return the response body as text (no browser, best-effort)."""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        charset = "utf-8"
+        ct = resp.headers.get_content_charset()
+        if ct:
+            charset = ct
+        return resp.read().decode(charset, errors="replace")
+
+
+class GenerateRubricBody(BaseModel):
+    url: str
+
+
+@app.post("/api/sites/{site}/company-rubric/generate")
+async def api_generate_company_rubric(site: str, body: GenerateRubricBody):
+    """Fetch a URL, extract company context via Gemini, save & return company.json."""
+    try:
+        html = _fetch_url_html(body.url)
+    except Exception as exc:
+        raise HTTPException(400, f"Failed to fetch URL: {exc}")
+
+    bb_path = str(_bb_dir)
+    if bb_path not in sys.path:
+        sys.path.insert(0, bb_path)
+    try:
+        from browser_bot.rubric_discovery import generate_company_json
+    except ImportError as exc:
+        raise HTTPException(500, f"rubric_discovery module unavailable: {exc}")
+
+    result = generate_company_json(html, body.url)
+    if not result:
+        raise HTTPException(500, "LLM returned empty result")
+
+    ensure_site_dir(site)
+    p = _bb_dir / "sites" / site / "company.json"
+    p.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "content": result}
+
+
+@app.post("/api/sites/{site}/{component}/component-rubric/generate")
+async def api_generate_component_rubric(site: str, component: str, body: GenerateRubricBody):
+    """Fetch a URL, extract component context via Gemini (+ company.json context), save & return component.json."""
+    try:
+        html = _fetch_url_html(body.url)
+    except Exception as exc:
+        raise HTTPException(400, f"Failed to fetch URL: {exc}")
+
+    bb_path = str(_bb_dir)
+    if bb_path not in sys.path:
+        sys.path.insert(0, bb_path)
+    try:
+        from browser_bot.rubric_discovery import generate_component_json
+    except ImportError as exc:
+        raise HTTPException(500, f"rubric_discovery module unavailable: {exc}")
+
+    # Load company.json to ground the component rubric in real company context
+    company_data: dict | None = None
+    company_p = _bb_dir / "sites" / site / "company.json"
+    if company_p.is_file():
+        try:
+            company_data = json.loads(company_p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    result = generate_component_json(html, body.url, component, company_data=company_data)
+    if not result:
+        raise HTTPException(500, "LLM returned empty result")
+
+    ensure_component_dir(site, component)
+    p = _bb_dir / "sites" / site / component / "component.json"
+    p.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "content": result}
 
 
 @app.get("/api/strategies")
@@ -158,6 +317,20 @@ async def api_component_strategies(site: str, component: str):
         for p in sorted(tests.iterdir())
         if p.is_dir() and any(p.glob("*.json"))
     ]
+
+
+@app.get("/api/sites/{site}/{component}/all-frameworks")
+async def api_all_frameworks(site: str, component: str):
+    """Return unique framework stems available across all strategy test dirs."""
+    tests = _bb_dir / "sites" / site / component / "tests"
+    if not tests.is_dir():
+        return []
+    stems: set[str] = set()
+    for strat_dir in tests.iterdir():
+        if strat_dir.is_dir():
+            for f in strat_dir.glob("*.json"):
+                stems.add(f.stem)
+    return [{"slug": s, "label": _pretty(s)} for s in sorted(stems)]
 
 
 @app.get("/api/sites/{site}/{component}/strategies/{strategy}/frameworks")
@@ -407,7 +580,7 @@ async def api_export_result(job_id: str):
 # ---------------------------------------------------------------------------
 
 _ENV_FILE = _root / ".env"
-_GB_VARS = ("GENBOUNTY_HOST", "GENBOUNTY_API_KEY")
+_GB_VARS = ("AIRTASYSTEMS_HOST", "AIRTASYSTEMS_API_KEY")
 
 
 def _read_env() -> dict[str, str]:
@@ -463,13 +636,13 @@ class CredentialsBody(BaseModel):
 
 @app.get("/api/credentials")
 async def api_get_credentials():
-    """Return saved Genbounty credentials — api_key is never sent, only has_api_key flag."""
+    """Return saved AIRTA Systems credentials — api_key is never sent, only has_api_key flag."""
     env = _read_env()
     return {
-        "host": env.get("GENBOUNTY_HOST", ""),
-        "has_api_key": bool(env.get("GENBOUNTY_API_KEY", "")),
+        "host": env.get("AIRTASYSTEMS_HOST", ""),
+        "has_api_key": bool(env.get("AIRTASYSTEMS_API_KEY", "")),
         # program_id is per-export but we surface a default if present in .env
-        "program_id": env.get("GENBOUNTY_PROGRAM_ID", ""),
+        "program_id": env.get("AIRTASYSTEMS_PROGRAM_ID", ""),
     }
 
 
@@ -485,25 +658,25 @@ async def api_env_defaults():
 
 @app.post("/api/credentials")
 async def api_save_credentials(body: CredentialsBody):
-    """Persist Genbounty credentials to .env. Empty string = leave existing value."""
+    """Persist AIRTA Systems credentials to .env. Empty string = leave existing value."""
     updates: dict[str, str | None] = {}
     if body.host:
-        updates["GENBOUNTY_HOST"] = body.host
+        updates["AIRTASYSTEMS_HOST"] = body.host
     if body.api_key:
-        updates["GENBOUNTY_API_KEY"] = body.api_key
+        updates["AIRTASYSTEMS_API_KEY"] = body.api_key
     if updates:
         _write_env(updates)
     env = _read_env()
     return {
         "ok": True,
-        "host": env.get("GENBOUNTY_HOST", ""),
-        "has_api_key": bool(env.get("GENBOUNTY_API_KEY", "")),
+        "host": env.get("AIRTASYSTEMS_HOST", ""),
+        "has_api_key": bool(env.get("AIRTASYSTEMS_API_KEY", "")),
     }
 
 
 @app.delete("/api/credentials")
 async def api_clear_credentials():
-    """Remove all Genbounty credentials from .env."""
+    """Remove all AIRTA Systems credentials from .env."""
     _write_env({k: None for k in _GB_VARS})
     return {"ok": True}
 
