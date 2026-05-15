@@ -12,49 +12,80 @@
 </head>
 <body>
 <div id="app">
-  <!-- Startup modal -->
+  <!-- Site/component management modal -->
   <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
-    <div class="modal">
+    <div class="modal modal-wide">
       <div class="modal-brand">
         <img src="/img/airtasystems-logo.png" alt="" class="modal-brand-logo" width="100">
         <div class="modal-logo"></div>
       </div>
-      <div class="modal-sub">AI Red Team Automation — select a site and component to get started</div>
+      <div class="modal-sub">Site & Component Management</div>
 
       <div class="modal-help">
         <p><strong>Tip:</strong> Set <code>TARGET</code> and <code>COMPONENT</code> in the project root <code>.env</code> file to skip this dialog and keep the same site/component every session (including login discovery and rubrics).</p>
         <p><strong>Site</strong> is the hostname you test (e.g. <code>chat.example.com</code> or <code>localhost:3000</code>). <strong>Component</strong> is a folder name for one UI surface (e.g. <code>chat</code>, <code>support-bot</code>) — configs, auth, and tests live under <code>sites/&lt;site&gt;/&lt;component&gt;/</code>.</p>
       </div>
 
-      <div class="modal-field">
-        <label>Site</label>
-        <select v-model="modalSite" @change="onModalSiteChange">
-          <option value="">Select site…</option>
-          <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
-          <option value="__new__">+ New site</option>
-        </select>
-        <div :class="['new-input', modalSite === '__new__' ? 'show' : '']">
-          <input v-model="modalNewSite" placeholder="domain (e.g. example.com)" @keyup.enter="confirmModal">
-        </div>
+      <div class="manage-grid">
+        <section class="manage-panel">
+          <h3>Sites</h3>
+          <div class="modal-field">
+            <label>Current Site</label>
+            <select v-model="modalSite" @change="onModalSiteChange">
+              <option value="">Select site...</option>
+              <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label>Create Site</label>
+            <div class="manage-inline">
+              <input v-model="modalNewSite" placeholder="domain (e.g. example.com)" @keyup.enter="modalCreateSite">
+              <button class="btn btn-primary btn-sm" @click="modalCreateSite">Create</button>
+            </div>
+          </div>
+          <div class="modal-field">
+            <label>Edit Site</label>
+            <div class="manage-inline">
+              <input v-model="modalRenameSite" :disabled="!modalSite" placeholder="rename selected site" @keyup.enter="modalRenameSiteAction">
+              <button class="btn btn-ghost btn-sm" @click="modalRenameSiteAction" :disabled="!modalSite || !modalRenameSite || modalRenameSite === modalSite">Rename</button>
+              <button class="btn btn-danger btn-sm" @click="modalDeleteSite" :disabled="!modalSite">Delete</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="manage-panel">
+          <h3>Components</h3>
+          <div class="modal-field">
+            <label>Current Component</label>
+            <select v-model="modalComponent" @change="onModalComponentChange" :disabled="!modalSite">
+              <option value="">Select component...</option>
+              <option v-for="c in modalComponents" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label>Create Component</label>
+            <div class="manage-inline">
+              <input v-model="modalNewComponent" :disabled="!modalSite" placeholder="component name (e.g. chat)" @keyup.enter="modalCreateComponent">
+              <button class="btn btn-primary btn-sm" @click="modalCreateComponent" :disabled="!modalSite">Create</button>
+            </div>
+          </div>
+          <div class="modal-field">
+            <label>Edit Component</label>
+            <div class="manage-inline">
+              <input v-model="modalRenameComponent" :disabled="!modalComponent" placeholder="rename selected component" @keyup.enter="modalRenameComponentAction">
+              <button class="btn btn-ghost btn-sm" @click="modalRenameComponentAction" :disabled="!modalComponent || !modalRenameComponent || modalRenameComponent === modalComponent">Rename</button>
+              <button class="btn btn-danger btn-sm" @click="modalDeleteComponent" :disabled="!modalComponent">Delete</button>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <div class="modal-field">
-        <label>Component</label>
-        <select v-model="modalComponent" :disabled="!modalSite">
-          <option value="">Select component…</option>
-          <option v-for="c in modalComponents" :key="c" :value="c">{{ c }}</option>
-          <option value="__new__">+ New component</option>
-        </select>
-        <div :class="['new-input', modalComponent === '__new__' ? 'show' : '']">
-          <input v-model="modalNewComponent" placeholder="component name (e.g. chat)" @keyup.enter="confirmModal">
-        </div>
-      </div>
-
-      <p v-if="modalError" style="color:var(--red);font-size:13px;margin-top:-8px;">{{ modalError }}</p>
+      <div v-if="modalMsg" class="modal-status">{{ modalMsg }}</div>
+      <p v-if="modalError" style="color:var(--red);font-size:13px;margin-top:12px;">{{ modalError }}</p>
 
       <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" @click="showModal = false">Skip</button>
-        <button type="button" class="btn btn-primary" @click="confirmModal">Continue</button>
+        <button type="button" class="btn btn-ghost" @click="showModal = false">Close</button>
+        <button type="button" class="btn btn-primary" @click="confirmModal" :disabled="!modalSite || !modalComponent">Use selected</button>
       </div>
     </div>
   </div>
@@ -85,17 +116,15 @@
       <h1>AIRTA - AI Risk Testing Agent</h1>
     </a>
     <span class="context">Powered by <a href="https://airtasystems.com" target="_blank">AIRTA Systems</a></span>
-    <button v-if="site && component" class="btn btn-ghost btn-sm" style="margin-left:4px;" @click="openModal" title="Switch site/component">⇄</button>
+    <button class="btn btn-ghost btn-sm" style="margin-left:4px;" @click="openModal" title="Manage sites and components">Manage</button>
     <div class="header-selects">
       <select v-model="site" @change="onSiteChange">
         <option value="">Select site...</option>
         <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
-        <option value="__new__">+ New site</option>
       </select>
       <select v-model="component" @change="onComponentChange" :disabled="!site" class="border-button">
         <option value="">Select component...</option>
         <option v-for="c in components" :key="c" :value="c">{{ c }}</option>
-        <option value="__new__">+ New component</option>
       </select>
     </div>
   </header>
@@ -326,6 +355,22 @@
           <div v-if="!hintDismissed['tests']" class="hint-banner">
             <div><strong>{{ HINTS.tests.title }}</strong><p>{{ HINTS.tests.text }}</p></div>
             <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('tests')">Got it</button>
+          </div>
+
+          <!-- Import zero-shot prompts -->
+          <div class="tm-import">
+            <div>
+              <strong>Import zero-shot prompts</strong>
+              <p>Upload a JSON array of prompt strings/objects, an object with <code>prompts</code>, or a full generated test suite.</p>
+            </div>
+            <div class="tm-import-controls">
+              <input type="file" accept="application/json,.json" @change="tmImportFileChanged">
+              <input v-model="tmImportName" placeholder="Save as filename">
+              <button class="btn btn-primary btn-sm" @click="tmImportZeroShot" :disabled="!tmImportFile || tmImporting">
+                {{ tmImporting ? 'Importing...' : 'Import tests' }}
+              </button>
+            </div>
+            <div v-if="tmImportMsg" class="tm-import-msg">{{ tmImportMsg }}</div>
           </div>
 
           <!-- File picker -->

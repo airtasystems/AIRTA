@@ -49,6 +49,10 @@ createApp({
     const tmEditingId = ref(null);  // prompt id being inline-edited
     const tmAddingMandate = ref('');// mandate slug for new-prompt form
     const tmNewPrompt = reactive({ id: '', description: '', prompt: '' });
+    const tmImportFile = ref(null);
+    const tmImportName = ref('');
+    const tmImporting = ref(false);
+    const tmImportMsg = ref('');
 
     async function tmLoadStrategies() {
       tmStrategies.value = [];
@@ -138,6 +142,56 @@ createApp({
     }
 
     function tmMarkDirty() { tmDirty.value = true; }
+
+    function tmImportFileChanged(event) {
+      const file = event.target.files?.[0] || null;
+      tmImportFile.value = file;
+      tmImportMsg.value = '';
+      if (file && !tmImportName.value) {
+        tmImportName.value = file.name.replace(/\.json$/i, '');
+      }
+    }
+
+    function tmReadImportFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            resolve(JSON.parse(reader.result));
+          } catch (e) {
+            reject(new Error('Invalid JSON: ' + e.message));
+          }
+        };
+        reader.onerror = () => reject(new Error('Could not read file'));
+        reader.readAsText(file);
+      });
+    }
+
+    async function tmImportZeroShot() {
+      if (!site.value || !component.value || !tmImportFile.value) return;
+      if (tmDirty.value && !confirm('Discard unsaved test edits and open the imported file?')) return;
+      tmImporting.value = true;
+      tmImportMsg.value = '';
+      try {
+        const data = await tmReadImportFile(tmImportFile.value);
+        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
+        const result = await api(`/api/sites/${s}/${c}/tests/import-zero-shot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: tmImportName.value || tmImportFile.value.name, data }),
+        });
+        await tmLoadStrategies();
+        tmStrategy.value = result.strategy;
+        await tmLoadFrameworks();
+        tmFramework.value = result.path;
+        await tmLoadFile();
+        tmImportMsg.value = `Imported ${result.framework} into Zero-shot`;
+      } catch (e) {
+        tmImportMsg.value = 'Import failed: ' + e.message;
+      } finally {
+        tmImporting.value = false;
+      }
+    }
 
     const gen = reactive({ strategy: 'zero_shot', framework: 'eu_ai_act' });
     const run = reactive({ strategy: '', framework: '', assess: false });
@@ -414,39 +468,168 @@ createApp({
     const modalComponents = ref([]);
     const modalNewSite = ref('');
     const modalNewComponent = ref('');
+    const modalRenameSite = ref('');
+    const modalRenameComponent = ref('');
     const modalError = ref('');
+    const modalMsg = ref('');
 
     async function onModalSiteChange() {
       modalComponent.value = '';
       modalComponents.value = [];
       modalNewSite.value = '';
       modalNewComponent.value = '';
-      if (modalSite.value && modalSite.value !== '__new__') {
+      modalRenameSite.value = modalSite.value || '';
+      modalRenameComponent.value = '';
+      if (modalSite.value) {
         modalComponents.value = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`);
+      }
+    }
+
+    function onModalComponentChange() {
+      modalRenameComponent.value = modalComponent.value || '';
+    }
+
+    async function modalCreateSite() {
+      modalError.value = '';
+      modalMsg.value = '';
+      const domain = modalNewSite.value.trim();
+      if (!domain) { modalError.value = 'Enter a domain.'; return; }
+      try {
+        const created = await api('/api/sites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain }),
+        });
+        await loadSites();
+        modalSite.value = created.domain;
+        modalRenameSite.value = created.domain;
+        modalNewSite.value = '';
+        modalComponent.value = '';
+        modalRenameComponent.value = '';
+        modalComponents.value = await api(`/api/sites/${encodeURIComponent(created.domain)}/components`);
+        modalMsg.value = 'Site created';
+      } catch (e) {
+        modalError.value = 'Create site failed: ' + e.message;
+      }
+    }
+
+    async function modalRenameSiteAction() {
+      modalError.value = '';
+      modalMsg.value = '';
+      const current = modalSite.value;
+      const next = modalRenameSite.value.trim();
+      if (!current || !next || current === next) return;
+      try {
+        const renamed = await api(`/api/sites/${encodeURIComponent(current)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain: next }),
+        });
+        if (site.value === current) site.value = renamed.domain;
+        await loadSites();
+        modalSite.value = renamed.domain;
+        modalRenameSite.value = renamed.domain;
+        modalComponents.value = await api(`/api/sites/${encodeURIComponent(renamed.domain)}/components`);
+        components.value = site.value === renamed.domain ? [...modalComponents.value] : components.value;
+        modalMsg.value = 'Site renamed';
+      } catch (e) {
+        modalError.value = 'Rename site failed: ' + e.message;
+      }
+    }
+
+    async function modalDeleteSite() {
+      modalError.value = '';
+      modalMsg.value = '';
+      if (!modalSite.value) return;
+      if (!confirm(`Delete site "${modalSite.value}" and all components?`)) return;
+      const deleting = modalSite.value;
+      try {
+        await api(`/api/sites/${encodeURIComponent(deleting)}`, { method: 'DELETE' });
+        if (site.value === deleting) {
+          site.value = '';
+          component.value = '';
+          components.value = [];
+        }
+        await loadSites();
+        modalSite.value = '';
+        modalRenameSite.value = '';
+        modalComponent.value = '';
+        modalRenameComponent.value = '';
+        modalComponents.value = [];
+        modalMsg.value = 'Site deleted';
+      } catch (e) {
+        modalError.value = 'Delete site failed: ' + e.message;
+      }
+    }
+
+    async function modalCreateComponent() {
+      modalError.value = '';
+      modalMsg.value = '';
+      if (!modalSite.value) { modalError.value = 'Select a site first.'; return; }
+      const name = modalNewComponent.value.trim();
+      if (!name) { modalError.value = 'Enter a component name.'; return; }
+      try {
+        const created = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        modalComponents.value = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`);
+        if (site.value === modalSite.value) components.value = [...modalComponents.value];
+        modalComponent.value = created.name;
+        modalRenameComponent.value = created.name;
+        modalNewComponent.value = '';
+        modalMsg.value = 'Component created';
+      } catch (e) {
+        modalError.value = 'Create component failed: ' + e.message;
+      }
+    }
+
+    async function modalRenameComponentAction() {
+      modalError.value = '';
+      modalMsg.value = '';
+      const current = modalComponent.value;
+      const next = modalRenameComponent.value.trim();
+      if (!modalSite.value || !current || !next || current === next) return;
+      try {
+        const renamed = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components/${encodeURIComponent(current)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: next }),
+        });
+        if (site.value === modalSite.value && component.value === current) component.value = renamed.name;
+        modalComponents.value = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`);
+        if (site.value === modalSite.value) components.value = [...modalComponents.value];
+        modalComponent.value = renamed.name;
+        modalRenameComponent.value = renamed.name;
+        modalMsg.value = 'Component renamed';
+      } catch (e) {
+        modalError.value = 'Rename component failed: ' + e.message;
+      }
+    }
+
+    async function modalDeleteComponent() {
+      modalError.value = '';
+      modalMsg.value = '';
+      if (!modalSite.value || !modalComponent.value) return;
+      if (!confirm(`Delete component "${modalComponent.value}"?`)) return;
+      const deleting = modalComponent.value;
+      try {
+        await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components/${encodeURIComponent(deleting)}`, { method: 'DELETE' });
+        if (site.value === modalSite.value && component.value === deleting) component.value = '';
+        modalComponents.value = await api(`/api/sites/${encodeURIComponent(modalSite.value)}/components`);
+        if (site.value === modalSite.value) components.value = [...modalComponents.value];
+        modalComponent.value = '';
+        modalRenameComponent.value = '';
+        modalMsg.value = 'Component deleted';
+      } catch (e) {
+        modalError.value = 'Delete component failed: ' + e.message;
       }
     }
 
     async function confirmModal() {
       modalError.value = '';
       let s = modalSite.value, c = modalComponent.value;
-      let siteWasNew = false, componentWasNew = false;
-      if (s === '__new__') {
-        siteWasNew = true;
-        s = modalNewSite.value.trim();
-        if (!s) { modalError.value = 'Enter a domain.'; return; }
-        const created = await api('/api/sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: s }) });
-        s = created.domain;
-        await loadSites();
-      }
-      if (c === '__new__') {
-        componentWasNew = true;
-        c = modalNewComponent.value.trim();
-        if (!c) { modalError.value = 'Enter a component name.'; return; }
-        const res = await api(`/api/sites/${encodeURIComponent(s)}/components`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: c })
-        });
-        c = res.name;
-      }
       if (!s) { modalError.value = 'Select or create a site.'; return; }
       if (!c) { modalError.value = 'Select or create a component.'; return; }
       site.value = s;
@@ -615,17 +798,10 @@ createApp({
     }
 
     async function onSiteChange() {
-      if (site.value === '__new__') {
-        const domain = prompt('Enter domain (e.g. example.com):');
-        if (!domain) { site.value = ''; return; }
-        const created = await api('/api/sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }) });
-        await loadSites();
-        site.value = created.domain;
-      }
       component.value = '';
       loginUrl.value = '';
       authConfigured.value = false;
-      if (site.value && site.value !== '__new__') {
+      if (site.value) {
         components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
         await loadAuthStatus();
       } else {
@@ -634,16 +810,7 @@ createApp({
     }
 
     async function loadContext() {
-      if (component.value === '__new__') {
-        const name = prompt('Component name:');
-        if (!name) { component.value = ''; return; }
-        const res = await api(`/api/sites/${encodeURIComponent(site.value)}/components`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
-        });
-        components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
-        component.value = res.name;
-      }
-      if (site.value && component.value && component.value !== '__new__') {
+      if (site.value && component.value) {
         const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
         runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
         const l = await api(`/api/sites/${s}/${c}/logs`);
@@ -991,12 +1158,15 @@ createApp({
 
     async function openModal() {
       modalError.value = '';
+      modalMsg.value = '';
       modalNewSite.value = '';
       modalNewComponent.value = '';
       if (site.value) {
         modalSite.value = site.value;
         modalComponents.value = components.value.length ? [...components.value] : await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
         modalComponent.value = component.value || '';
+        modalRenameSite.value = modalSite.value;
+        modalRenameComponent.value = modalComponent.value;
       } else {
         // Pre-fill from .env defaults if available
         try {
@@ -1005,14 +1175,21 @@ createApp({
             modalSite.value = defaults.target;
             modalComponents.value = await api(`/api/sites/${encodeURIComponent(defaults.target)}/components`);
             if (defaults.component) modalComponent.value = defaults.component;
+            else modalComponent.value = '';
+            modalRenameSite.value = modalSite.value;
+            modalRenameComponent.value = modalComponent.value;
           } else {
             modalSite.value = '';
             modalComponent.value = '';
+            modalRenameSite.value = '';
+            modalRenameComponent.value = '';
             modalComponents.value = [];
           }
         } catch {
           modalSite.value = '';
           modalComponent.value = '';
+          modalRenameSite.value = '';
+          modalRenameComponent.value = '';
           modalComponents.value = [];
         }
       }
@@ -1066,8 +1243,11 @@ createApp({
       showRunTroubleshoot,
       allStrategies, allFrameworks, runStrategies, runFrameworks, runAllFrameworks, logs,
       gen, run, risk, exp, cache,
-      showModal, modalSite, modalComponent, modalComponents, modalNewSite, modalNewComponent, modalError,
-      onModalSiteChange, confirmModal, openModal,
+      showModal, modalSite, modalComponent, modalComponents, modalNewSite, modalNewComponent,
+      modalRenameSite, modalRenameComponent, modalError, modalMsg,
+      onModalSiteChange, onModalComponentChange, confirmModal, openModal,
+      modalCreateSite, modalRenameSiteAction, modalDeleteSite,
+      modalCreateComponent, modalRenameComponentAction, modalDeleteComponent,
       HINTS, hintDismissed, dismissHint,
       runResults, runResultsLoading, expandedRunRows, toggleRunRow,
       compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES,
@@ -1088,8 +1268,9 @@ createApp({
       pretty, lineClass, activeOutput, runProgress, runProgressBarLabel, runProgressEtaText, riskTabProgressBarVisible, formatRunEta,
       onSiteChange, onComponentChange, loadContext, loadRunFrameworks, refreshRunTests,
       tmStrategy, tmStrategies, tmFramework, tmFrameworks, tmFile, tmDirty, tmSaving, tmSaveMsg,
-      tmEditingId, tmAddingMandate, tmNewPrompt,
+      tmEditingId, tmAddingMandate, tmNewPrompt, tmImportFile, tmImportName, tmImporting, tmImportMsg,
       tmLoadStrategies, tmLoadFrameworks, tmLoadFile, tmSave, tmDeletePrompt, tmStartAdd, tmConfirmAdd, tmMarkDirty,
+      tmImportFileChanged, tmImportZeroShot,
       startGenerate, startDiscover, startManualDiscover, sendEnter,
       startRunTests, startSampleRequest, startRiskAssess, startExport, startClearCache,
       expResult, expPreview, expCreds, expCredsEdit, expCredsSaving, expCredsMsg,

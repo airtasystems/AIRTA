@@ -3,7 +3,7 @@ Export pipeline_report.json results to AIRTA Systems via the bulk-import API.
 
 API: POST /api/v2/imported-reports/company
 Headers: Authorization: Bearer <key>, X-Program-Id: <id>
-Body: sanitized pipeline_report.json fields (must contain adversarial_results array).
+Body: pipeline_report.json fields accepted by the import endpoint.
 
 Required env vars (or supplied via CLI / GUI):
   AIRTASYSTEMS_HOST        — hostname (e.g. app.airtasystems.com or localhost:4000)
@@ -11,7 +11,7 @@ Required env vars (or supplied via CLI / GUI):
   AIRTASYSTEMS_PROGRAM_ID  — MongoDB ObjectId of the target program
 
 Optional env var:
-  AIRTASYSTEMS_DEFAULT_LEVEL — informational | low | medium | critical
+  AIRTASYSTEMS_DEFAULT_LEVEL — indeterminate | compliant | informational | low | medium | high | critical
 """
 import json
 import os
@@ -23,7 +23,14 @@ from pathlib import Path
 IMPORT_PATH = "/api/v2/imported-reports/company"
 # The API accepts up to 5 000 items; we stay well under to avoid timeouts.
 MAX_BATCH_SIZE = 2500
-TOP_LEVEL_FIELDS = {"timestamp", "framework", "adversarial_results"}
+TOP_LEVEL_FIELDS = {
+    "timestamp",
+    "framework",
+    "source_file",
+    "run_log_dir",
+    "compliance_log",
+    "adversarial_results",
+}
 RESULT_FIELDS = {
     "id",
     "mandate",
@@ -33,8 +40,20 @@ RESULT_FIELDS = {
     "judge_reasoning",
     "experts_summary",
     "description",
+    "expected_behavior",
     "ok",
+    "status",
     "error",
+    "response_html",
+}
+VALID_RISK_LEVELS = {
+    "indeterminate",
+    "compliant",
+    "informational",
+    "low",
+    "medium",
+    "high",
+    "critical",
 }
 
 
@@ -51,9 +70,12 @@ def _post_json(url: str, api_key: str, program_id: str, payload: dict) -> dict:
         url,
         data=body,
         headers={
+            "Accept": "application/json",
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
             "X-Program-Id": program_id,
+            # Avoid edge filters that reject Python's default urllib user agent.
+            "User-Agent": "AIRTA-Pipeline-Exporter/1.0",
         },
         method="POST",
     )
@@ -63,9 +85,11 @@ def _post_json(url: str, api_key: str, program_id: str, payload: dict) -> dict:
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", errors="replace")
         try:
-            return json.loads(body_text)
+            error_body = json.loads(body_text)
         except Exception:
             raise RuntimeError(f"HTTP {e.code}: {body_text}") from e
+        message = error_body.get("message") or error_body.get("error") or body_text
+        raise RuntimeError(f"HTTP {e.code}: {message}") from e
 
 
 def _normalize_timestamp(value: object) -> object:
@@ -76,24 +100,42 @@ def _normalize_timestamp(value: object) -> object:
     text = value.strip()
     for fmt in ("%Y-%m-%dT%H-%M-%S", "%Y-%m-%d_%H-%M-%S"):
         try:
-            return datetime.strptime(text, fmt).isoformat()
+            return datetime.strptime(text, fmt).isoformat(timespec="milliseconds") + "Z"
         except ValueError:
             pass
     return text
 
 
-def _sanitize_payload(data: dict, results: list[dict]) -> dict:
-    """
-    Keep only fields accepted by the bulk-import API.
+def _normalize_risk_level(value: object, default_level: str | None = None) -> object:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in VALID_RISK_LEVELS:
+            return normalized
+    if default_level:
+        normalized_default = default_level.strip().lower()
+        if normalized_default in VALID_RISK_LEVELS:
+            return normalized_default
+    return value
 
-    pipeline_report.json also contains local file paths, rollups, and rendered HTML
-    for the AIRTA UI; those are intentionally not sent to AIRTA Systems.
+
+def _sanitize_result(item: dict, default_level: str | None = None) -> dict:
+    result = {k: item[k] for k in RESULT_FIELDS if k in item}
+    if "risk_level" in result:
+        result["risk_level"] = _normalize_risk_level(result["risk_level"], default_level)
+    elif default_level:
+        result["risk_level"] = _normalize_risk_level(default_level)
+    return result
+
+
+def _sanitize_payload(data: dict, results: list[dict], default_level: str | None = None) -> dict:
+    """
+    Keep fields accepted by the imported-reports API and drop local rollups.
     """
     payload = {k: data[k] for k in TOP_LEVEL_FIELDS if k in data and k != "adversarial_results"}
     if "timestamp" in payload:
         payload["timestamp"] = _normalize_timestamp(payload["timestamp"])
     payload["adversarial_results"] = [
-        {k: item[k] for k in RESULT_FIELDS if k in item}
+        _sanitize_result(item, default_level)
         for item in results
     ]
     return payload
@@ -114,6 +156,9 @@ def _extract_summary(resp: dict, batch_size: int) -> dict[str, int]:
     summary = resp.get("summary")
     if not isinstance(summary, dict):
         summary = {}
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        data = {}
 
     failed = _coerce_int(summary.get("failed"))
     if failed is None:
@@ -135,6 +180,8 @@ def _extract_summary(resp: dict, batch_size: int) -> dict[str, int]:
         created = _coerce_int(resp.get("inserted"))
     if created is None:
         created = _coerce_int(resp.get("imported"))
+    if created is None:
+        created = _coerce_int(data.get("importedCount"))
     if created is None:
         created = max(0, total - failed)
 
@@ -175,13 +222,17 @@ def export_pipeline_report(
     responses: list[dict] = []
     for idx, batch in enumerate(batches, 1):
         print(f"[*] Sending batch {idx}/{len(batches)} ({len(batch)} item(s))...")
-        payload = _sanitize_payload(meta, batch)
+        payload = _sanitize_payload(meta, batch, default_level)
 
         try:
             resp = _post_json(url, api_key, program_id, payload)
         except Exception as e:
             print(f"[!] Batch {idx} failed: {e}")
-            responses.append({"batch": idx, "error": str(e)})
+            responses.append({
+                "batch": idx,
+                "error": str(e),
+                "summary": {"total": len(batch), "created": 0, "failed": len(batch)},
+            })
             continue
 
         success = resp.get("success", False)

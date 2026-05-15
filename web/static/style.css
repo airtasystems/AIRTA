@@ -311,9 +311,24 @@ select { cursor: pointer; }
 .modal-field .new-input.show { display: block; }
 .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
 .modal-actions .btn { flex: 1; justify-content: center; padding: 10px; font-size: 14px; }
+.manage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.manage-panel { background: rgba(21, 42, 56, 0.55); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.manage-panel h3 { font-size: 13px; color: var(--gold); margin-bottom: 14px; }
+.manage-inline { display: flex; gap: 8px; align-items: center; }
+.manage-inline input { min-width: 0; flex: 1; }
+.manage-inline .btn { flex-shrink: 0; }
+.modal-status { color: var(--green); font-size: 13px; margin-top: 12px; }
 
 /* Test Management tab */
 /* Stack like Generate Tests: one label+control per row, full width */
+.tm-import { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
+.tm-import strong { display: block; font-size: 13px; color: var(--gold); margin-bottom: 4px; }
+.tm-import p { color: var(--text-dim); font-size: 13px; line-height: 1.5; margin: 0; }
+.tm-import code { font-family: var(--mono); color: var(--accent); }
+.tm-import-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.tm-import-controls input[type="file"] { max-width: 280px; }
+.tm-import-controls input:not([type="file"]) { min-width: 180px; }
+.tm-import-msg { font-size: 12px; color: var(--text-dim); }
 .tm-picker { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 20px; }
 .tm-picker .form-row:last-child { margin-bottom: 0; }
 .tm-editor { display: flex; flex-direction: column; gap: 16px; }

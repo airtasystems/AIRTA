@@ -6,6 +6,7 @@ import ast as _ast
 import json
 import os
 import re as _re
+import socket
 import sys
 import urllib.request
 from pathlib import Path
@@ -80,11 +81,32 @@ async def api_list_sites():
 class CreateSiteBody(BaseModel):
     domain: str
 
+
+class RenameSiteBody(BaseModel):
+    domain: str
+
+
 @app.post("/api/sites")
 async def api_create_site(body: CreateSiteBody):
     domain = get_domain_from_url(body.domain) if "://" in body.domain else body.domain
     domain = domain.rstrip("/")
     ensure_site_dir(domain)
+    return {"ok": True, "domain": domain}
+
+
+@app.patch("/api/sites/{site}")
+async def api_rename_site(site: str, body: RenameSiteBody):
+    domain = get_domain_from_url(body.domain) if "://" in body.domain else body.domain
+    domain = domain.rstrip("/")
+    if not domain:
+        raise HTTPException(400, "Domain is required")
+    src = _bb_dir / "sites" / site
+    dst = _bb_dir / "sites" / domain
+    if not src.is_dir():
+        raise HTTPException(404, "Site not found")
+    if dst.exists() and dst != src:
+        raise HTTPException(409, "Site already exists")
+    src.rename(dst)
     return {"ok": True, "domain": domain}
 
 
@@ -116,11 +138,42 @@ async def api_list_components(site: str):
 class CreateComponentBody(BaseModel):
     name: str
 
+
+class RenameComponentBody(BaseModel):
+    name: str
+
+
 @app.post("/api/sites/{site}/components")
 async def api_create_component(site: str, body: CreateComponentBody):
     name = "".join(c if c.isalnum() or c in "-_" else "_" for c in body.name).strip("_") or "default"
     ensure_component_dir(site, name)
     return {"ok": True, "name": name}
+
+
+@app.patch("/api/sites/{site}/components/{component}")
+async def api_rename_component(site: str, component: str, body: RenameComponentBody):
+    name = "".join(c if c.isalnum() or c in "-_" else "_" for c in body.name).strip("_")
+    if not name:
+        raise HTTPException(400, "Component name is required")
+    src = get_component_path(site, component)
+    dst = get_component_path(site, name)
+    if not src.is_dir():
+        raise HTTPException(404, "Component not found")
+    if dst.exists() and dst != src:
+        raise HTTPException(409, "Component already exists")
+    src.rename(dst)
+    return {"ok": True, "name": name}
+
+
+@app.delete("/api/sites/{site}/components/{component}")
+async def api_delete_component(site: str, component: str):
+    import shutil
+
+    p = get_component_path(site, component)
+    if not p.is_dir():
+        raise HTTPException(404, "Component not found")
+    shutil.rmtree(p)
+    return {"ok": True}
 
 
 @app.get("/api/sites/{site}/{component}/config")
@@ -356,6 +409,73 @@ class TestFileBody(BaseModel):
     data: dict
 
 
+class ImportZeroShotTestsBody(BaseModel):
+    filename: str
+    data: dict | list
+
+
+def _slugify_test_filename(name: str) -> str:
+    stem = Path(name).stem
+    slug = _re.sub(r"[^A-Za-z0-9_-]+", "_", stem).strip("_").lower()
+    return slug or "imported_prompts"
+
+
+def _normalize_prompt(raw, idx: int) -> dict:
+    if isinstance(raw, str):
+        prompt = raw.strip()
+        description = "Imported zero-shot prompt"
+        prompt_id = f"imported-zs-{idx:03d}"
+    elif isinstance(raw, dict):
+        prompt = str(raw.get("prompt") or raw.get("text") or raw.get("content") or "").strip()
+        description = str(raw.get("description") or "Imported zero-shot prompt").strip()
+        prompt_id = str(raw.get("id") or f"imported-zs-{idx:03d}").strip()
+    else:
+        raise HTTPException(400, f"Prompt {idx} must be a string or object")
+    if not prompt:
+        raise HTTPException(400, f"Prompt {idx} is empty")
+    if not prompt_id:
+        prompt_id = f"imported-zs-{idx:03d}"
+    return {"id": prompt_id, "description": description, "prompt": prompt}
+
+
+def _normalize_zero_shot_suite(data, filename: str) -> dict:
+    if isinstance(data, dict) and isinstance(data.get("mandates"), list):
+        mandates = data["mandates"]
+        for mandate_idx, mandate in enumerate(mandates, start=1):
+            if not isinstance(mandate, dict) or not isinstance(mandate.get("prompts"), list):
+                raise HTTPException(400, f"Mandate {mandate_idx} must include a prompts list")
+            mandate["prompts"] = [
+                _normalize_prompt(prompt, prompt_idx)
+                for prompt_idx, prompt in enumerate(mandate["prompts"], start=1)
+            ]
+        return {
+            "framework": data.get("framework") or Path(filename).stem,
+            "description": data.get("description") or "Imported zero-shot prompts",
+            "mandates": mandates,
+        }
+
+    prompts = data.get("prompts") if isinstance(data, dict) else data
+    if not isinstance(prompts, list) or not prompts:
+        raise HTTPException(400, "JSON must be a prompt array, an object with prompts, or a full test suite")
+
+    framework = (data.get("framework") or Path(filename).stem) if isinstance(data, dict) else Path(filename).stem
+    description = (data.get("description") or "Imported zero-shot prompts") if isinstance(data, dict) else "Imported zero-shot prompts"
+    return {
+        "framework": framework,
+        "description": description,
+        "mandates": [
+            {
+                "mandate": data.get("mandate", "Imported zero-shot prompts") if isinstance(data, dict) else "Imported zero-shot prompts",
+                "focus": data.get("focus", "Imported") if isinstance(data, dict) else "Imported",
+                "prompts": [
+                    _normalize_prompt(prompt, idx)
+                    for idx, prompt in enumerate(prompts, start=1)
+                ],
+            }
+        ],
+    }
+
+
 @app.put("/api/sites/{site}/{component}/tests/{strategy}/{framework}")
 async def api_put_test_file(site: str, component: str, strategy: str, framework: str, body: TestFileBody):
     p = _bb_dir / "sites" / site / component / "tests" / strategy / f"{framework}.json"
@@ -363,6 +483,18 @@ async def api_put_test_file(site: str, component: str, strategy: str, framework:
         raise HTTPException(404, "Test file not found")
     p.write_text(json.dumps(body.data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return {"ok": True}
+
+
+@app.post("/api/sites/{site}/{component}/tests/import-zero-shot")
+async def api_import_zero_shot_tests(site: str, component: str, body: ImportZeroShotTestsBody):
+    ensure_component_dir(site, component)
+    filename = _slugify_test_filename(body.filename)
+    suite = _normalize_zero_shot_suite(body.data, body.filename)
+    tests_dir = _bb_dir / "sites" / site / component / "tests" / "zero-shot"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    p = tests_dir / f"{filename}.json"
+    p.write_text(json.dumps(suite, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "strategy": "zero-shot", "framework": filename, "path": str(p), "data": suite}
 
 
 @app.get("/api/sites/{site}/{component}/logs")
@@ -704,6 +836,25 @@ async def api_serve_log(path: str):
 # Startup
 # ---------------------------------------------------------------------------
 
+def _next_available_port(host: str, preferred_port: int) -> int:
+    port = preferred_port
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, port))
+            except OSError:
+                port += 1
+                continue
+        return port
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("web.app:app", host="0.0.0.0", port=8000, reload=True)
+
+    host = os.getenv("HOST", "0.0.0.0")
+    preferred_port = int(os.getenv("PORT", "8000"))
+    port = _next_available_port(host, preferred_port)
+    if port != preferred_port:
+        print(f"Port {preferred_port} is in use; starting on {port} instead.")
+    uvicorn.run("web.app:app", host=host, port=port, reload=True)
