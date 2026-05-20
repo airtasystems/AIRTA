@@ -111,6 +111,8 @@ def _run_generate(args) -> None:
     component = getattr(args, "component", "") or ""
     if site and component:
         site_args = ["--site", site, "--component", component]
+        env["AIRTA_SITE"] = site
+        env["AIRTA_COMPONENT"] = component
         # Per-site company.json + per-component component.json (same layout as web/jobs.py).
         if not company_rubric or not spec_rubric:
             _setup_browser_bot()
@@ -120,8 +122,12 @@ def _run_generate(args) -> None:
                 if not company_rubric:
                     p_co = get_site_company_rubric_path(site)
                     if p_co:
-                        env["COMPONENT_RUBRIC_JSON"] = str(p_co.resolve())
-                        env["COMPONENT_RUBRIC_CACHE_JSON"] = str(p_co.resolve())
+                        resolved = str(p_co.resolve())
+                        env["COMPANY_RUBRIC_JSON"] = resolved
+                        env["COMPONENT_RUBRIC_JSON"] = resolved
+                        env["COMPONENT_RUBRIC_CACHE_JSON"] = resolved
+                    else:
+                        print(f"[warn] No browser-bot/sites/{site}/company.json — check rubrics/company.json fallback")
                 if not spec_rubric:
                     p_sp = get_component_rubric_path(site, component)
                     if p_sp:
@@ -743,9 +749,21 @@ def _menu_clear_cache() -> None:
         _setup_paths()
         import risk_level_agent as rla
         rla.clear_gemini_cache(delete_on_server=delete_on_server)
+        local_removed = rla.clear_local_result_cache()
         cleared.append("risk-level-agent")
+        if local_removed:
+            print(f"  [+] Cleared {local_removed} local risk-assessment result cache file(s).")
     except Exception as exc:
         print(f"  [!] Risk-level-agent cache clear failed: {exc}")
+
+    try:
+        from pipeline.cleanup import clear_project_pycache
+
+        pycache_removed = clear_project_pycache(_root)
+        if pycache_removed:
+            print(f"  [+] Removed {pycache_removed} __pycache__ director{'y' if pycache_removed == 1 else 'ies'}.")
+    except Exception as exc:
+        print(f"  [!] __pycache__ cleanup failed: {exc}")
 
     if cleared:
         action = "Cleared in-process + deleted server-side" if delete_on_server else "Cleared in-process"

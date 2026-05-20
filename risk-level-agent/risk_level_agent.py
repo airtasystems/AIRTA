@@ -7,6 +7,7 @@ import logging
 import hashlib
 import time
 import threading
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, List, Dict, TypedDict, Optional
@@ -63,6 +64,49 @@ def _model_for_genai(model: str | None) -> str:
     """Gemini cache APIs expect a models/ resource name."""
     m = (model or "").strip()
     return m if m.startswith("models/") else f"models/{m}"
+
+
+def _text_from_genai_response(response: Any) -> str:
+    """Extract plain text from google-genai GenerateContentResponse (incl. cached calls)."""
+    text = getattr(response, "text", None)
+    if text is not None and str(text).strip():
+        return str(text).strip()
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        if candidates:
+            content = getattr(candidates[0], "content", None)
+            if content is not None:
+                parts = getattr(content, "parts", None) or []
+                bits = []
+                for part in parts:
+                    t = getattr(part, "text", None)
+                    if t is not None and str(t).strip():
+                        bits.append(str(t).strip())
+                if bits:
+                    return "\n".join(bits).strip()
+    except (IndexError, AttributeError, TypeError):
+        pass
+    return ""
+
+
+def _text_from_lc_content(content: Any) -> str:
+    """Normalize LangChain message content (str or list of text blocks) to a string."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        bits = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                t = block.get("text")
+                if t is not None and str(t).strip():
+                    bits.append(str(t).strip())
+            elif isinstance(block, str) and block.strip():
+                bits.append(block.strip())
+        if bits:
+            return "\n".join(bits).strip()
+    if content is not None:
+        return str(content).strip()
+    return ""
 
 # =========================
 # Retry for transient Gemini API errors (503 UNAVAILABLE, 429 rate limit)
@@ -150,6 +194,21 @@ def clear_gemini_cache(delete_on_server: bool = False) -> None:
                         logging.warning("Failed to delete cache %s: %s", key, e)
     for store in all_stores:
         store.clear()
+
+
+def clear_local_result_cache() -> int:
+    """Delete persisted risk-assessment result files (risk-level-agent/cache/*.json). Returns count removed."""
+    cache_dir = Path(_get_cache_dir())
+    if not cache_dir.is_dir():
+        return 0
+    removed = 0
+    for path in cache_dir.glob("*.json"):
+        try:
+            path.unlink()
+            removed += 1
+        except OSError as exc:
+            logging.warning("Failed to delete local cache file %s: %s", path, exc)
+    return removed
 
 
 # =========================
@@ -248,6 +307,16 @@ def _create_gemini_cache(
     Ensure there is an explicit Gemini context cache for the given system_prompt.
     Stores the cache name in cache_store[cache_key]. Returns the cache name (empty string on failure).
     """
+    try:
+        from pipeline.gemini_cache import gemini_cache_enabled
+    except ImportError:
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        from pipeline.gemini_cache import gemini_cache_enabled
+
+    if not gemini_cache_enabled():
+        return ""
+
     if cache_key in cache_store:
         return cache_store[cache_key]
 
@@ -369,7 +438,7 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
                     temperature=0.1,
                 ),
             )
-            text = (getattr(response, "text", None) or str(response)).strip()
+            text = _text_from_genai_response(response)
         else:
             # Fallback: no explicit cache for this framework, use LangChain client
             messages = [
@@ -377,7 +446,7 @@ def make_expert_node(expert_id: str, framework_name: str, framework_lens: str):
                 HumanMessage(content=user_query),
             ]
             ai_msg = _gemini_call_with_retry(llm.invoke, messages)
-            text = (ai_msg.content if isinstance(ai_msg.content, str) else str(ai_msg.content)).strip()
+            text = _text_from_lc_content(getattr(ai_msg, "content", ai_msg))
 
         # Parse JSON output with hardening (handles raw JSON or JSON inside ```json fences)
         parse_ok = True
@@ -582,7 +651,7 @@ def judge_node(state: GraphState) -> Dict:
                 temperature=0.1,
             ),
         )
-        raw_content = getattr(response, "text", None) or str(response)
+        raw_content = _text_from_genai_response(response)
         ai_msg = None
     else:
         messages = [
@@ -593,18 +662,7 @@ def judge_node(state: GraphState) -> Dict:
         raw_content = None
     # Normalise response text from either the cached Gemini path or the LangChain path.
     if raw_content is None and ai_msg is not None:
-        # LangChain path: content may be str or list of parts
-        lc_content = getattr(ai_msg, "content", ai_msg)
-        if isinstance(lc_content, str):
-            raw_content = lc_content
-        elif isinstance(lc_content, list):
-            raw_content = "".join(
-                str(block.get("text", "")) if isinstance(block, dict) and block.get("type") == "text"
-                else (block if isinstance(block, str) else "")
-                for block in lc_content
-            )
-        else:
-            raw_content = str(lc_content)
+        raw_content = _text_from_lc_content(getattr(ai_msg, "content", ai_msg))
     text = (raw_content or "").strip()
 
     # Parse JSON output with hardening: accept raw JSON, or JSON inside markdown code blocks

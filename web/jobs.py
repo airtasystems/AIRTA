@@ -15,6 +15,22 @@ from typing import Any
 _root = Path(__file__).resolve().parent.parent
 
 
+def _prepare_component_context(job: Job) -> None:
+    """Set AIRTA_SITE/COMPONENT and apply per-component browser settings overrides."""
+    if job.site:
+        os.environ["AIRTA_SITE"] = job.site
+    if job.component:
+        os.environ["AIRTA_COMPONENT"] = job.component
+    if not (job.site and job.component):
+        return
+    bb_dir = _root / "browser-bot"
+    if str(bb_dir) not in sys.path:
+        sys.path.insert(0, str(bb_dir))
+    from browser_bot.config import apply_component_settings
+
+    apply_component_settings(job.site, job.component)
+
+
 @dataclass
 class Job:
     id: str
@@ -217,6 +233,8 @@ async def start_job(job_type: str, site: str, component: str, params: dict | Non
         job._task = asyncio.create_task(_start_discover(job))
     elif job_type == "manual_discover":
         job._task = asyncio.create_task(_start_manual_discover(job))
+    elif job_type == "api_discover":
+        job._task = asyncio.create_task(_start_api_discover(job))
     elif job_type == "run_tests":
         job._task = asyncio.create_task(_start_run_tests(job))
     elif job_type == "sample_request":
@@ -250,22 +268,45 @@ async def _start_generate(job: Job):
         sys.path.insert(0, str(bb_dir))
     try:
         from browser_bot.sites import get_site_company_rubric_path, get_component_rubric_path
-        company_rubric = (
-            get_site_company_rubric_path(job.site) if job.site else None
-        ) or (_root / "rubrics" / "company.json" if (_root / "rubrics" / "company.json").exists() else None)
+        company_rubric = get_site_company_rubric_path(job.site) if job.site else None
         spec_rubric = (
             get_component_rubric_path(job.site, job.component) if (job.site and job.component) else None
-        ) or (_root / "rubrics" / "component.json" if (_root / "rubrics" / "component.json").exists() else None)
+        )
+        global_company = _root / "rubrics" / "company.json"
+        global_spec = _root / "rubrics" / "component.json"
+        if job.site and not company_rubric and global_company.is_file():
+            job.output.append(
+                f"[warn] No browser-bot/sites/{job.site}/company.json — falling back to rubrics/company.json"
+            )
+            company_rubric = global_company
+        elif not company_rubric and global_company.is_file():
+            company_rubric = global_company
+        if job.site and job.component and not spec_rubric and global_spec.is_file():
+            job.output.append(
+                f"[warn] No browser-bot/sites/{job.site}/{job.component}/component.json — "
+                "falling back to rubrics/component.json"
+            )
+            spec_rubric = global_spec
+        elif not spec_rubric and global_spec.is_file():
+            spec_rubric = global_spec
     except ImportError:
         company_rubric = _root / "rubrics" / "company.json" if (_root / "rubrics" / "company.json").exists() else None
         spec_rubric = _root / "rubrics" / "component.json" if (_root / "rubrics" / "component.json").exists() else None
 
     env = os.environ.copy()
+    if job.site:
+        env["AIRTA_SITE"] = job.site
+    if job.component:
+        env["AIRTA_COMPONENT"] = job.component
     if company_rubric:
-        env["COMPONENT_RUBRIC_JSON"] = str(company_rubric)
-        env["COMPONENT_RUBRIC_CACHE_JSON"] = str(company_rubric)
+        resolved = str(company_rubric.resolve() if hasattr(company_rubric, "resolve") else company_rubric)
+        env["COMPANY_RUBRIC_JSON"] = resolved
+        env["COMPONENT_RUBRIC_JSON"] = resolved
+        env["COMPONENT_RUBRIC_CACHE_JSON"] = resolved
     if spec_rubric:
-        env["COMPONENT_SPEC_RUBRIC_JSON"] = str(spec_rubric)
+        env["COMPONENT_SPEC_RUBRIC_JSON"] = str(
+            spec_rubric.resolve() if hasattr(spec_rubric, "resolve") else spec_rubric
+        )
 
     def _build_cmd(strat: str) -> list[str]:
         cmd = [sys.executable, str(generator_py), "--strategy", strat, "--framework", framework]
@@ -337,6 +378,22 @@ async def _start_discover(job: Job):
     await _run_subprocess_job(job, cmd)
 
 
+async def _start_api_discover(job: Job):
+    worker = _root / "web" / "api_discover_worker.py"
+    params = {
+        "api_url": job.params.get("api_url", ""),
+        "api_method": job.params.get("api_method", "POST"),
+        "api_headers": job.params.get("api_headers") or {},
+        "api_body": job.params.get("api_body"),
+        "api_response_path": job.params.get("api_response_path", "response"),
+        "probe_prompt": job.params.get("probe_prompt", "Hello from AIRTA"),
+    }
+    import json as _json
+
+    cmd = [sys.executable, "-u", str(worker), job.site, job.component, _json.dumps(params)]
+    await _run_subprocess_job(job, cmd)
+
+
 async def _start_manual_discover(job: Job):
     worker = _root / "web" / "manual_discover_worker.py"
     cmd = [sys.executable, "-u", str(worker), job.site, job.component]
@@ -352,6 +409,8 @@ async def _start_run_tests(job: Job):
         import importlib.util
         import json as _json
 
+        _prepare_component_context(job)
+
         bb_dir = _root / "browser-bot"
         if str(bb_dir) not in sys.path:
             sys.path.insert(0, str(bb_dir))
@@ -364,27 +423,15 @@ async def _start_run_tests(job: Job):
         suite_data = _json.loads(suite_path.read_text(encoding="utf-8"))
 
         from browser_bot.config import infer_ui_mode_from_suite_raw
-        from browser_bot.sites import get_submission_config, load_component_config
+        from browser_bot.sites import describe_submission_config_issue, get_submission_config, load_component_config
 
         mode = infer_ui_mode_from_suite_raw(suite_data) or "single"
 
         if not get_submission_config(job.site, job.component):
-            config = load_component_config(job.site, job.component)
-            sub = config.get("submission")
-            if not isinstance(sub, dict):
-                reason = "missing submission block"
-            else:
-                missing = []
-                if not sub.get("start_url"):
-                    missing.append("submission.start_url")
-                if not (sub.get("inputs") or sub.get("input_selector")):
-                    missing.append("submission.inputs")
-                if not sub.get("submit_selector"):
-                    missing.append("submission.submit_selector")
-                reason = "missing " + ", ".join(missing) if missing else "invalid submission block"
+            reason = describe_submission_config_issue(load_component_config(job.site, job.component))
             raise RuntimeError(
-                f"Cannot run UI test suite for {job.site}/{job.component}: {reason}. "
-                "Run Discovery or complete the component submission config before running generated tests."
+                f"Cannot run test suite for {job.site}/{job.component}: {reason}. "
+                "Run Discovery / Connect via API or complete the component submission config first."
             )
 
         bb_main_path = bb_dir / "main.py"
@@ -492,32 +539,34 @@ async def _start_sample_request(job: Job):
         import importlib.util
         import time
 
+        _prepare_component_context(job)
+
         bb_dir = _root / "browser-bot"
         if str(bb_dir) not in sys.path:
             sys.path.insert(0, str(bb_dir))
 
-        from browser_bot.sites import get_storage_state_path, get_submission_config, load_component_config
+        from browser_bot.sites import describe_submission_config_issue, get_storage_state_path, get_submission_config, load_component_config
+        from browser_bot.submit.api_helpers import do_api_request
         from browser_bot.submit.single import do_ui_submit_with_page
 
         sub = get_submission_config(job.site, job.component)
         if not sub:
-            config = load_component_config(job.site, job.component)
-            raw = config.get("submission")
-            if not isinstance(raw, dict):
-                reason = "missing submission block"
-            else:
-                missing = []
-                if not raw.get("start_url"):
-                    missing.append("submission.start_url")
-                if not (raw.get("inputs") or raw.get("input_selector")):
-                    missing.append("submission.inputs")
-                if not raw.get("submit_selector"):
-                    missing.append("submission.submit_selector")
-                reason = "missing " + ", ".join(missing) if missing else "invalid submission block"
+            reason = describe_submission_config_issue(load_component_config(job.site, job.component))
             raise RuntimeError(
                 f"Cannot send sample request for {job.site}/{job.component}: {reason}. "
-                "Run Discovery or complete the component submission config first."
+                "Run Discovery / Connect via API or complete the component submission config first."
             )
+
+        if sub.get("transport") == "api":
+            status, response_text, err = do_api_request(sub, prompt, site=job.site)
+            print("[sample] Prompt: " + prompt)
+            print("[sample] Transport: api")
+            print("[sample] Status: " + str(status))
+            print("[sample] Response:")
+            print(response_text or err or "(none)")
+            if err and not response_text:
+                raise RuntimeError(f"Sample API request failed: {err}")
+            return
 
         storage_path = get_storage_state_path(job.site)
         if not storage_path:
@@ -549,6 +598,8 @@ async def _start_sample_request(job: Job):
                             sub["submit_selector"],
                             prompt,
                             response_selector=sub.get("response_selector") or "",
+                            response_within_selector=sub.get("response_within_selector") or "",
+                            response_text_within_selector=sub.get("response_text_within_selector") or "",
                             submit_via=sub.get("submit_via", "click"),
                             response_wait_ms=int(sub.get("response_wait_ms", 5000) or 5000),
                             human_behavior=True,
@@ -605,6 +656,7 @@ async def _start_risk_assess(job: Job):
     def _do():
         if str(_root) not in sys.path:
             sys.path.insert(0, str(_root))
+        _prepare_component_context(job)
 
         import importlib.util
         rla_file = _root / "risk-level-agent" / "risk_level_agent.py"
@@ -743,9 +795,21 @@ async def _start_clear_cache(job: Job):
                     spec.loader.exec_module(mod)
             import risk_level_agent as rla
             rla.clear_gemini_cache(delete_on_server=delete_on_server)
+            local_removed = rla.clear_local_result_cache()
             cleared.append("risk-level-agent")
+            if local_removed:
+                print(f"[+] Cleared {local_removed} local risk-assessment result cache file(s).")
         except Exception as exc:
             print(f"[!] Risk-level-agent cache clear failed: {exc}")
+
+        try:
+            from pipeline.cleanup import clear_project_pycache
+
+            pycache_removed = clear_project_pycache(_root)
+            if pycache_removed:
+                print(f"[+] Removed {pycache_removed} __pycache__ director{'y' if pycache_removed == 1 else 'ies'}.")
+        except Exception as exc:
+            print(f"[!] __pycache__ cleanup failed: {exc}")
 
         if cleared:
             action = "Cleared in-process + deleted server-side" if delete_on_server else "Cleared in-process"

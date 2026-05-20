@@ -34,24 +34,25 @@ def _apply_site_component_rubric_env(project_root: Path, site: str, component: s
     """
     Point judge/adapter context at per-site company.json and per-component component.json
     (browser-bot/sites/<site>/company.json and .../<site>/<component>/component.json).
-    Uses setdefault so explicit COMPONENT_* / AIRTA_* env vars still win.
     """
     site = (site or "").strip()
     component = (component or "").strip()
     if site:
-        os.environ.setdefault("AIRTA_SITE", site)
+        os.environ["AIRTA_SITE"] = site
     if component:
-        os.environ.setdefault("AIRTA_COMPONENT", component)
+        os.environ["AIRTA_COMPONENT"] = component
     sites_root = project_root / "browser-bot" / "sites"
     if site:
         company_p = sites_root / site / "company.json"
         if company_p.is_file():
-            os.environ.setdefault("COMPONENT_RUBRIC_JSON", str(company_p.resolve()))
-            os.environ.setdefault("COMPONENT_RUBRIC_CACHE_JSON", str(company_p.resolve()))
+            resolved = str(company_p.resolve())
+            os.environ["COMPANY_RUBRIC_JSON"] = resolved
+            os.environ["COMPONENT_RUBRIC_JSON"] = resolved
+            os.environ["COMPONENT_RUBRIC_CACHE_JSON"] = resolved
     if site and component:
         spec_p = sites_root / site / component / "component.json"
         if spec_p.is_file():
-            os.environ.setdefault("COMPONENT_SPEC_RUBRIC_JSON", str(spec_p.resolve()))
+            os.environ["COMPONENT_SPEC_RUBRIC_JSON"] = str(spec_p.resolve())
 
 
 def main() -> None:

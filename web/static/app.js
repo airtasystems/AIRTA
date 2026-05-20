@@ -259,32 +259,226 @@ createApp({
         };
       } catch { /* ignore */ }
     });
-    const cache = reactive({ deleteOnServer: false });
+    const cache = reactive({ deleteOnServer: false, useGeminiCache: false, effectiveGeminiCache: false, componentOverride: null });
+    const cacheSettingsSaving = ref(false);
+    const cacheSettingsMsg = ref('');
+
+    async function loadCacheSettings() {
+      try {
+        let path = '/api/cache-settings';
+        if (site.value && component.value) {
+          const s = encodeURIComponent(site.value);
+          const c = encodeURIComponent(component.value);
+          path += `?site=${s}&component=${c}`;
+        }
+        const s = await api(path);
+        cache.useGeminiCache = !!s.gemini_use_cache;
+        cache.effectiveGeminiCache = !!s.effective_gemini_use_cache;
+        cache.componentOverride = s.component_override;
+      } catch { /* ignore */ }
+    }
+
+    async function saveCacheSettings() {
+      cacheSettingsSaving.value = true;
+      cacheSettingsMsg.value = '';
+      try {
+        const result = await api('/api/cache-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gemini_use_cache: cache.useGeminiCache }),
+        });
+        cache.useGeminiCache = !!result.gemini_use_cache;
+        cacheSettingsMsg.value = cache.useGeminiCache ? 'Gemini cache enabled' : 'Gemini cache disabled';
+      } catch (e) {
+        cacheSettingsMsg.value = 'Save failed: ' + e.message;
+      } finally {
+        cacheSettingsSaving.value = false;
+      }
+    }
 
     // Component config
+    const PROMPT_TEMPLATE_HINT = '{{prompt}}';
+    const PROMPT_BODY_PLACEHOLDER = '{"prompt": "' + PROMPT_TEMPLATE_HINT + '"}';
+
     const INPUT_TYPES = ['text', 'textarea', 'contenteditable', 'password', 'email', 'search', 'select', 'combobox', 'checkbox', 'radio'];
     const compCfg = reactive({
       login_url: '',
-      submission: { start_url: '', inputs: [], submit_selector: '', response_selector: '', submit_via: 'click', response_wait_ms: 5000 },
+      submission: {
+        transport: 'ui',
+        start_url: '', inputs: [], submit_selector: '', response_selector: '',
+        response_within_selector: '', response_text_within_selector: '',
+        submit_via: 'click', response_wait_ms: 5000,
+        api_url: '', api_method: 'POST', api_response_path: 'response',
+        api_body_json: '{\n  "prompt": "{{prompt}}"\n}',
+        api_headers_json: '{}',
+      },
     });
+    const settingsSchema = ref(null);
+    const compSettings = reactive({});
+    const compSettingsInherited = reactive({});
     const compCfgSaved = ref(false);
     const compCfgError = ref('');
     const compCfgEmpty = ref(false);
+
+    function settingMeta(key) {
+      return (settingsSchema.value?.meta || {})[key] || { type: 'string', label: key };
+    }
+
+    function settingLabel(key) {
+      return settingMeta(key).label || key;
+    }
+
+    function formatSettingGlobal(key) {
+      const val = settingsSchema.value?.globals?.[key];
+      if (key === 'BLOCKED_TYPES') {
+        const arr = Array.isArray(val) ? val : [];
+        return arr.length ? arr.join(', ') : '(none)';
+      }
+      if (typeof val === 'boolean') return val ? 'on' : 'off';
+      if (val === null || val === undefined || val === '') return '(empty)';
+      return String(val);
+    }
+
+    function cloneSettingGlobal(key) {
+      const val = settingsSchema.value?.globals?.[key];
+      if (key === 'BLOCKED_TYPES') return Array.isArray(val) ? [...val] : [];
+      if (typeof val === 'boolean') return val;
+      if (val === null || val === undefined) return '';
+      return val;
+    }
+
+    function initCompSettingsFromConfig(overrides) {
+      if (!settingsSchema.value) return;
+      for (const group of settingsSchema.value.groups || []) {
+        for (const key of group.keys || []) {
+          const inherited = !(key in (overrides || {}));
+          compSettingsInherited[key] = inherited;
+          if (inherited) {
+            compSettings[key] = cloneSettingGlobal(key);
+          } else {
+            const raw = overrides[key];
+            if (key === 'BLOCKED_TYPES') {
+              compSettings[key] = Array.isArray(raw) ? [...raw] : [];
+            } else if (typeof settingsSchema.value.globals?.[key] === 'boolean') {
+              compSettings[key] = !!raw;
+            } else {
+              compSettings[key] = raw;
+            }
+          }
+        }
+      }
+    }
+
+    function onCompSettingInheritChange(key) {
+      if (compSettingsInherited[key]) {
+        compSettings[key] = cloneSettingGlobal(key);
+      }
+    }
+
+    function toggleCompSettingSet(key, type) {
+      if (!Array.isArray(compSettings[key])) compSettings[key] = [];
+      const idx = compSettings[key].indexOf(type);
+      if (idx === -1) compSettings[key].push(type);
+      else compSettings[key].splice(idx, 1);
+    }
+
+    function buildCompSettingsPayload() {
+      const settings = {};
+      if (!settingsSchema.value) return settings;
+      for (const group of settingsSchema.value.groups || []) {
+        for (const key of group.keys || []) {
+          if (compSettingsInherited[key]) continue;
+          const val = compSettings[key];
+          if (key === 'BLOCKED_TYPES') {
+            settings[key] = Array.isArray(val) ? [...val].sort() : [];
+          } else {
+            settings[key] = val;
+          }
+        }
+      }
+      return settings;
+    }
+
+    async function loadSettingsSchema() {
+      try {
+        settingsSchema.value = await api('/api/settings-schema');
+      } catch { /* ignore */ }
+    }
+
+    function submissionConfigComplete(sub) {
+      if (!sub || typeof sub !== 'object') return false;
+      const transport = (sub.transport || 'ui').toLowerCase();
+      if (transport === 'api') {
+        return !!(sub.api_url || sub.start_url);
+      }
+      return !!(sub.start_url && sub.submit_selector && (sub.inputs?.length || sub.input_selector));
+    }
+
+    function applySubmissionToCompCfg(sub) {
+      const s = sub || {};
+      compCfg.submission.transport = s.transport === 'api' ? 'api' : 'ui';
+      compCfg.submission.start_url = s.start_url || '';
+      compCfg.submission.submit_selector = s.submit_selector || '';
+      compCfg.submission.response_selector = s.response_selector || '';
+      compCfg.submission.response_within_selector = s.response_within_selector || '';
+      compCfg.submission.response_text_within_selector = s.response_text_within_selector || '';
+      compCfg.submission.submit_via = s.submit_via || 'click';
+      compCfg.submission.response_wait_ms = s.response_wait_ms ?? 5000;
+      compCfg.submission.inputs = (s.inputs || []).map(inp => ({ ...inp }));
+      compCfg.submission.api_url = s.api_url || '';
+      compCfg.submission.api_method = s.api_method || 'POST';
+      compCfg.submission.api_response_path = s.api_response_path || 'response';
+      compCfg.submission.api_body_json = JSON.stringify(s.api_body || { prompt: '{{prompt}}' }, null, 2);
+      compCfg.submission.api_headers_json = JSON.stringify(s.api_headers || {}, null, 2);
+      if (compCfg.submission.transport === 'api') {
+        discoverTransport.value = 'api';
+        apiDiscover.url = compCfg.submission.api_url;
+        apiDiscover.method = compCfg.submission.api_method;
+        apiDiscover.responsePath = compCfg.submission.api_response_path;
+        apiDiscover.bodyJson = compCfg.submission.api_body_json;
+        apiDiscover.headersJson = compCfg.submission.api_headers_json;
+      }
+    }
+
+    function buildSubmissionPayload() {
+      const transport = compCfg.submission.transport || 'ui';
+      if (transport === 'api') {
+        let api_body = { prompt: '{{prompt}}' };
+        let api_headers = {};
+        try { api_body = JSON.parse(compCfg.submission.api_body_json || '{}'); } catch { /* keep default */ }
+        try { api_headers = JSON.parse(compCfg.submission.api_headers_json || '{}'); } catch { /* ignore */ }
+        return {
+          transport: 'api',
+          api_url: compCfg.submission.api_url,
+          api_method: compCfg.submission.api_method || 'POST',
+          api_headers,
+          api_body,
+          api_response_path: compCfg.submission.api_response_path || 'response',
+        };
+      }
+      return {
+        transport: 'ui',
+        start_url: compCfg.submission.start_url,
+        inputs: compCfg.submission.inputs.map(i => ({ ...i })),
+        submit_selector: compCfg.submission.submit_selector,
+        response_selector: compCfg.submission.response_selector,
+        response_within_selector: compCfg.submission.response_within_selector || '',
+        response_text_within_selector: compCfg.submission.response_text_within_selector || '',
+        submit_via: compCfg.submission.submit_via,
+        response_wait_ms: Number(compCfg.submission.response_wait_ms),
+      };
+    }
 
     async function loadCompCfg() {
       if (!site.value || !component.value) return;
       compCfgError.value = '';
       try {
+        await loadSettingsSchema();
         const data = await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`);
         compCfg.login_url = data.login_url || '';
-        const sub = data.submission || {};
-        compCfg.submission.start_url = sub.start_url || '';
-        compCfg.submission.submit_selector = sub.submit_selector || '';
-        compCfg.submission.response_selector = sub.response_selector || '';
-        compCfg.submission.submit_via = sub.submit_via || 'click';
-        compCfg.submission.response_wait_ms = sub.response_wait_ms ?? 5000;
-        compCfg.submission.inputs = (sub.inputs || []).map(inp => ({ ...inp }));
-        compCfgEmpty.value = !data.submission;
+        applySubmissionToCompCfg(data.submission);
+        compCfgEmpty.value = !submissionConfigComplete(data.submission);
+        initCompSettingsFromConfig(data.settings || {});
       } catch (e) { compCfgError.value = String(e); }
     }
 
@@ -292,17 +486,15 @@ createApp({
       compCfgError.value = '';
       compCfgSaved.value = false;
       try {
+        const existing = await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`);
         const payload = {
+          ...existing,
           login_url: compCfg.login_url,
-          submission: {
-            start_url: compCfg.submission.start_url,
-            inputs: compCfg.submission.inputs.map(i => ({ ...i })),
-            submit_selector: compCfg.submission.submit_selector,
-            response_selector: compCfg.submission.response_selector,
-            submit_via: compCfg.submission.submit_via,
-            response_wait_ms: Number(compCfg.submission.response_wait_ms),
-          },
+          submission: buildSubmissionPayload(),
         };
+        const settings = buildCompSettingsPayload();
+        if (Object.keys(settings).length) payload.settings = settings;
+        else delete payload.settings;
         await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ config: payload }),
@@ -345,9 +537,17 @@ createApp({
           const data = await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/component-rubric`);
           componentRubricText.value = JSON.stringify(data, null, 2);
         } catch { componentRubricText.value = '{}'; }
-        // Pre-fill generate URL with component start URL if available
-        if (!componentGenerateUrl.value) {
-          componentGenerateUrl.value = `https://${site.value}`;
+        try {
+          const cfg = await api(`/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`);
+          if (cfg?.submission?.start_url) {
+            componentGenerateUrl.value = cfg.submission.start_url;
+          } else if (!componentGenerateUrl.value) {
+            componentGenerateUrl.value = `https://${site.value}`;
+          }
+        } catch {
+          if (!componentGenerateUrl.value) {
+            componentGenerateUrl.value = `https://${site.value}`;
+          }
         }
       } else {
         componentRubricText.value = '';
@@ -647,8 +847,8 @@ createApp({
         text: 'Create test suites by choosing a strategy (e.g. Zero-shot) and framework (e.g. EU AI Act). Tests are generated via LLM and saved to the component\'s tests/ directory, ready to run.',
       },
       discover: {
-        title: 'Browser Discovery',
-        text: 'Records how browser-bot interacts with the target UI. A real browser opens and walks through each recording step. Recorded selectors are saved automatically to the component config.',
+        title: 'Connect Target',
+        text: 'Step 1: choose public access or save a login session. Step 2: optional company context. Step 3: connect via browser UI (Discovery) or API endpoint when the app exposes a chat API (e.g. POST /api/chat). Both paths write config.yaml for Run Tests.',
       },
       run: {
         title: 'Run Tests',
@@ -667,16 +867,16 @@ createApp({
         text: 'Sends a pipeline report to a AIRTA Systems instance via the bulk-import API. Select a report, enter your host, API key, and program ID. Each adversarial result is submitted as a finding.',
       },
       cache: {
-        title: 'Clear Gemini Cache',
-        text: 'Clears the local Gemini API response cache used by the test generator and risk-level agent. Use this to force fresh LLM responses. "Delete server-side" also removes cached content from Google\'s servers.',
+        title: 'Clear Cache',
+        text: 'Global default for Gemini context cache (stored in .env). Per-component overrides in config.yaml → settings take precedence for cache and browser config. Clear All Caches removes Gemini handles, on-disk risk assessment results ([cache hit]), and __pycache__ folders.',
       },
       component: {
         title: 'Component Config',
-        text: 'Configures how browser-bot interacts with this component\'s UI — the page URL, input selector, submit button, and where to read the AI response from. If no config exists yet, use Discovery to auto-record these selectors.',
+        text: 'Configures how browser-bot interacts with this component\'s UI — the page URL, input selector, submit button, and where to read the AI response from. Settings overrides mirror Browser Config and Cache Control; omitted keys inherit via site config, global config.py/.env, then config.defaults.yaml.',
       },
       config: {
         title: 'Global Config',
-        text: 'Controls browser-bot\'s global behaviour. Changes are written directly to config.py and take effect on the next test run. Key settings: Fetch Method selects the browser tier, Pool/Cluster enhancements add stealth, and Evasion controls retry behaviour on rate limits.',
+        text: 'Controls browser-bot\'s global behaviour. Changes are written directly to config.py and override config.defaults.yaml. Per-site or per-component overrides in config.yaml → settings take precedence on the next run.',
       },
     };
 
@@ -692,15 +892,22 @@ createApp({
     const runResultsLoading = ref(false);
     const expandedRunRows = ref({});
 
+    async function loadLogs() {
+      if (!site.value || !component.value) return;
+      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
+      const l = await api(`/api/sites/${s}/${c}/logs`);
+      logs.runs = l.runs;
+      logs.compliance = l.compliance;
+      logs.reports = l.reports;
+    }
+
     async function loadLatestRunLog() {
       if (!site.value || !component.value) return;
       runResultsLoading.value = true;
       try {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        const l = await api(`/api/sites/${s}/${c}/logs`);
-        logs.runs = l.runs; logs.compliance = l.compliance; logs.reports = l.reports;
-        if (!l.runs.length) return;
-        const data = await api(`/api/files?path=${encodeURIComponent(l.runs[0].path)}`);
+        await loadLogs();
+        if (!logs.runs.length) return;
+        const data = await api(`/api/files?path=${encodeURIComponent(logs.runs[0].path)}`);
         expandedRunRows.value = {};
         if (data.mode === 'multi') {
           runResults.value = (data.batches || []).flatMap(b =>
@@ -813,8 +1020,7 @@ createApp({
       if (site.value && component.value) {
         const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
         runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
-        const l = await api(`/api/sites/${s}/${c}/logs`);
-        logs.runs = l.runs; logs.compliance = l.compliance; logs.reports = l.reports;
+        await loadLogs();
         if (tab.value === 'settings' && settingsTab.value === 'component') loadCompCfg();
         if (tab.value === 'settings' && settingsTab.value === 'rubrics') loadRubrics();
         if (tab.value === 'tests') await tmLoadStrategies();
@@ -940,6 +1146,7 @@ createApp({
           }, 5000);
         }
         if (j.type === 'risk_assess') {
+          loadLogs();
           setTimeout(() => {
             if (activeJobs.risk_assess === j.id) runProgress.value = null;
           }, 5000);
@@ -1022,15 +1229,63 @@ createApp({
     });
     const loginUrl = ref('');
     const authConfigured = ref(false);
+    const authMode = ref(null);
+    const authLoginChoice = ref(null);
+    const authPublicSaving = ref(false);
 
     async function loadAuthStatus() {
-      if (!site.value) { authConfigured.value = false; loginUrl.value = ''; return; }
+      if (!site.value) {
+        authConfigured.value = false;
+        authMode.value = null;
+        authLoginChoice.value = null;
+        loginUrl.value = '';
+        return;
+      }
       const _isLocal = site.value.startsWith('localhost') || site.value.startsWith('127.') || site.value.startsWith('0.0.0.0');
       loginUrl.value = `${_isLocal ? 'http' : 'https'}://${site.value}`;
       try {
         const s = await api(`/api/sites/${encodeURIComponent(site.value)}/auth-status`);
         authConfigured.value = s.configured;
-      } catch { authConfigured.value = false; }
+        authMode.value = s.mode || null;
+        if (s.configured) {
+          authLoginChoice.value = s.mode === 'none' ? false : true;
+        } else {
+          authLoginChoice.value = null;
+        }
+      } catch {
+        authConfigured.value = false;
+        authMode.value = null;
+        authLoginChoice.value = null;
+      }
+    }
+
+    function chooseAuthRequired() {
+      authLoginChoice.value = true;
+    }
+
+    async function chooseAuthNotRequired() {
+      if (!site.value || authPublicSaving.value) return;
+      authPublicSaving.value = true;
+      try {
+        await api(`/api/sites/${encodeURIComponent(site.value)}/auth/public`, { method: 'POST' });
+        await loadAuthStatus();
+      } catch (e) {
+        alert('Could not save public auth: ' + e.message);
+      } finally {
+        authPublicSaving.value = false;
+      }
+    }
+
+    async function resetAuthSetup() {
+      if (!site.value) return;
+      try {
+        await api(`/api/sites/${encodeURIComponent(site.value)}/auth`, { method: 'DELETE' });
+      } catch {
+        /* no auth file yet — still show choice */
+      }
+      authConfigured.value = false;
+      authMode.value = null;
+      authLoginChoice.value = null;
     }
 
     async function checkSetupAndNavigate() {
@@ -1083,6 +1338,42 @@ createApp({
           body: JSON.stringify({ text: '\n' })
         });
       }
+    }
+
+    const discoverTransport = ref('browser');
+    const apiDiscover = reactive({
+      url: 'http://localhost:3000/api/chat',
+      method: 'POST',
+      responsePath: 'response',
+      bodyJson: '{\n  "prompt": "{{prompt}}"\n}',
+      headersJson: '{}',
+    });
+    const apiDiscoverJobId = ref(null);
+    const apiDiscoverRunning = computed(() => {
+      if (!apiDiscoverJobId.value) return false;
+      const j = jobs.value.find(x => x.id === apiDiscoverJobId.value);
+      return j && (j.status === 'running' || j.status === 'pending');
+    });
+
+    async function startApiDiscover() {
+      let api_body = null;
+      let api_headers = {};
+      try { api_body = JSON.parse(apiDiscover.bodyJson || '{}'); } catch (e) {
+        alert('Invalid request body JSON: ' + e.message);
+        return;
+      }
+      try { api_headers = JSON.parse(apiDiscover.headersJson || '{}'); } catch (e) {
+        alert('Invalid headers JSON: ' + e.message);
+        return;
+      }
+      const j = await startJob('api_discover', {
+        api_url: apiDiscover.url,
+        api_method: apiDiscover.method,
+        api_response_path: apiDiscover.responsePath,
+        api_body,
+        api_headers,
+      });
+      apiDiscoverJobId.value = j.id;
     }
 
     async function startDiscover() {
@@ -1225,8 +1516,11 @@ createApp({
         if (settingsTab.value === 'browser') loadConfig();
         else if (settingsTab.value === 'component') loadCompCfg();
         else if (settingsTab.value === 'rubrics') loadRubrics();
-      } else if (tab.value === 'export') loadExpCreds();
-      else if (tab.value === 'tests') tmLoadStrategies();
+        else if (settingsTab.value === 'cache') loadCacheSettings();
+      } else if (tab.value === 'export') {
+        loadExpCreds();
+        loadLogs();
+      } else if (tab.value === 'tests') tmLoadStrategies();
       else if (tab.value === 'discover') loadAuthStatus();
       else if (site.value && component.value) loadContext();
     });
@@ -1236,6 +1530,7 @@ createApp({
       if (settingsTab.value === 'browser') loadConfig();
       else if (settingsTab.value === 'component') loadCompCfg();
       else if (settingsTab.value === 'rubrics') loadRubrics();
+      else if (settingsTab.value === 'cache') loadCacheSettings();
     });
 
     return {
@@ -1250,7 +1545,9 @@ createApp({
       modalCreateComponent, modalRenameComponentAction, modalDeleteComponent,
       HINTS, hintDismissed, dismissHint,
       runResults, runResultsLoading, expandedRunRows, toggleRunRow,
-      compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES,
+      compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES, PROMPT_TEMPLATE_HINT, PROMPT_BODY_PLACEHOLDER,
+      settingsSchema, compSettings, compSettingsInherited,
+      settingMeta, settingLabel, formatSettingGlobal, onCompSettingInheritChange, toggleCompSettingSet,
       loadCompCfg, saveCompCfg, addInput, removeInput,
       companyRubricText, companySaved, companyError, companyGenerating, companyGenerateUrl,
       saveCompanyRubric, generateCompanyRubric,
@@ -1260,10 +1557,13 @@ createApp({
       cfg, cfgSaved, cfgError,
       BLOCKED_OPTIONS, COUNTRIES, CHANNELS, FETCH_METHODS,
       discoverJobId, discoverRunning, manualDiscoverJobId, manualDiscoverRunning,
+      discoverTransport, apiDiscover, apiDiscoverRunning,
+      startApiDiscover,
       companyDiscoverJobId, companyDiscoverRunning, companyDiscoverDone,
       sampleRequestRunning,
       startCompanyDiscover, sendCompanyDiscoverEnter,
-      loginJobId, loginRunning, loginUrl, authConfigured,
+      loginJobId, loginRunning, loginUrl, authConfigured, authMode, authLoginChoice, authPublicSaving,
+      chooseAuthRequired, chooseAuthNotRequired, resetAuthSetup,
       startLogin, sendLoginEnter,
       pretty, lineClass, activeOutput, runProgress, runProgressBarLabel, runProgressEtaText, riskTabProgressBarVisible, formatRunEta,
       onSiteChange, onComponentChange, loadContext, loadRunFrameworks, refreshRunTests,
@@ -1273,6 +1573,7 @@ createApp({
       tmImportFileChanged, tmImportZeroShot,
       startGenerate, startDiscover, startManualDiscover, sendEnter,
       startRunTests, startSampleRequest, startRiskAssess, startExport, startClearCache,
+      loadCacheSettings, saveCacheSettings, cacheSettingsSaving, cacheSettingsMsg,
       expResult, expPreview, expCreds, expCredsEdit, expCredsSaving, expCredsMsg,
       loadExpCreds, saveExpCreds, clearExpCreds,
       cancelJob, saveConfig, toggleBlocked,

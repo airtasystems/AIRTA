@@ -12,6 +12,11 @@ playwright-stealth
 python-dotenv
 pyyaml
 
+# Web UI
+fastapi
+uvicorn
+pydantic
+
 # Terminal output
 rich
 

@@ -44,6 +44,26 @@ def _strip_code_fences(s: str) -> str:
     return s.strip()
 
 
+def _text_from_lc_content(content: Any) -> str:
+    """Normalize LangChain message content (str or list of text blocks) to a string."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        bits = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                t = block.get("text")
+                if t is not None and str(t).strip():
+                    bits.append(str(t).strip())
+            elif isinstance(block, str) and block.strip():
+                bits.append(block.strip())
+        if bits:
+            return "\n".join(bits).strip()
+    if content is not None:
+        return str(content).strip()
+    return ""
+
+
 def _convert_one(text: str, llm: Any) -> str:
     from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -57,9 +77,7 @@ def _convert_one(text: str, llm: Any) -> str:
         ),
     ]
     out = llm.invoke(msg)
-    raw = getattr(out, "content", None) or str(out)
-    if not isinstance(raw, str):
-        raw = str(raw)
+    raw = _text_from_lc_content(getattr(out, "content", out))
     return _strip_code_fences(raw)
 
 

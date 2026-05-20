@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast as _ast
 import json
 import os
 import re as _re
@@ -25,7 +24,13 @@ if str(_bb_dir) not in sys.path:
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-from browser_bot.auth_state import auth_config_exists, load_auth_config
+from browser_bot.auth_state import (
+    auth_config_exists,
+    auth_mode_for_domain,
+    is_auth_configured,
+    save_public_auth,
+)
+from browser_bot.sites import ensure_site_dir, AUTH_FILE
 from browser_bot.sites import (
     ensure_component_dir,
     ensure_site_dir,
@@ -120,14 +125,26 @@ async def api_delete_site(site: str):
 @app.get("/api/sites/{site}/auth-status")
 async def api_auth_status(site: str):
     if not auth_config_exists(site):
-        return {"configured": False}
-    config = load_auth_config(site)
-    has_cookies = bool(config and config.get("cookies"))
-    has_storage = any(
-        o.get("localStorage") or o.get("sessionStorage")
-        for o in (config or {}).get("origins", [])
-    )
-    return {"configured": has_cookies or has_storage}
+        return {"configured": False, "mode": None}
+    return {
+        "configured": is_auth_configured(site),
+        "mode": auth_mode_for_domain(site),
+    }
+
+
+@app.post("/api/sites/{site}/auth/public")
+async def api_init_public_auth(site: str):
+    """Initialize auth.json for targets that do not require login."""
+    path = save_public_auth(site)
+    return {"ok": True, "mode": "none", "path": str(path)}
+
+
+@app.delete("/api/sites/{site}/auth")
+async def api_clear_auth(site: str):
+    """Reset auth so the user can choose login vs public access again."""
+    site_dir = ensure_site_dir(site)
+    (site_dir / AUTH_FILE).write_text("{}", encoding="utf-8")
+    return {"ok": True}
 
 
 @app.get("/api/sites/{site}/components")
@@ -532,40 +549,16 @@ async def api_component_logs(site: str, component: str):
 
 _CONFIG_PY = _bb_dir / "browser_bot" / "config.py"
 
-_EDITABLE_VARS = {
-    "FETCH_METHOD", "POOL_SIZE", "CONTEXT_COUNT", "PAGES_PER_CONTEXT",
-    "POOL_CLUSTER_HUMAN_LIKE", "POOL_CLUSTER_ALLOW_STYLES", "POOL_CLUSTER_USE_STEALTH",
-    "POOL_CLUSTER_USE_HUMAN_CHROME", "POOL_CLUSTER_USE_HUMAN_CONTEXT",
-    "EVASION_REQUEST_DELAY_S", "EVASION_RETRY_WAIT_S", "EVASION_MAX_RETRIES",
-    "HUMAN_COUNTRY", "HUMAN_ALLOW_STYLES", "HUMAN_READ_DELAY_MS",
-    "HUMAN_SCROLL_AFTER_LOAD", "HUMAN_USER_AGENT",
-    "HEADLESS", "BLOCKED_TYPES", "CHROMIUM_EXECUTABLE_PATH", "CHROME_CHANNEL",
-}
+from pipeline.component_settings import (  # noqa: E402
+    EDITABLE_BROWSER_VARS as _EDITABLE_VARS,
+    get_effective_settings_detail,
+    parse_browser_config_py,
+    settings_schema_payload,
+)
 
 
 def _parse_config() -> dict:
-    source = _CONFIG_PY.read_text(encoding="utf-8")
-    tree = _ast.parse(source)
-    result: dict = {}
-    for node in _ast.walk(tree):
-        # Plain assignment:  NAME = value
-        if isinstance(node, _ast.Assign):
-            for target in node.targets:
-                if isinstance(target, _ast.Name) and target.id in _EDITABLE_VARS:
-                    try:
-                        val = _ast.literal_eval(node.value)
-                        result[target.id] = sorted(val) if isinstance(val, (set, frozenset)) else val
-                    except Exception:
-                        pass
-        # Annotated assignment:  NAME: type = value
-        elif isinstance(node, _ast.AnnAssign):
-            if isinstance(node.target, _ast.Name) and node.target.id in _EDITABLE_VARS and node.value is not None:
-                try:
-                    val = _ast.literal_eval(node.value)
-                    result[node.target.id] = sorted(val) if isinstance(val, (set, frozenset)) else val
-                except Exception:
-                    pass
-    return result
+    return parse_browser_config_py()
 
 
 def _write_config_value(source: str, name: str, value) -> str:
@@ -590,6 +583,18 @@ def _write_config_value(source: str, name: str, value) -> str:
 @app.get("/api/config")
 async def api_get_config():
     return _parse_config()
+
+
+@app.get("/api/settings-schema")
+async def api_settings_schema():
+    """Schema + global defaults for component settings overrides."""
+    return settings_schema_payload()
+
+
+@app.get("/api/sites/{site}/{component}/effective-settings")
+async def api_effective_settings(site: str, component: str):
+    """Per-key global, override, and effective values for a component."""
+    return get_effective_settings_detail(site=site, component=component)
 
 
 class SaveConfigBody(BaseModel):
@@ -811,6 +816,38 @@ async def api_clear_credentials():
     """Remove all AIRTA Systems credentials from .env."""
     _write_env({k: None for k in _GB_VARS})
     return {"ok": True}
+
+
+class CacheSettingsBody(BaseModel):
+    gemini_use_cache: bool = False
+
+
+@app.get("/api/cache-settings")
+async def api_get_cache_settings(site: str = "", component: str = ""):
+    """Return global cache settings and effective value for optional site/component."""
+    from pipeline.component_settings import (
+        component_gemini_cache_override,
+        gemini_cache_enabled,
+        global_gemini_cache_enabled,
+    )
+
+    site = site.strip() or None
+    component = component.strip() or None
+    override = component_gemini_cache_override(site=site, component=component) if site and component else None
+    return {
+        "gemini_use_cache": global_gemini_cache_enabled(),
+        "effective_gemini_use_cache": gemini_cache_enabled(site=site, component=component),
+        "component_override": override,
+    }
+
+
+@app.post("/api/cache-settings")
+async def api_save_cache_settings(body: CacheSettingsBody):
+    """Persist GEMINI_USE_CACHE to .env (1 = on, 0 = off)."""
+    val = "1" if body.gemini_use_cache else "0"
+    _write_env({"GEMINI_USE_CACHE": val})
+    os.environ["GEMINI_USE_CACHE"] = val
+    return {"ok": True, "gemini_use_cache": body.gemini_use_cache}
 
 
 @app.get("/api/log")
