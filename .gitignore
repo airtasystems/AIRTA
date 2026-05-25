@@ -25,6 +25,9 @@ risk-level-agent/logs/
 # Pipeline reports
 reports/
 
+# Web UI temp files
+web/tmp/
+
 # component discovery
 # Per-site state (site_config/) and per-component state (localhost3000/<component>/)
 **/site_config/

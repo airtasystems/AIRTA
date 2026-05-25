@@ -26,11 +26,11 @@ Send the export-safe subset of `pipeline_report.json` as the request body. Local
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `adversarial_results` | array | Yes | Test result items (max 5,000) |
+| `compliance_results` | array | Yes | Test result items (max 5,000) |
 | `framework` | string | No | e.g. `"EU AI Act"` |
 | `timestamp` | string | No | ISO-format report timestamp |
 
-### Each `adversarial_results` item
+### Each `compliance_results` item
 
 | Field | Type | Description |
 |---|---|---|
@@ -134,7 +134,7 @@ Partial failures are reported in an `errors` array alongside successful inserts:
 | Status | `error` | Cause |
 |---|---|---|
 | `400` | `invalid_body` | Request body is not valid JSON |
-| `400` | `validation_error` | Missing/invalid `X-Program-Id` or empty `adversarial_results` |
+| `400` | `validation_error` | Missing/invalid `X-Program-Id` or empty `compliance_results` |
 | `401` | `invalid_api_key` | Key not found or inactive |
 | `403` | `ip_not_allowed` | Client IP not on key's allowlist |
 | `403` | `forbidden` | Key missing `write:bulk_import` scope, or program not owned by your company |

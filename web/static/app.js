@@ -19,6 +19,9 @@ createApp({
     const jobsOpen = ref(true);
     const jobs = ref([]);
     const showRunTroubleshoot = ref(false);
+    const showRunLoginModal = ref(false);
+    const showRunRateLimitModal = ref(false);
+    const runLoginUrl = ref('');
 
     const tabs = [
       { id: 'discover', label: 'Connect Target' },
@@ -48,11 +51,77 @@ createApp({
     const tmSaveMsg = ref('');
     const tmEditingId = ref(null);  // prompt id being inline-edited
     const tmAddingMandate = ref('');// mandate slug for new-prompt form
-    const tmNewPrompt = reactive({ id: '', description: '', prompt: '' });
+    const tmNewPrompt = reactive({ id: '', description: '', prompt: '', prompts: [] });
     const tmImportFile = ref(null);
     const tmImportName = ref('');
     const tmImporting = ref(false);
     const tmImportMsg = ref('');
+
+    const TM_MULTI_TURN_STRATEGIES = {
+      'multi-shot': 3,
+      'tree-of-thoughts': 4,
+      iterative: 4,
+      'prompt-chaining': 3,
+    };
+
+    function tmIsMultiTurnStrategy() {
+      return Object.prototype.hasOwnProperty.call(TM_MULTI_TURN_STRATEGIES, tmStrategy.value);
+    }
+
+    function tmDefaultTurnCount() {
+      return TM_MULTI_TURN_STRATEGIES[tmStrategy.value] || 3;
+    }
+
+    function tmEntryIsMultiTurn(entry) {
+      return Array.isArray(entry?.prompts) && entry.prompts.length > 0;
+    }
+
+    function tmPromptPreview(entry) {
+      if (tmEntryIsMultiTurn(entry)) {
+        const first = (entry.prompts[0] || '').trim();
+        const extra = entry.prompts.length - 1;
+        if (extra > 0) {
+          return `${first}\n\n(${extra} more turn${extra === 1 ? '' : 's'})`;
+        }
+        return first;
+      }
+      return entry?.prompt || '';
+    }
+
+    function tmTurnLabel(index, total) {
+      if (tmStrategy.value === 'tree-of-thoughts') {
+        return ['Setup', 'Propose', 'Evaluate', 'Select'][index] || `Turn ${index + 1}`;
+      }
+      if (tmStrategy.value === 'prompt-chaining') {
+        return `Step ${index + 1}`;
+      }
+      return `Turn ${index + 1}${total > 1 ? ` / ${total}` : ''}`;
+    }
+
+    function tmEnsurePromptTurns(entry) {
+      if (!Array.isArray(entry.prompts)) {
+        entry.prompts = Array.from({ length: tmDefaultTurnCount() }, () => '');
+      }
+      return entry.prompts;
+    }
+
+    function tmAddTurn(entry) {
+      tmEnsurePromptTurns(entry).push('');
+      tmMarkDirty();
+    }
+
+    function tmRemoveTurn(entry, turnIdx) {
+      if (!Array.isArray(entry.prompts) || entry.prompts.length <= 1) return;
+      entry.prompts.splice(turnIdx, 1);
+      tmMarkDirty();
+    }
+
+    function tmResetNewPrompt() {
+      tmNewPrompt.id = '';
+      tmNewPrompt.description = '';
+      tmNewPrompt.prompt = '';
+      tmNewPrompt.prompts = Array.from({ length: tmDefaultTurnCount() }, () => '');
+    }
 
     async function tmLoadStrategies() {
       tmStrategies.value = [];
@@ -128,15 +197,26 @@ createApp({
 
     function tmStartAdd(mandateSlug) {
       tmAddingMandate.value = mandateSlug;
-      tmNewPrompt.id = '';
-      tmNewPrompt.description = '';
-      tmNewPrompt.prompt = '';
+      tmResetNewPrompt();
     }
 
     function tmConfirmAdd(mandateIdx) {
-      const p = { id: tmNewPrompt.id.trim(), description: tmNewPrompt.description.trim(), prompt: tmNewPrompt.prompt.trim() };
-      if (!p.id || !p.prompt) return;
-      tmFile.value.mandates[mandateIdx].prompts.push(p);
+      const id = tmNewPrompt.id.trim();
+      const description = tmNewPrompt.description.trim();
+      if (!id) return;
+
+      let entry;
+      if (tmIsMultiTurnStrategy()) {
+        const prompts = (tmNewPrompt.prompts || []).map(t => String(t || '').trim());
+        if (!prompts.some(Boolean)) return;
+        entry = { id, description, prompts };
+      } else {
+        const prompt = tmNewPrompt.prompt.trim();
+        if (!prompt) return;
+        entry = { id, description, prompt };
+      }
+
+      tmFile.value.mandates[mandateIdx].prompts.push(entry);
       tmDirty.value = true;
       tmAddingMandate.value = '';
     }
@@ -253,7 +333,7 @@ createApp({
       try {
         const data = await api(`/api/log?path=${encodeURIComponent(path)}`);
         expPreview.value = {
-          count: (data.adversarial_results || []).length,
+          count: (data.compliance_results || []).length,
           framework: data.framework || '',
           timestamp: data.timestamp || '',
         };
@@ -864,7 +944,7 @@ createApp({
       },
       export: {
         title: 'Export to AIRTA Systems',
-        text: 'Sends a pipeline report to a AIRTA Systems instance via the bulk-import API. Select a report, enter your host, API key, and program ID. Each adversarial result is submitted as a finding.',
+        text: 'Sends a pipeline report to an AIRTA Systems instance via the bulk-import API. Select a report, enter your host, API key, and program ID. Each compliance test result is submitted as a finding.',
       },
       cache: {
         title: 'Clear Cache',
@@ -910,12 +990,16 @@ createApp({
         const data = await api(`/api/files?path=${encodeURIComponent(logs.runs[0].path)}`);
         expandedRunRows.value = {};
         if (data.mode === 'multi') {
-          runResults.value = (data.batches || []).flatMap(b =>
-            (b.turns || []).map((t, ti) => ({
-              label: `Batch ${b.batch_index + 1} / Turn ${ti + 1}`,
-              input: t.input, response: t.response,
-            }))
-          );
+          runResults.value = (data.batches || []).map(b => {
+            const turns = b.turns || [];
+            const last = turns[turns.length - 1] || {};
+            return {
+              label: `#${b.batch_index + 1}${turns.length > 1 ? ` (${turns.length}-turn, final)` : ''}`,
+              input: last.input || '',
+              response: last.response,
+              turns,
+            };
+          });
         } else {
           runResults.value = (data.entries || []).map((e, i) => ({
             label: `#${i + 1}`, input: e.input, response: e.response,
@@ -932,6 +1016,46 @@ createApp({
     const activeJobs = reactive({});
     const sseConnections = {};
     const runProgress = ref(null);
+    const runPreviewSlots = ref([{ slot: 0, url: '' }]);
+    const runPreviewLightbox = ref(null);
+    const runBlockedInfo = ref(null);
+    const runRateLimitBackoff = ref(120);
+    const rateLimitCountdown = ref(0);
+    const rateLimitWaiting = ref(false);
+    let rateLimitCountdownTimer = null;
+
+    function initRunPreviewSlots(count) {
+      const n = Math.max(1, Number(count) || 1);
+      runPreviewSlots.value = Array.from({ length: n }, (_, slot) => ({ slot, url: '' }));
+    }
+
+    function setRunPreviewSlot(jobId, slot) {
+      const idx = Number(slot) || 0;
+      const url = `${API}/api/jobs/${jobId}/preview?slot=${idx}&t=${Date.now()}`;
+      const slots = runPreviewSlots.value.slice();
+      while (slots.length <= idx) {
+        slots.push({ slot: slots.length, url: '' });
+      }
+      slots[idx] = { slot: idx, url };
+      runPreviewSlots.value = slots;
+    }
+
+    function clearRunPreview() {
+      runPreviewSlots.value = [{ slot: 0, url: '' }];
+      runPreviewLightbox.value = null;
+    }
+
+    function openRunPreviewLightbox(slotEntry) {
+      if (!slotEntry?.url) return;
+      const label = runPreviewSlots.value.length > 1
+        ? `Browser ${slotEntry.slot + 1}`
+        : 'Live browser preview';
+      runPreviewLightbox.value = { url: slotEntry.url, label };
+    }
+
+    function closeRunPreviewLightbox() {
+      runPreviewLightbox.value = null;
+    }
 
     function formatRunEta(sec) {
       if (sec == null || sec === '' || Number.isNaN(Number(sec))) return '—';
@@ -956,6 +1080,8 @@ createApp({
       }
       if (p.type === 'run_start') return 'Starting tests…';
       if (p.type === 'run_done') return 'Tests complete';
+      if (p.type === 'blocked') return p.message || 'Run blocked';
+      if (p.type === 'rate_limit_wait') return p.message || 'Rate limited — waiting…';
       return `${p.mode === 'multi' ? 'Multi-turn' : 'Single'} · ${p.current ?? 0} / ${p.total ?? 0} prompts`;
     });
 
@@ -1095,37 +1221,68 @@ createApp({
             const isRunJob = j.type === 'run_tests' && activeJobs.run_tests === j.id;
             const isRiskJob = j.type === 'risk_assess' && activeJobs.risk_assess === j.id;
             if (isRunJob || isRiskJob) {
-              let pct = 0;
-              let phase = p.phase || 'submit';
-              if (p.type === 'suite') {
-                const total = p.total || 0;
-                const cur = p.current || 0;
-                pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
-                phase = 'suite';
-              } else if (p.type === 'run_start') {
-                pct = 0;
-                phase = 'submit';
-              } else if (p.type === 'progress' && p.mode) {
-                const total = p.total || 0;
-                const cur = p.current || 0;
-                pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
-                phase = 'submit';
-              } else if (p.type === 'run_done') {
-                pct = 100;
-                phase = 'submit';
-              } else if (p.type === 'risk_start') {
-                pct = 0;
-                phase = 'risk';
-              } else if (p.type === 'risk_progress') {
-                const total = p.total || 0;
-                const cur = p.current || 0;
-                pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
-                phase = 'risk';
-              } else if (p.type === 'risk_done') {
-                pct = 100;
-                phase = 'risk';
+              if (p.type === 'screenshot') {
+                if (isRunJob) setRunPreviewSlot(jobId, p.slot ?? 0);
+              } else if (p.type === 'preview_layout') {
+                if (isRunJob) initRunPreviewSlots(p.slots ?? 1);
+              } else if (p.type === 'rate_limit_wait') {
+                if (isRunJob) {
+                  runProgress.value = {
+                    ...p,
+                    pct: 0,
+                    phase: 'rate_limit_wait',
+                  };
+                }
+              } else {
+                let pct = 0;
+                let phase = p.phase || 'submit';
+                if (p.type === 'suite') {
+                  const total = p.total || 0;
+                  const cur = p.current || 0;
+                  pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
+                  phase = 'suite';
+                } else if (p.type === 'run_start') {
+                  pct = 0;
+                  phase = 'submit';
+                } else if (p.type === 'progress' && p.mode) {
+                  const total = p.total || 0;
+                  const cur = p.current || 0;
+                  pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
+                  phase = 'submit';
+                } else if (p.type === 'run_done') {
+                  pct = 100;
+                  phase = 'submit';
+                } else if (p.type === 'blocked') {
+                  pct = 0;
+                  phase = 'blocked';
+                  if (isRunJob) {
+                    runBlockedInfo.value = p;
+                    if (p.action === 'start_login' || p.action === 'prompt_login' || p.kind === 'login_required') {
+                      pendingRunAfterLogin.value = true;
+                      runLoginUrl.value = p.login_url || loginUrl.value || '';
+                      tab.value = 'run';
+                      showRunLoginModal.value = true;
+                    } else if (p.action === 'prompt_rate_limit' || p.kind === 'rate_limited') {
+                      pendingRunAfterRateLimit.value = true;
+                      runRateLimitBackoff.value = Number(p.backoff_sec) || 120;
+                      tab.value = 'run';
+                      showRunRateLimitModal.value = true;
+                    }
+                  }
+                } else if (p.type === 'risk_start') {
+                  pct = 0;
+                  phase = 'risk';
+                } else if (p.type === 'risk_progress') {
+                  const total = p.total || 0;
+                  const cur = p.current || 0;
+                  pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
+                  phase = 'risk';
+                } else if (p.type === 'risk_done') {
+                  pct = 100;
+                  phase = 'risk';
+                }
+                runProgress.value = { ...p, pct, phase };
               }
-              runProgress.value = { ...p, pct, phase };
             }
           } catch { /* ignore */ }
         }
@@ -1186,8 +1343,21 @@ createApp({
     }
 
     async function cancelJob(id) {
-      await api(`/api/jobs/${id}`, { method: 'DELETE' });
-      refreshJobs();
+      const j = jobs.value.find(x => x.id === id);
+      if (!j || j.status !== 'running') return;
+      j.status = 'cancelled';
+      try {
+        await api(`/api/jobs/${id}`, { method: 'DELETE' });
+      } catch {
+        j.status = 'running';
+        return;
+      }
+      if (activeJobs[j.type] === id) {
+        activeJobs[j.type] = null;
+        if (j.type === 'run_tests' || j.type === 'risk_assess') {
+          runProgress.value = null;
+        }
+      }
     }
 
     const discoverJobId = ref(null);
@@ -1222,12 +1392,16 @@ createApp({
     });
 
     const loginJobId = ref(null);
+    const pendingRunAfterLogin = ref(false);
+    const pendingRunAfterRateLimit = ref(false);
     const loginRunning = computed(() => {
       if (!loginJobId.value) return false;
       const j = jobs.value.find(x => x.id === loginJobId.value);
       return j && j.status === 'running';
     });
     const loginUrl = ref('');
+    const authSaving = ref(false);
+    const authSaveError = ref('');
     const authConfigured = ref(false);
     const authMode = ref(null);
     const authLoginChoice = ref(null);
@@ -1304,13 +1478,103 @@ createApp({
       await checkSetupAndNavigate();
     }
 
-    async function startLogin() {
-      const j = await startJob('login', { url: loginUrl.value });
+    async function prepareAuthForLoginCapture() {
+      if (authMode.value === 'none') {
+        try {
+          await api(`/api/sites/${encodeURIComponent(site.value)}/auth`, { method: 'DELETE' });
+        } catch { /* ignore */ }
+        authConfigured.value = false;
+        authMode.value = null;
+      }
+      authLoginChoice.value = true;
+    }
+
+    async function confirmRunLogin() {
+      if (!site.value || loginRunning.value) return;
+      const url = runLoginUrl.value || runBlockedInfo.value?.login_url || loginUrl.value;
+      if (!url) return;
+      loginUrl.value = url;
+      runLoginUrl.value = url;
+      pendingRunAfterLogin.value = true;
+      authSaveError.value = '';
+      await prepareAuthForLoginCapture();
+      await startLogin(url);
+    }
+
+    function dismissRunLoginModal() {
+      showRunLoginModal.value = false;
+    }
+
+    function onRunTroubleshoot() {
+      if (runBlockedInfo.value?.kind === 'login_required' || runBlockedInfo.value?.action === 'prompt_login' || runBlockedInfo.value?.action === 'start_login') {
+        showRunLoginModal.value = true;
+        return;
+      }
+      if (runBlockedInfo.value?.kind === 'rate_limited' || runBlockedInfo.value?.action === 'prompt_rate_limit') {
+        showRunRateLimitModal.value = true;
+        return;
+      }
+      showRunTroubleshoot.value = true;
+    }
+
+    function formatRateLimitWait(sec) {
+      const n = Math.max(0, Math.round(Number(sec) || 0));
+      if (n < 60) return `${n}s`;
+      const m = Math.floor(n / 60);
+      const s = n % 60;
+      return s ? `${m}m ${s}s` : `${m}m`;
+    }
+
+    function clearRateLimitCountdown() {
+      if (rateLimitCountdownTimer) {
+        clearInterval(rateLimitCountdownTimer);
+        rateLimitCountdownTimer = null;
+      }
+      rateLimitCountdown.value = 0;
+      rateLimitWaiting.value = false;
+    }
+
+    function dismissRunRateLimitModal() {
+      clearRateLimitCountdown();
+      showRunRateLimitModal.value = false;
+    }
+
+    async function retryRunAfterRateLimit(withWait) {
+      if (rateLimitWaiting.value) return;
+      clearRateLimitCountdown();
+      const waitSec = withWait ? Math.max(0, Math.round(Number(runRateLimitBackoff.value) || 120)) : 0;
+      if (waitSec > 0) {
+        rateLimitWaiting.value = true;
+        rateLimitCountdown.value = waitSec;
+        await new Promise(resolve => {
+          rateLimitCountdownTimer = setInterval(() => {
+            rateLimitCountdown.value = Math.max(0, rateLimitCountdown.value - 1);
+            if (rateLimitCountdown.value <= 0) {
+              clearRateLimitCountdown();
+              resolve();
+            }
+          }, 1000);
+        });
+      }
+      pendingRunAfterRateLimit.value = false;
+      runBlockedInfo.value = null;
+      showRunRateLimitModal.value = false;
+      await startRunTests();
+    }
+
+    async function startLogin(urlOverride) {
+      const url = (typeof urlOverride === 'string' && urlOverride) || loginUrl.value;
+      if (!url) return;
+      loginUrl.value = url;
+      const j = await startJob('login', { url });
       loginJobId.value = j.id;
     }
 
-    async function sendLoginEnter() {
-      if (loginJobId.value) {
+    async function saveAuth() {
+      if (!loginJobId.value || authSaving.value) return;
+      authSaving.value = true;
+      authSaveError.value = '';
+      try {
         await api(`/api/jobs/${loginJobId.value}/stdin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1318,7 +1582,26 @@ createApp({
         });
         await new Promise(r => setTimeout(r, 1200));
         await loadAuthStatus();
+        if (authMode.value !== 'session') {
+          authSaveError.value = 'Auth was not saved. Finish sign-in in the browser, then try again.';
+          return;
+        }
+        authSaveError.value = '';
+        if (pendingRunAfterLogin.value) {
+          pendingRunAfterLogin.value = false;
+          runBlockedInfo.value = null;
+          showRunLoginModal.value = false;
+          await startRunTests();
+        }
+      } catch (e) {
+        authSaveError.value = 'Could not save auth: ' + e.message;
+      } finally {
+        authSaving.value = false;
       }
+    }
+
+    async function sendLoginEnter() {
+      await saveAuth();
     }
 
     async function startGenerate() {
@@ -1398,6 +1681,15 @@ createApp({
 
     async function startRunTests() {
       runProgress.value = null;
+      clearRunPreview();
+      runBlockedInfo.value = null;
+      showRunLoginModal.value = false;
+      showRunRateLimitModal.value = false;
+      pendingRunAfterLogin.value = false;
+      pendingRunAfterRateLimit.value = false;
+      runLoginUrl.value = '';
+      authSaveError.value = '';
+      clearRateLimitCountdown();
       if (run.strategy === '__all__') {
         await startJob('run_tests', { suite: '__all__', framework: run.framework, assess: run.assess });
       } else {
@@ -1535,7 +1827,9 @@ createApp({
 
     return {
       site, component, sites, components, tab, settingsTab, tabs, jobsOpen, jobs, activeJobs,
-      showRunTroubleshoot,
+      showRunTroubleshoot, showRunLoginModal, showRunRateLimitModal, runLoginUrl,
+      runRateLimitBackoff, rateLimitCountdown, rateLimitWaiting, pendingRunAfterRateLimit,
+      formatRateLimitWait, dismissRunRateLimitModal, retryRunAfterRateLimit,
       allStrategies, allFrameworks, runStrategies, runFrameworks, runAllFrameworks, logs,
       gen, run, risk, exp, cache,
       showModal, modalSite, modalComponent, modalComponents, modalNewSite, modalNewComponent,
@@ -1563,12 +1857,17 @@ createApp({
       sampleRequestRunning,
       startCompanyDiscover, sendCompanyDiscoverEnter,
       loginJobId, loginRunning, loginUrl, authConfigured, authMode, authLoginChoice, authPublicSaving,
+      authSaving, authSaveError, pendingRunAfterLogin,
       chooseAuthRequired, chooseAuthNotRequired, resetAuthSetup,
-      startLogin, sendLoginEnter,
+      startLogin, saveAuth, sendLoginEnter, confirmRunLogin, dismissRunLoginModal, onRunTroubleshoot,
       pretty, lineClass, activeOutput, runProgress, runProgressBarLabel, runProgressEtaText, riskTabProgressBarVisible, formatRunEta,
+      runPreviewSlots, initRunPreviewSlots, setRunPreviewSlot, clearRunPreview,
+      runPreviewLightbox, openRunPreviewLightbox, closeRunPreviewLightbox,
+      runBlockedInfo,
       onSiteChange, onComponentChange, loadContext, loadRunFrameworks, refreshRunTests,
       tmStrategy, tmStrategies, tmFramework, tmFrameworks, tmFile, tmDirty, tmSaving, tmSaveMsg,
       tmEditingId, tmAddingMandate, tmNewPrompt, tmImportFile, tmImportName, tmImporting, tmImportMsg,
+      tmIsMultiTurnStrategy, tmEntryIsMultiTurn, tmPromptPreview, tmTurnLabel, tmEnsurePromptTurns, tmAddTurn, tmRemoveTurn,
       tmLoadStrategies, tmLoadFrameworks, tmLoadFile, tmSave, tmDeletePrompt, tmStartAdd, tmConfirmAdd, tmMarkDirty,
       tmImportFileChanged, tmImportZeroShot,
       startGenerate, startDiscover, startManualDiscover, sendEnter,

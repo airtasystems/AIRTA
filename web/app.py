@@ -1,4 +1,4 @@
-"""AIRTA Web UI — FastAPI backend."""
+"""AIRTA — AI Risk Testing Agent. Web UI (FastAPI backend)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -54,7 +54,7 @@ STRATEGIES = [
     "directional_stimulus",
 ]
 
-app = FastAPI(title="AIRTA", docs_url="/api/docs")
+app = FastAPI(title="AIRTA — AI Risk Testing Agent", docs_url="/api/docs")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -350,15 +350,9 @@ async def api_strategies():
 
 @app.get("/api/frameworks")
 async def api_frameworks():
-    rubrics_dir = _root / "rubrics"
-    if not rubrics_dir.is_dir():
-        return []
-    out = []
-    for p in sorted(rubrics_dir.glob("*.json")):
-        if p.stem in ("company", "component"):
-            continue
-        out.append(p.stem.replace("-", "_"))
-    return out
+    from pipeline.framework_labels import list_framework_options
+
+    return list_framework_options()
 
 
 def _pretty(slug: str) -> str:
@@ -392,6 +386,8 @@ async def api_component_strategies(site: str, component: str):
 @app.get("/api/sites/{site}/{component}/all-frameworks")
 async def api_all_frameworks(site: str, component: str):
     """Return unique framework stems available across all strategy test dirs."""
+    from pipeline.framework_labels import framework_label
+
     tests = _bb_dir / "sites" / site / component / "tests"
     if not tests.is_dir():
         return []
@@ -400,18 +396,29 @@ async def api_all_frameworks(site: str, component: str):
         if strat_dir.is_dir():
             for f in strat_dir.glob("*.json"):
                 stems.add(f.stem)
-    return [{"slug": s, "label": _pretty(s)} for s in sorted(stems)]
+    return [{"slug": s, "label": framework_label(s)} for s in sorted(stems)]
 
 
 @app.get("/api/sites/{site}/{component}/strategies/{strategy}/frameworks")
 async def api_strategy_frameworks(site: str, component: str, strategy: str):
+    from pipeline.framework_labels import framework_label
+
     d = _bb_dir / "sites" / site / component / "tests" / strategy
     if not d.is_dir():
         return []
-    return [
-        {"slug": p.stem, "label": _pretty(p.stem), "path": str(p)}
-        for p in sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    ]
+    out = []
+    for p in sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        suite_framework = None
+        try:
+            suite_framework = json.loads(p.read_text(encoding="utf-8")).get("framework")
+        except Exception:
+            pass
+        out.append({
+            "slug": p.stem,
+            "label": framework_label(p.stem, suite_framework=suite_framework),
+            "path": str(p),
+        })
+    return out
 
 
 @app.get("/api/sites/{site}/{component}/tests/{strategy}/{framework}")
@@ -678,6 +685,23 @@ async def api_cancel_job(job_id: str):
     if not ok:
         raise HTTPException(400, "Cannot cancel job")
     return {"ok": True}
+
+
+@app.get("/api/jobs/{job_id}/preview")
+async def api_job_preview(job_id: str, slot: int = 0):
+    """Latest live browser screenshot for a run_tests job (one file per parallel slot)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    previews_root = _root / "web" / "tmp" / "previews"
+    path = previews_root / job_id / f"{slot}.png"
+    if not path.is_file():
+        legacy = previews_root / f"{job_id}.png"
+        if slot == 0 and legacy.is_file():
+            path = legacy
+        else:
+            raise HTTPException(404, "Preview not available")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/jobs/{job_id}/export-result")

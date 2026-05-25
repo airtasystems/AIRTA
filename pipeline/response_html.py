@@ -1,5 +1,5 @@
 """
-Optional LLM step: add ``response_html`` to each adversarial result when writing
+Optional LLM step: add ``response_html`` to each compliance result when writing
 ``pipeline_report.json``. Converts raw ``response`` text (plain, Markdown-like,
 or mixed) into a small semantic HTML fragment — no outer wrappers (no html/body/div shell).
 """
@@ -81,7 +81,7 @@ def _convert_one(text: str, llm: Any) -> str:
     return _strip_code_fences(raw)
 
 
-def enrich_adversarial_results_with_response_html(results: list[dict[str, Any]]) -> None:
+def enrich_compliance_results_with_response_html(results: list[dict[str, Any]]) -> None:
     """Mutate each row in place: set ``response_html`` from ``response`` via Gemini.
 
     Disabled when ``PIPELINE_RESPONSE_HTML`` is 0/false/no/off, or when ``GEMINI_API_KEY`` is unset.

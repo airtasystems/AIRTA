@@ -1,311 +1,209 @@
-# AIRTA — AI Red Team Attack Suite
+# AIRTA — AI Risk Testing Agent
 
-Generate adversarial test suites from compliance rubrics, run them against live targets via browser automation, and assess risk with multi-expert analysis.
+**Automated regulatory compliance testing for AI systems.** Generate framework-aligned test suites, exercise live UIs and APIs, and produce multi-expert risk assessments — from one open-source pipeline.
 
-## Requirements
-
-- Python 3.10+
-- Chromium (for browser-bot). On first run, `start.py` installs Playwright's Chromium automatically. On Linux you can also use system Chromium at `/usr/bin/chromium-browser` (already configured in `browser-bot/browser_bot/config.py`).
-
-## Quick start (web UI)
-
-The easiest way to run AIRTA — creates a venv, installs dependencies, and launches the web UI:
+AIRTA is a free, production-ready **AI Risk Testing Agent**. Point it at your chatbot, copilot, or API; build structured compliance tests from rubrics such as the EU AI Act and OECD; run them through browser automation with saved auth and live previews; then assess every response against regulatory mandates. Export structured reports to [AIRTA Systems](https://airtasystems.com) when you are ready to operationalize results.
 
 ```bash
 python start.py
+# → http://localhost:8000
 ```
 
-Or from anywhere:
+---
 
-```bash
-python ~/Code/AIRTA/start.py
+## Why teams use AIRTA
+
+| Capability | What you get |
+|------------|----------------|
+| **Rubric-grounded tests** | Compliance suites generated from JSON regulatory frameworks — aligned to mandates, not ad-hoc prompts. |
+| **Real target interaction** | Playwright drives the same UI your users see: login, cookies, blockers, multi-turn flows. |
+| **API or browser** | One component config: `transport: ui` for SaaS apps, `transport: api` for HTTP chat endpoints. |
+| **10 prompting strategies** | Zero-shot through tree-of-thoughts, few-shot, self-reflection, and more — each tuned for regulatory scenarios. |
+| **Risk pipeline** | Compliance logs → multi-expert LangGraph assessment → mandate rollups → export. |
+| **Operator-first UI** | FastAPI web app: discover selectors, save auth, run suites, watch live browser previews, resolve login walls. |
+| **Runs anywhere** | Single `start.py` bootstraps venv, Chromium, and the server. CLI subcommands for CI and scripting. |
+
+You own the stack: local execution, your API keys, your targets, your logs under `browser-bot/sites/<site>/<component>/logs/`.
+
+---
+
+## Production-ready by design
+
+- **Persistent auth** — Session cookies, localStorage, and sessionStorage captured to `auth.json` and replayed on every new browser context (including multi-origin dashboards).
+- **Tiered fetchers** — Pool, cluster, and human-mimic browser tiers with stealth, locale, and retry handling.
+- **Parallel test runs** — Configurable concurrency with per-slot live screenshots during suite execution.
+- **Login & blocker handling** — Detects login walls, rate limits, and cookie banners; guides re-auth from the UI.
+- **Layered config** — Global defaults → site → component overrides; documented in YAML with inline comments.
+- **Local smoke target** — [`test-target/`](test-target/) mock chat app for end-to-end validation without an external SaaS.
+
+---
+
+## How it works
+
+```
+  rubrics/          generate-tests/       browser-bot/          pipeline/
+  (EU AI Act,        compliance JSON   →   Playwright runs  →  compliance_log.json
+   OECD, NIST…)                          + auth + logs            │
+                                                                    ▼
+                                                          risk-level-agent/
+                                                          pipeline_report.json
+                                                                    │
+                                                                    ▼
+                                                          export → AIRTA Systems
 ```
 
-Optional shell alias:
+1. **Generate** — LLM builds regulatory compliance prompts from a framework + strategy.
+2. **Discover** — Record login, input, submit, and response selectors (or wire an API).
+3. **Run** — Submit every prompt; capture responses and HTTP metadata.
+4. **Risk-assess** — Multi-expert + judge scoring per mandate.
+5. **Export** — Push structured reports to your AIRTA Systems program (optional).
+
+---
+
+## Quick start
+
+**Requirements:** Python 3.10+, network for LLM calls (`GEMINI_API_KEY` in `.env`).
 
 ```bash
-alias airta='python ~/Code/AIRTA/start.py'
+git clone <your-repo-url>
+cd AIRTA
+python start.py
 ```
 
-Then open **http://localhost:8000**. The web UI (FastAPI + SPA) wraps the full pipeline — generate, discover, run, risk-assess, export — with a browser-based interface. API docs are available at `/api/docs`.
+Open the URL printed in the terminal (default **http://localhost:8000**). API reference: `/api/docs`.
 
-`start.py` creates `airta-venv/` on first run, installs `requirements.txt`, runs `playwright install chromium` once, then starts the server. If port 8000 is busy, the app picks the next available port and prints it.
+`start.py` creates `airta-venv/`, installs dependencies, runs `playwright install chromium` once, and starts the web UI.
 
-### Manual setup (alternative)
-
-If you prefer to manage the venv yourself:
+### Try it locally (no external SaaS)
 
 ```bash
-python -m venv airta-venv
-source airta-venv/bin/activate
+python test-target/app.py          # mock chat on :3000
+# In the UI: site localhost:3000, component test-target — see test-target/README.md
+```
+
+### Manual setup
+
+```bash
+python -m venv airta-venv && source airta-venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
 python web/app.py
 ```
 
-Run from the repo root so `.config` and `.env` are picked up.
+Run from the repo root so `.config` and `.env` load correctly.
 
-## Local test target app
+---
 
-For browser-bot smoke tests without an external SaaS demo, run the in-repo mock chat app:
+## Web UI workflow
+
+1. **Create site** — Domain or URL (e.g. `www.example.com`).
+2. **Add login** — Browser opens with saved auth; sign in; **Save auth**.
+3. **Connect target** — Discovery (UI) or API endpoint; AIRTA writes `config.yaml`.
+4. **Generate tests** — Pick strategy + framework (EU AI Act, OECD, FRIA, NIST, PLD, …).
+5. **Run tests** — Live previews, compliance log, optional inline risk assessment.
+6. **Export** — Send `pipeline_report.json` to AIRTA Systems when configured.
+
+Terminal users: `python main.py` for the interactive menu, or direct subcommands below.
+
+---
+
+## Strategies & frameworks
+
+**Strategies** (under `generate-tests/strategies/`):
+
+| Strategy | Pattern |
+|----------|---------|
+| `zero_shot` | Single compliance prompt |
+| `multi_shot` | Multi-turn regulatory dialogue |
+| `few_shot` | In-context examples before the test case |
+| `iterative` | Refinement across turns |
+| `chain_of_thought` | Reasoning-style prompts |
+| `prompt_chaining` | Chained steps |
+| `tree_of_thoughts` | Branching exploration |
+| `self_consistency` | Multiple samples |
+| `self_reflection` | Critique-and-revise |
+| `directional_stimulus` | Stimulus-guided framing |
+
+**Frameworks** (under `rubrics/`): `eu_ai_act`, `oecd`, `nist_ai_rmf`, `fria_core`, `fria_extended`, `pld`, and more.
 
 ```bash
-python test-target/app.py
+python main.py generate --strategy zero_shot --framework eu_ai_act
+python main.py generate --all
 ```
 
-Then run tests against site `localhost:3000`, component `test-target`. See [test-target/README.md](test-target/README.md).
+---
+
+## CLI reference
+
+| Command | Purpose |
+|---------|---------|
+| `python main.py` | Interactive site/component menu |
+| `python main.py generate …` | Build compliance test suites from rubrics |
+| `python main.py discover` | Browser-bot login & config menu |
+| `python main.py run <suite.json> --site S --component C` | Execute suite against target |
+| `python main.py run … --assess` | Run + risk assessment in one step |
+| `python main.py risk-assess <compliance_log.json>` | Assess existing log |
+| `python main.py export <pipeline_report.json> …` | Upload to AIRTA Systems |
+
+Example:
+
+```bash
+python main.py run generate-tests/zero_shot/eu_ai_act.json \
+  --site chatgpt.com --component chat --assess
+```
+
+---
 
 ## Configuration
 
-AIRTA layers configuration from several files. Later layers override earlier ones:
-
-| Layer | File | What it controls |
-|-------|------|------------------|
-| 1 (baseline) | [`config.defaults.yaml`](config.defaults.yaml) | Shipped browser/cache defaults — edit to change the out-of-box experience |
-| 2 (global) | [`browser-bot/browser_bot/config.py`](browser-bot/browser_bot/config.py) | Browser behaviour — edited via **Settings → Browser Config** in the web UI |
-| 2 (global) | [`.env`](.env) | Secrets and cache toggle (`GEMINI_USE_CACHE`) — **Settings → Cache Control** |
-| 3 (site) | `browser-bot/sites/<site>/config.yaml` | Shared auth and optional `settings:` for all components on a site — **auto-created on first Discovery** |
-| 4 (component) | `browser-bot/sites/<site>/<component>/config.yaml` | UI submission selectors and per-component `settings:` overrides |
-
-Other files:
-
-- **[`.config`](.config)** — Non-sensitive LLM settings (`GEMINI_MODEL`, `GEMINI_JUDGE`). Same `KEY=value` format as `.env`.
-- **[`.env`](.env)** — Secrets only (e.g. `GEMINI_API_KEY`). Loaded after `.config`.
-
-### Settings overrides (`settings:` block)
-
-Browser and cache keys can be copied from [`config.defaults.yaml`](config.defaults.yaml) into any site or component `config.yaml`. Each key is documented there with allowed values. The web UI exposes the same options under **Settings → Component Config → Settings overrides** (check **Inherit** to omit a key and use the global default).
-
-**Example — override one component to run headless:**
-
-```yaml
-# browser-bot/sites/localhost:3000/main/config.yaml
-submission:
-  start_url: http://localhost:3000/playground
-  # ... other submission fields ...
-
-settings:
-  HEADLESS: true
-```
-
-**Example — site-wide default for every component on a host:**
-
-```yaml
-# browser-bot/sites/localhost:3000/config.yaml
-settings:
-  FETCH_METHOD: human
-  HUMAN_COUNTRY: UK
-```
-
-**Common `settings:` keys**
-
-| Key | Purpose | Options / notes |
-|-----|---------|-----------------|
-| `gemini_use_cache` | Gemini context cache for generate + risk assess | `true` / `false`; also `.env` `GEMINI_USE_CACHE` |
-| `FETCH_METHOD` | Browser tier | `auto`, `pool`, `cluster`, `human` |
-| `HEADLESS` | Hide browser window | `true` / `false` |
-| `HUMAN_COUNTRY` | Locale / timezone / geo | `US`, `UK`, `DE`, `FR`, `JP`, `CA`, `AU`, `NL`, `ES`, `IT` |
-| `CHROME_CHANNEL` | Playwright channel | `chromium`, `chrome`, `chrome-beta`, `msedge` |
-| `BLOCKED_TYPES` | Blocked resource types | List: `image`, `font`, `media`, `stylesheet` |
-
-See [`config.defaults.yaml`](config.defaults.yaml) for the full list and defaults.
-
-### Component `config.yaml` (UI submission)
-
-Each component lives at `browser-bot/sites/<site>/<component>/config.yaml`. This file defines how browser-bot interacts with the target UI for **Run Tests**, **Sample Request**, and **Discovery**. **Discovery**, **Settings → Save**, and new component creation all write this file with inline comments (see [`browser_bot/component_config_yaml.py`](browser-bot/browser_bot/component_config_yaml.py)). Full annotated example: [`browser-bot/sites/localhost:3000/main/config.yaml`](browser-bot/sites/localhost:3000/main/config.yaml).
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `login_url` | Recommended | URL opened for **Add Login** (`http://localhost:…` or `https://…`) |
-| `submission.start_url` | Yes | Page with the chat / prompt UI |
-| `submission.inputs` | Yes | List of `{selector, type}` fields to fill before submit (in order) |
-| `submission.submit_selector` | Yes | Button or control that sends the prompt |
-| `submission.response_selector` | Yes | Container where assistant output appears |
-| `submission.submit_via` | No | `click` (default) or `enter` |
-| `submission.response_wait_ms` | No | Ms to wait for response after submit (default 5000) |
-| `submission.response_within_selector` | No | Descendant under response root; last visible match wins |
-| `submission.response_text_within_selector` | No | Narrower node for text extraction (e.g. `"> p"`) |
-| `submission.mode` | No | `single` or `multi` for multi-turn / batched test suites |
-| `settings` | No | Browser/cache overrides — same keys as [`config.defaults.yaml`](config.defaults.yaml) |
-
-**`submission.inputs` types:** `text`, `textarea`, `contenteditable`, `password`, `email`, `search`, `select`, `combobox`, `checkbox`, `radio`.
-
-### API submission (`transport: api`)
-
-When the target exposes a chat/completion HTTP API (e.g. test target `POST /api/chat`), use **Connect Target → API endpoint** or set in component config:
-
-```yaml
-submission:
-  transport: api
-  api_url: http://localhost:3000/api/chat
-  api_method: POST
-  api_body:
-    prompt: "{{prompt}}"
-  api_response_path: response
-```
-
-- `api_body` — JSON template; `{{prompt}}` is replaced with each test prompt
-- `api_response_path` — dot path into the JSON response (e.g. `response`, `data.message`)
-- `api_headers` — optional; merged with saved auth headers/cookies from **Add Login**
-
-Run Tests and Sample Request use direct HTTP (no browser) when `transport: api`. Prompts run concurrently up to **`API_CONCURRENCY`** (default 8; Settings → Browser Config or component `settings:` override). Set to `1` for fully sequential runs with the evasion delay between requests.
-
-**Site-level config** (`browser-bot/sites/<site>/config.yaml`) can hold shared `login_url`, `refresh_url`, `refresh_mode` (`cookie` \| `both`), and `settings:` that apply to every component on that site unless overridden. **Discovery** creates this file automatically (with inline comments) if it does not exist yet — see [`browser_bot/site_config_yaml.py`](browser-bot/browser_bot/site_config_yaml.py).
-
-## Quick start (interactive menu)
-
-With the venv active (`source airta-venv/bin/activate`, or after running `start.py` once):
-
-```bash
-python main.py
-```
-
-This launches the interactive terminal menu: select a site, then a component, then choose from the pipeline steps. You can also create new sites and components from the menu.
-
-## Commands (direct CLI)
-
-All commands are also available as direct subcommands for scripting and CI.
-
-### Generate tests
-
-Generate adversarial test prompts from rubrics using a configurable prompting strategy.
-
-```bash
-# One strategy + one framework
-python main.py generate --strategy zero_shot --framework oecd
-
-# All frameworks for a strategy
-python main.py generate --strategy zero_shot --all-frameworks
-
-# All strategies for a framework
-python main.py generate --framework eu_ai_act --all-strategies
-
-# Everything: all strategies x all frameworks
-python main.py generate --all
-
-# With component rubric context
-python main.py generate --strategy zero_shot --framework eu_ai_act --component-rubric path/to/rubric.json
-```
-
-Output is written to `generate-tests/<strategy>/<framework>.json`.
-
-### Discover (browser-bot setup)
-
-Interactive terminal menu for browser-bot: log in to a target site, create component configs (input/submit selectors), and manage saved sites.
-
-```bash
-python main.py discover
-```
-
-This opens the browser-bot menu where you can:
-1. Add login (open browser, log in, save auth state)
-2. Create component config (record input fields and submit button)
-3. Remove sites
-4. Manage tokens and site/component selection
-
-### Run tests
-
-Run a generated test suite against a configured browser target. Copies the suite into browser-bot's posts directory, executes via Playwright, and converts the run log into a compliance log for risk assessment.
-
-```bash
-# Run tests with interactive site/component picker
-python main.py run generate-tests/zero-shot/eu-ai-act.json
-
-# Specify site and component directly
-python main.py run generate-tests/zero-shot/oecd.json --site chatgpt.com --component chat
-
-# Run tests and immediately assess risk
-python main.py run generate-tests/zero-shot/eu-ai-act.json --assess
-```
-
-The command auto-detects single-shot vs multi-shot suites. After the run, a `compliance_log.json` is written next to the browser-bot run log. With `--assess`, a `pipeline_report.json` is also generated.
-
-### Risk assessment
-
-Run multi-expert + judge risk assessment on a compliance log.
-
-```bash
-python main.py risk-assess path/to/compliance_log.json
-
-# Also copy the report elsewhere
-python main.py risk-assess path/to/compliance_log.json --report-dir ./reports
-```
-
-Writes `pipeline_report.json` alongside the compliance log.
-
-### Export to AIRTA Systems
-
-Export a pipeline report to AIRTA Systems via the bulk-import API.
-
-```bash
-python main.py export path/to/pipeline_report.json \
-  --host app.airtasystems.com \
-  --api-key YOUR_KEY \
-  --program-id PROGRAM_ID
-```
-
-Credentials can also be set via `AIRTASYSTEMS_HOST`, `AIRTASYSTEMS_API_KEY`, `AIRTASYSTEMS_PROGRAM_ID` env vars.
-
-### Direct generator usage
-
-The generator can also be run directly with more options:
-
-```bash
-python generate-tests/generator.py --strategy zero_shot --framework eu_ai_act
-python generate-tests/generate_all.py  # generate all missing strategy x framework files
-```
-
-## Strategies
-
-| Strategy | Description |
-|----------|-------------|
-| `zero_shot` | Single-prompt adversarial tests |
-| `multi_shot` | Multi-turn sequential conversations |
-| `few_shot` | Example-based prompts |
-| `iterative` | Multi-turn refinement |
-| `chain_of_thought` | CoT-style reasoning prompts |
-| `prompt_chaining` | Multi-step chained prompts |
-| `tree_of_thoughts` | ToT-style exploration |
-| `self_consistency` | Multiple runs for consistency |
-| `self_reflection` | Review/revise pattern |
-| `directional_stimulus` | Steering/hint-based prompts |
-
-## Pipeline flow
-
-```
-generate  →  discover  →  run  →  risk-assess  →  export
-(rubrics)    (auth+config)  (browser)  (multi-expert)   (AIRTA Systems)
-```
-
-1. **Generate** creates adversarial test suites from compliance rubrics.
-2. **Discover** sets up browser-bot: login, record input/submit selectors.
-3. **Run** submits the generated prompts to the live target and captures responses.
-4. **Risk-assess** evaluates each prompt/response pair with multi-expert analysis.
-5. **Export** pushes the pipeline report to AIRTA Systems.
+| Layer | Location |
+|-------|----------|
+| Defaults | [`config.defaults.yaml`](config.defaults.yaml) |
+| Secrets / cache | [`.env`](.env) |
+| LLM model | [`.config`](.config) |
+| Site | `browser-bot/sites/<site>/config.yaml` |
+| Component | `browser-bot/sites/<site>/<component>/config.yaml` |
+
+See [`config.defaults.yaml`](config.defaults.yaml) and annotated examples under `browser-bot/sites/`.
+
+---
 
 ## Project layout
 
-- `start.py` — Bootstrap script: create venv, install deps, launch web UI.
-- `main.py` — CLI entry point: `generate`, `discover`, `run`, `risk-assess`, `export`.
-- `web/` — FastAPI backend and web UI.
-- `generate-tests/` — Test generation: `generator.py`, `core.py`, `strategies/`.
-- `browser-bot/` — Browser automation: Playwright-based test runner with tiered fetchers.
-- `risk-level-agent/` — Multi-expert + judge LangGraph agent for risk levels.
-- `pipeline/` — `risk_assess.py`, `convert_log.py`, `export_airta.py`.
-- `rubrics/` — Compliance framework rubrics (EU AI Act, OWASP, FRIA, MITRE, NIST, etc.).
-- `test-target/` — Local mock chat app for browser-bot automation (`python test-target/app.py`).
-- `docs/` — Additional guides (e.g. `TEST_TARGET_APP_GUIDE.md` for building a local test target app).
+| Path | Role |
+|------|------|
+| `start.py` | Bootstrap venv + launch web UI |
+| `main.py` | CLI: generate, discover, run, risk-assess, export |
+| `web/` | FastAPI backend + SPA |
+| `generate-tests/` | Rubric → compliance suite generation |
+| `browser-bot/` | Playwright runner, sites, auth, fetchers |
+| `risk-level-agent/` | Multi-expert + judge assessment |
+| `pipeline/` | Log conversion, export helpers |
+| `rubrics/` | Regulatory framework JSON |
+| `test-target/` | Local mock chat for smoke tests |
+
+---
+
+## License
+
+AIRTA is **free and open source** under the [AIRTA License](LICENSE):
+
+- **Free use** — Run AIRTA as-is for any purpose, including commercial production.
+- **No commercial modification** — You may not modify the software and use or distribute those modifications commercially.
+- **Unmodified redistribution** — Share copies freely with the license intact.
+
+See [LICENSE](LICENSE) for full terms.
+
+---
 
 ## Troubleshooting
 
-### Port is taken
+**Port in use** — The app auto-picks the next free port, or free 8000 with `lsof -i :8000` and `kill`.
 
-```bash
-lsof -i :8000
-ss -tulnp | grep 8000
-sudo ss -tulnp | grep 8000
-kill -9 [pid]
-```
+**Login / auth** — Re-run **Add login** if sessions expire; site folder name must match the URL host (e.g. `www.example.com`).
 
-The web app also auto-selects the next free port if 8000 is in use.
+**Chromium** — `start.py` installs Playwright Chromium automatically.
 
+---
+
+**AIRTA — AI Risk Testing Agent.** Regulatory compliance testing, real browsers, structured risk reports. Run `python start.py` and start validating your AI systems.

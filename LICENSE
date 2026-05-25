@@ -1,0 +1,34 @@
+AIRTA — AI Risk Testing Agent
+Copyright (c) 2026 AIRTA contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use
+the Software without restriction, including for personal, educational,
+research, and commercial production use, provided that:
+
+  1. The Software is used as distributed, without modification.
+
+  2. You may NOT modify the Software (or any portion of it) for commercial
+     purposes. "Commercial purposes" includes selling, sublicensing, or
+     distributing modified versions as part of a product or service offered
+     for a fee, or using modified versions to provide commercial services to
+     third parties.
+
+  3. Non-commercial modification is permitted for private use, contribution
+     back to the upstream project, or internal forks that are not offered
+     commercially. Any modified version must retain this license notice and
+     clearly state that it is a modified work.
+
+  4. Redistributions of unmodified copies must reproduce this license and
+     retain all copyright notices.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For commercial licensing of modified versions or embedded distribution,
+contact the project maintainers.

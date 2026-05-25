@@ -30,10 +30,10 @@ settings:
   #   pool    — fast shared browser pool (Tier 1)
   #   cluster — larger parallel cluster (Tier 2)
   #   human   — new context per request, most stealthy (Tier 3)
-  FETCH_METHOD: human
+  FETCH_METHOD: pool
 
   # Number of concurrent browser pages in the pool tier (1–32).
-  POOL_SIZE: 8
+  POOL_SIZE: 6
 
   # Cluster tier: number of browser contexts (1–32).
   CONTEXT_COUNT: 8
@@ -72,6 +72,10 @@ settings:
   # Max retries per prompt before recording failure (0–10).
   EVASION_MAX_RETRIES: 3
 
+  # UI rate-limit modal backoff (pool/cluster browser runs).
+  RATE_LIMIT_BACKOFF_S: 120
+  RATE_LIMIT_AUTO_WAIT: true
+
   # --- Human tier (used when FETCH_METHOD is human or auto falls through) ----
   # Simulated user country for locale, timezone, and geolocation.
   # Options: US | UK | DE | FR | JP | CA | AU | NL | ES | IT
@@ -91,7 +95,7 @@ settings:
 
   # --- Browser launch --------------------------------------------------------
   # Run browser without a visible window. false = headed (easier for debugging login/discovery).
-  HEADLESS: false
+  HEADLESS: true
 
   # Path to Chromium/Chrome binary. Use null in Python config for Playwright bundled Chromium.
   # Linux default assumes system package at /usr/bin/chromium-browser.

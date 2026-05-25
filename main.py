@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-AIRTA CLI — Generate adversarial test suites, discover targets, run tests, and assess risk.
+AIRTA CLI — AI Risk Testing Agent.
+
+Generate regulatory compliance test suites, discover targets, run tests, and assess risk.
 
 Interactive mode (no subcommand):
   python main.py          Select site/component, then use the pipeline menu.
 
 Direct subcommands:
-  generate      Generate adversarial test prompts from rubrics.
+  generate      Generate compliance test prompts from rubrics.
   discover      Interactive browser-bot menu: login, create component config, manage sites.
   run           Run generated test suite against a browser target, convert log for risk-assess.
   risk-assess   Run multi-expert risk assessment on a compliance log → pipeline_report.json.
@@ -201,9 +203,9 @@ def _run_risk_assess(args) -> None:
             if field not in r:
                 r[field] = cl.get(field)
 
-    from pipeline.response_html import enrich_adversarial_results_with_response_html
+    from pipeline.response_html import enrich_compliance_results_with_response_html
 
-    enrich_adversarial_results_with_response_html(risk_results)
+    enrich_compliance_results_with_response_html(risk_results)
 
     severity_order = ("critical", "high", "medium", "low", "informational", "compliant", "indeterminate")
 
@@ -227,7 +229,7 @@ def _run_risk_assess(args) -> None:
         "source_file": log_data.get("source_file", ""),
         "run_log_dir": str(log_dir),
         "compliance_log": str(compliance_log_path),
-        "adversarial_results": risk_results,
+        "compliance_results": risk_results,
         "mandate_rollup": mandate_rollup,
     }
     report_path = log_dir / "pipeline_report.json"
@@ -267,7 +269,13 @@ def _latest_run_log(site: str, component: str) -> Path | None:
     logs_dir = _browser_bot_dir / "sites" / site / component / "logs"
     if not logs_dir.is_dir():
         return None
-    logs = sorted(logs_dir.glob("run_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # New-style: logs/{timestamp}/run_log.json
+    # Old-style: logs/run_{timestamp}.json (backward compat)
+    logs = sorted(
+        list(logs_dir.glob("*/run_log.json")) + list(logs_dir.glob("run_*.json")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
     return logs[0] if logs else None
 
 
@@ -330,9 +338,9 @@ def _run_tests(args) -> None:
                 if field not in r:
                     r[field] = cl.get(field)
 
-        from pipeline.response_html import enrich_adversarial_results_with_response_html
+        from pipeline.response_html import enrich_compliance_results_with_response_html
 
-        enrich_adversarial_results_with_response_html(risk_results)
+        enrich_compliance_results_with_response_html(risk_results)
 
         severity_order = ("critical", "high", "medium", "low", "informational", "compliant", "indeterminate")
         def severity_index(level: str) -> int:
@@ -354,7 +362,7 @@ def _run_tests(args) -> None:
             "source_file": log_data.get("source_file", ""),
             "run_log_dir": str(run_log.parent),
             "compliance_log": str(compliance_log),
-            "adversarial_results": risk_results,
+            "compliance_results": risk_results,
             "mandate_rollup": mandate_rollup,
         }
         report_path = compliance_log.parent / "pipeline_report.json"
@@ -400,6 +408,8 @@ def _run_export(args) -> None:
         api_key=api_key,
         program_id=program_id,
         default_level=args.default_level,
+        batch_size=args.batch_size,
+        batch_delay_s=args.batch_delay,
     )
 
 
@@ -508,22 +518,10 @@ def _pretty_strategy_dir(slug: str) -> str:
 
 
 def _pretty_framework_stem(stem: str) -> str:
-    """Suite file stem e.g. eu-ai-act -> EU AI Act."""
-    parts = stem.replace("_", "-").split("-")
-    short_upper = {"eu", "ai", "uk", "us"}
-    long_upper = {"oecd", "gdpr", "iso"}
-    words: list[str] = []
-    for p in parts:
-        if not p:
-            continue
-        pl = p.lower()
-        if pl in short_upper:
-            words.append(p.upper())
-        elif pl in long_upper:
-            words.append(p.upper())
-        else:
-            words.append(p.capitalize())
-    return " ".join(words)
+    """Suite file stem e.g. eu-ai-act -> EU AI Act; pld -> rubric full name."""
+    from pipeline.framework_labels import framework_label
+
+    return framework_label(stem)
 
 
 def _discover_strategy_dirs(site: str, component: str) -> list[Path]:
@@ -583,7 +581,10 @@ def _menu_generate() -> None:
         print("  [-] No rubrics found in rubrics/.")
         return
 
-    choice = _pick_numbered("Select framework:", [f.replace("_", "-") for f in frameworks])
+    from pipeline.framework_labels import framework_label
+
+    fw_labels = [framework_label(f) for f in frameworks]
+    choice = _pick_numbered("Select framework:", frameworks, display=fw_labels)
     if not choice:
         return
     framework = choice.replace("-", "_")
@@ -892,7 +893,7 @@ def _interactive_menu() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="AIRTA — generate adversarial test suites and run risk assessment.\n"
+        description="AIRTA — AI Risk Testing Agent. Generate compliance test suites and run risk assessment.\n"
                     "Run with no subcommand for interactive menu.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -902,7 +903,7 @@ def main() -> None:
         return s.strip().replace("-", "_")
 
     # --- generate ---
-    gen_p = sub.add_parser("generate", help="Generate adversarial test prompts from rubrics.")
+    gen_p = sub.add_parser("generate", help="Generate regulatory compliance test prompts from rubrics.")
     gen_p.add_argument("--strategy", type=norm, choices=STRATEGIES, default="zero_shot",
                        help="Prompt strategy (default: zero_shot).")
     gen_p.add_argument("--framework", type=norm, default="eu_ai_act",
@@ -941,6 +942,10 @@ def main() -> None:
     exp_p.add_argument("--program-id", default="", help="Program ID (or set AIRTASYSTEMS_PROGRAM_ID).")
     exp_p.add_argument("--default-level", choices=["informational", "low", "medium", "critical"],
                         help="Override severity level for all results.")
+    exp_p.add_argument("--batch-size", type=int, default=None,
+                        help="Results per API request (default: 10, or AIRTASYSTEMS_EXPORT_BATCH_SIZE).")
+    exp_p.add_argument("--batch-delay", type=float, default=None,
+                        help="Seconds to wait between batches (default: 2, or AIRTASYSTEMS_EXPORT_BATCH_DELAY_S).")
 
     args = parser.parse_args()
 

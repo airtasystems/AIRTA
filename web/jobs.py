@@ -130,6 +130,15 @@ async def send_stdin(job_id: str, text: str) -> bool:
         return False
 
 
+def _is_cancelled(job: Job) -> bool:
+    return job.status == "cancelled"
+
+
+def _set_final_status(job: Job, status: str) -> None:
+    if not _is_cancelled(job):
+        job.status = status
+
+
 async def cancel_job(job_id: str) -> bool:
     job = _jobs.get(job_id)
     if not job or job.status not in ("pending", "running"):
@@ -138,6 +147,13 @@ async def cancel_job(job_id: str) -> bool:
     if job._process:
         try:
             job._process.terminate()
+            try:
+                await asyncio.wait_for(job._process.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                job._process.kill()
+                await job._process.wait()
+        except ProcessLookupError:
+            pass
         except Exception:
             pass
     if job._task and not job._task.done():
@@ -166,17 +182,25 @@ async def _run_subprocess_job(job: Job, cmd: list[str], *, cwd: str | None = Non
         job._process = proc
         assert proc.stdout
         async for raw_line in proc.stdout:
+            if _is_cancelled(job):
+                break
             line = raw_line.decode(errors="replace").rstrip("\n")
             job.output.append(line)
             job._event.set()
         await proc.wait()
-        job.status = "done" if proc.returncode == 0 else "failed"
+        if _is_cancelled(job):
+            pass
+        elif proc.returncode == 0:
+            _set_final_status(job, "done")
+        else:
+            _set_final_status(job, "failed")
     except asyncio.CancelledError:
         job.status = "cancelled"
     except Exception as exc:
         job.output.append(f"[error] {exc}")
-        job.status = "failed"
+        _set_final_status(job, "failed")
     finally:
+        job._process = None
         job._event.set()
 
 
@@ -197,12 +221,12 @@ async def _run_thread_job(job: Job, fn, *args: Any, **kwargs: Any):
 
     try:
         await asyncio.to_thread(_wrapped)
-        job.status = "done"
+        _set_final_status(job, "done")
     except asyncio.CancelledError:
         job.status = "cancelled"
     except Exception as exc:
         job.output.append(f"[error] {exc}")
-        job.status = "failed"
+        _set_final_status(job, "failed")
     finally:
         job._event.set()
 
@@ -322,6 +346,8 @@ async def _start_generate(job: Job):
         total = len(_ALL_STRATEGIES)
         try:
             for i, strat in enumerate(_ALL_STRATEGIES, 1):
+                if _is_cancelled(job):
+                    break
                 job.output.append(f"[{i}/{total}] Generating: strategy={strat}, framework={framework}...")
                 job._event.set()
                 proc = await asyncio.create_subprocess_exec(
@@ -335,20 +361,29 @@ async def _start_generate(job: Job):
                 job._process = proc
                 assert proc.stdout
                 async for raw_line in proc.stdout:
+                    if _is_cancelled(job):
+                        break
                     line = raw_line.decode(errors="replace").rstrip("\n")
                     job.output.append(line)
                     job._event.set()
                 await proc.wait()
+                job._process = None
+                if _is_cancelled(job):
+                    break
                 if proc.returncode != 0:
                     job.output.append(f"[!] Generator exited {proc.returncode} for {strat}/{framework}")
-            job.output.append(f"[+] All {total} strategies complete for framework={framework}.")
-            job.status = "done"
+            if _is_cancelled(job):
+                pass
+            else:
+                job.output.append(f"[+] All {total} strategies complete for framework={framework}.")
+                _set_final_status(job, "done")
         except asyncio.CancelledError:
             job.status = "cancelled"
         except Exception as exc:
             job.output.append(f"[error] {exc}")
-            job.status = "failed"
+            _set_final_status(job, "failed")
         finally:
+            job._process = None
             job._event.set()
     else:
         await _run_subprocess_job(job, _build_cmd(strategy), env=env)
@@ -401,107 +436,60 @@ async def _start_manual_discover(job: Job):
 
 
 async def _start_run_tests(job: Job):
+    import json as _json
+
     suite_param = job.params.get("suite", "")
     assess = bool(job.params.get("assess", False))
 
-    def _run_one_suite(suite_path_str: str) -> None:
-        """Run a single suite file. Must be called from a thread (uses asyncio.run internally)."""
-        import importlib.util
-        import json as _json
-
-        _prepare_component_context(job)
-
-        bb_dir = _root / "browser-bot"
-        if str(bb_dir) not in sys.path:
-            sys.path.insert(0, str(bb_dir))
-        if str(_root) not in sys.path:
-            sys.path.insert(0, str(_root))
-
-        suite_path = Path(suite_path_str)
-        if not suite_path.is_absolute():
-            suite_path = _root / suite_path
-        suite_data = _json.loads(suite_path.read_text(encoding="utf-8"))
-
-        from browser_bot.config import infer_ui_mode_from_suite_raw
+    bb_dir = _root / "browser-bot"
+    if str(bb_dir) not in sys.path:
+        sys.path.insert(0, str(bb_dir))
+    try:
         from browser_bot.sites import describe_submission_config_issue, get_submission_config, load_component_config
-
-        mode = infer_ui_mode_from_suite_raw(suite_data) or "single"
 
         if not get_submission_config(job.site, job.component):
             reason = describe_submission_config_issue(load_component_config(job.site, job.component))
-            raise RuntimeError(
-                f"Cannot run test suite for {job.site}/{job.component}: {reason}. "
+            job.output.append(
+                f"[!] Cannot run test suite for {job.site}/{job.component}: {reason}. "
                 "Run Discovery / Connect via API or complete the component submission config first."
             )
+            job.status = "failed"
+            job._event.set()
+            return
+    except ImportError as exc:
+        job.output.append(f"[error] {exc}")
+        job.status = "failed"
+        job._event.set()
+        return
 
-        bb_main_path = bb_dir / "main.py"
-        spec = importlib.util.spec_from_file_location("browser_bot_main", bb_main_path)
-        bb_main = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(bb_main)
-        import asyncio as _aio
-        _aio.run(bb_main.run_posts(site=job.site, component=job.component, mode=mode, suite_path=suite_path))
+    env = os.environ.copy()
+    if job.site:
+        env["AIRTA_SITE"] = job.site
+    if job.component:
+        env["AIRTA_COMPONENT"] = job.component
+    env["AIRTA_JOB_ID"] = job.id
+    _prepare_component_context(job)
 
-        logs_dir = bb_dir / "sites" / job.site / job.component / "logs"
-        if logs_dir.is_dir():
-            logs = sorted(
-                list(logs_dir.glob("*/run_log.json")) + list(logs_dir.glob("run_*.json")),
-                key=lambda p: p.stat().st_mtime, reverse=True,
-            )
-            if logs:
-                run_log = logs[0]
-                print(f"[+] Run log: {run_log}")
-                from pipeline.convert_log import convert_run_log
-                compliance_log = convert_run_log(run_log, suite_path)
-                print(f"[+] Compliance log: {compliance_log}")
-
-                if assess:
-                    print("[*] Running risk assessment...")
-                    from pipeline.risk_assess import run_risk_assessment
-                    risk_results = run_risk_assessment(compliance_log)
-
-                    log_data = _json.loads(compliance_log.read_text(encoding="utf-8"))
-                    compliance_by_id = {r["id"]: r for r in log_data.get("results", []) if "id" in r}
-                    for r in risk_results:
-                        cl = compliance_by_id.get(r.get("id", ""), {})
-                        for fld in ("description", "expected_behavior", "status", "ok", "error"):
-                            if fld not in r:
-                                r[fld] = cl.get(fld)
-
-                    from pipeline.response_html import enrich_adversarial_results_with_response_html
-
-                    enrich_adversarial_results_with_response_html(risk_results)
-
-                    severity_order = ("critical", "high", "medium", "low", "informational", "compliant", "indeterminate")
-                    mandate_rollup = {}
-                    for r in risk_results:
-                        m = r.get("mandate", "")
-                        if m:
-                            cur = mandate_rollup.get(m, "compliant")
-                            nl = r.get("risk_level", "indeterminate")
-                            ci = severity_order.index(cur) if cur in severity_order else len(severity_order)
-                            ni = severity_order.index(nl) if nl in severity_order else len(severity_order)
-                            if ni < ci:
-                                mandate_rollup[m] = nl
-
-                    from datetime import datetime as _dt
-                    ts = _dt.now().strftime("%Y-%m-%dT%H-%M-%S")
-                    report = {
-                        "timestamp": ts,
-                        "framework": log_data.get("framework", ""),
-                        "source_file": log_data.get("source_file", ""),
-                        "run_log_dir": str(run_log.parent),
-                        "compliance_log": str(compliance_log),
-                        "adversarial_results": risk_results,
-                        "mandate_rollup": mandate_rollup,
-                    }
-                    report_path = compliance_log.parent / "pipeline_report.json"
-                    report_path.write_text(_json.dumps(report, indent=2), encoding="utf-8")
-                    print(f"[+] Pipeline report: {report_path}")
-                    print(f"[+] Assessed: {len(risk_results)}")
+    def _build_run_cmd(suite_path_str: str) -> list[str]:
+        suite_path = Path(suite_path_str)
+        if not suite_path.is_absolute():
+            suite_path = _root / suite_path
+        cmd = [
+            sys.executable,
+            str(_root / "main.py"),
+            "run",
+            str(suite_path),
+            "--site",
+            job.site,
+            "--component",
+            job.component,
+        ]
+        if assess:
+            cmd.append("--assess")
+        return cmd
 
     if suite_param == "__all__":
         framework = job.params.get("framework", "")
-        bb_dir = _root / "browser-bot"
         tests_dir = bb_dir / "sites" / job.site / job.component / "tests"
         suites = sorted(tests_dir.glob(f"*/{framework}.json")) if tests_dir.is_dir() else []
 
@@ -512,23 +500,55 @@ async def _start_run_tests(job: Job):
             return
 
         total = len(suites)
-
-        def _run_all():
-            import json as _json
-
+        job.status = "running"
+        job._event.set()
+        try:
             for i, sp in enumerate(suites, 1):
+                if _is_cancelled(job):
+                    break
                 strat_name = sp.parent.name
-                print(
-                    f"[airta_progress] {_json.dumps({'type': 'suite', 'current': i, 'total': total, 'strategy': strat_name}, ensure_ascii=False)}",
-                    flush=True,
+                job.output.append(
+                    f"[airta_progress] {_json.dumps({'type': 'suite', 'current': i, 'total': total, 'strategy': strat_name}, ensure_ascii=False)}"
                 )
-                print(f"[{i}/{total}] Running: strategy={strat_name}, framework={framework}...")
-                _run_one_suite(str(sp))
-            print(f"[+] All {total} strategy suites complete for framework={framework}.")
-
-        await _run_thread_job(job, _run_all)
+                job.output.append(f"[{i}/{total}] Running: strategy={strat_name}, framework={framework}...")
+                job._event.set()
+                proc = await asyncio.create_subprocess_exec(
+                    *_build_run_cmd(str(sp)),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    stdin=asyncio.subprocess.PIPE,
+                    cwd=str(_root),
+                    env=env,
+                )
+                job._process = proc
+                assert proc.stdout
+                async for raw_line in proc.stdout:
+                    if _is_cancelled(job):
+                        break
+                    line = raw_line.decode(errors="replace").rstrip("\n")
+                    job.output.append(line)
+                    job._event.set()
+                await proc.wait()
+                job._process = None
+                if _is_cancelled(job):
+                    break
+                if proc.returncode != 0:
+                    job.output.append(f"[!] Test run exited {proc.returncode} for {strat_name}/{framework}")
+            if _is_cancelled(job):
+                pass
+            else:
+                job.output.append(f"[+] All {total} strategy suites complete for framework={framework}.")
+                _set_final_status(job, "done")
+        except asyncio.CancelledError:
+            job.status = "cancelled"
+        except Exception as exc:
+            job.output.append(f"[error] {exc}")
+            _set_final_status(job, "failed")
+        finally:
+            job._process = None
+            job._event.set()
     else:
-        await _run_thread_job(job, lambda: _run_one_suite(suite_param))
+        await _run_subprocess_job(job, _build_run_cmd(suite_param), env=env)
 
 
 async def _start_sample_request(job: Job):
@@ -685,9 +705,9 @@ async def _start_risk_assess(job: Job):
                 if fld not in r:
                     r[fld] = cl_entry.get(fld)
 
-        from pipeline.response_html import enrich_adversarial_results_with_response_html
+        from pipeline.response_html import enrich_compliance_results_with_response_html
 
-        enrich_adversarial_results_with_response_html(risk_results)
+        enrich_compliance_results_with_response_html(risk_results)
 
         severity_order = ("critical", "high", "medium", "low", "informational", "compliant", "indeterminate")
         mandate_rollup = {}
@@ -709,7 +729,7 @@ async def _start_risk_assess(job: Job):
             "source_file": log_data.get("source_file", ""),
             "run_log_dir": str(cl_path.parent),
             "compliance_log": str(cl_path),
-            "adversarial_results": risk_results,
+            "compliance_results": risk_results,
             "mandate_rollup": mandate_rollup,
         }
         report_path = cl_path.parent / "pipeline_report.json"

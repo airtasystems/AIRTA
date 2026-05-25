@@ -1,5 +1,5 @@
 """
-Run risk-level-agent on each adversarial result in a compliance log.
+Run risk-level-agent on each compliance test result in a compliance log.
 Builds an evaluation record, invokes the single framework expert + judge,
 and returns per-result risk level and judge reasoning.
 
@@ -205,15 +205,15 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
     log_data = json.loads(compliance_log_path.read_text(encoding="utf-8"))
     results = log_data.get("results", [])
     framework = log_data.get("framework", "EU AI Act")
-    adversarial = results
-    if not adversarial:
+    compliance_entries = results
+    if not compliance_entries:
         return []
 
     expert_ids = get_experts_for_framework(framework)
-    total = len(adversarial)
+    total = len(compliance_entries)
     print(f"[*] Framework: {framework}")
     print(f"[*] Expert: {expert_ids[0]}")
-    print(f"[*] Assessing {total} adversarial entries...")
+    print(f"[*] Assessing {total} compliance test entries...")
     risk_t0 = time.perf_counter()
     print(
         f"[airta_progress] {json.dumps({'type': 'risk_start', 'phase': 'risk', 'total': total}, ensure_ascii=False)}",
@@ -256,7 +256,7 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
     completed = 0
     queued_full_entries: list[tuple[int, dict]] = []
 
-    for i, entry in enumerate(adversarial, 1):
+    for i, entry in enumerate(compliance_entries, 1):
         entry_id = entry.get("id", f"entry-{i}")
         mandate = entry.get("mandate", "")
         mandate_short = mandate[:50] + ("..." if len(mandate) > 50 else "")
@@ -274,7 +274,7 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
                 "prompt": entry.get("prompt", ""),
                 "response": response_text,
                 "risk_level": "compliant",
-                "judge_reasoning": "Model refused the adversarial prompt (fast-path).",
+                "judge_reasoning": "Model refused the compliance test prompt (fast-path).",
                 "experts_summary": [],
             }
             completed += 1

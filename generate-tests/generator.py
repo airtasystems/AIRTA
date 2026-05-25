@@ -11,7 +11,7 @@ Example:
   python generate-tests/generator.py --strategy self_reflection --framework eu_ai_act
   python generate-tests/generator.py --strategy directional_stimulus --framework eu_ai_act
   python generate-tests/generator.py --strategy iterative --framework eu_ai_act
-  python generate-tests/generator.py --strategy multi_shot --framework owasp_llm
+  python generate-tests/generator.py --strategy multi_shot --framework fria_core
 
 Output is written under generate-tests/<strategy.output_subdir>/<filename>.
 """
@@ -76,7 +76,7 @@ def main() -> None:
         "--framework",
         type=_norm_hyphens,
         default="eu_ai_act",
-        help="Framework name (rubric stem, e.g. eu_ai_act, owasp_llm, fria_core). Hyphens auto-corrected to underscores.",
+        help="Framework name (rubric stem, e.g. eu_ai_act, fria_core, nist_ai_rmf). Hyphens auto-corrected to underscores.",
     )
     parser.add_argument(
         "--rubric",
@@ -193,7 +193,7 @@ def main() -> None:
         framework = args.framework  # already normalized by type
         rubric_path = str(rubrics_dir / f"{framework}.json")
         if not Path(rubric_path).exists():
-            parser.error(f"Rubric not found: {rubric_path} (use --framework <name> for e.g. eu_ai_act, owasp_llm, fria_core)")
+            parser.error(f"Rubric not found: {rubric_path} (use --framework <name> for e.g. eu_ai_act, fria_core, nist_ai_rmf)")
         filename = args.output or f"{framework.replace('_', '-')}.json"
 
     # Resolve the final output path — component-scoped when --site/--component provided

@@ -19,6 +19,7 @@ EDITABLE_BROWSER_VARS = frozenset({
     "POOL_CLUSTER_USE_HUMAN_CHROME", "POOL_CLUSTER_USE_HUMAN_CONTEXT",
     "API_CONCURRENCY",
     "EVASION_REQUEST_DELAY_S", "EVASION_RETRY_WAIT_S", "EVASION_MAX_RETRIES",
+    "RATE_LIMIT_BACKOFF_S", "RATE_LIMIT_AUTO_WAIT",
     "HUMAN_COUNTRY", "HUMAN_ALLOW_STYLES", "HUMAN_READ_DELAY_MS",
     "HUMAN_SCROLL_AFTER_LOAD", "HUMAN_USER_AGENT",
     "HEADLESS", "BLOCKED_TYPES", "CHROMIUM_EXECUTABLE_PATH", "CHROME_CHANNEL",
@@ -50,7 +51,7 @@ SETTING_GROUPS: list[dict[str, Any]] = [
     {
         "id": "evasion",
         "title": "API / Evasion",
-        "keys": ["API_CONCURRENCY", "EVASION_REQUEST_DELAY_S", "EVASION_RETRY_WAIT_S", "EVASION_MAX_RETRIES"],
+        "keys": ["API_CONCURRENCY", "EVASION_REQUEST_DELAY_S", "EVASION_RETRY_WAIT_S", "EVASION_MAX_RETRIES", "RATE_LIMIT_BACKOFF_S", "RATE_LIMIT_AUTO_WAIT"],
     },
     {
         "id": "human",
@@ -81,6 +82,8 @@ SETTING_META: dict[str, dict[str, Any]] = {
     "EVASION_REQUEST_DELAY_S": {"type": "float", "label": "Request delay (s)", "min": 0, "step": 0.1},
     "EVASION_RETRY_WAIT_S": {"type": "float", "label": "Retry wait (s)", "min": 0, "step": 1},
     "EVASION_MAX_RETRIES": {"type": "int", "label": "Max retries", "min": 0, "max": 10},
+    "RATE_LIMIT_BACKOFF_S": {"type": "float", "label": "Rate limit backoff (s)", "min": 0, "step": 1},
+    "RATE_LIMIT_AUTO_WAIT": {"type": "bool", "label": "Auto-wait on rate limit modal"},
     "HUMAN_COUNTRY": {
         "type": "select", "label": "Country",
         "options": ["US", "UK", "DE", "FR", "JP", "CA", "AU", "NL", "ES", "IT"],
@@ -304,7 +307,7 @@ def _coerce_setting(key: str, value: Any) -> Any:
         return set()
     if key in {"POOL_SIZE", "CONTEXT_COUNT", "PAGES_PER_CONTEXT", "API_CONCURRENCY", "EVASION_MAX_RETRIES", "HUMAN_READ_DELAY_MS"}:
         return int(value)
-    if key in {"EVASION_REQUEST_DELAY_S", "EVASION_RETRY_WAIT_S"}:
+    if key in {"EVASION_REQUEST_DELAY_S", "EVASION_RETRY_WAIT_S", "RATE_LIMIT_BACKOFF_S"}:
         return float(value)
     if key in {
         "POOL_CLUSTER_HUMAN_LIKE", "POOL_CLUSTER_ALLOW_STYLES", "POOL_CLUSTER_USE_STEALTH",

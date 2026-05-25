@@ -10,26 +10,32 @@ Required env vars (or supplied via CLI / GUI):
   AIRTASYSTEMS_API_KEY     — API key scoped to write:bulk_import
   AIRTASYSTEMS_PROGRAM_ID  — MongoDB ObjectId of the target program
 
-Optional env var:
-  AIRTASYSTEMS_DEFAULT_LEVEL — indeterminate | compliant | informational | low | medium | high | critical
+Optional env vars:
+  AIRTASYSTEMS_DEFAULT_LEVEL   — indeterminate | compliant | informational | low | medium | high | critical
+  AIRTASYSTEMS_EXPORT_BATCH_SIZE   — items per request (default: 10)
+  AIRTASYSTEMS_EXPORT_BATCH_DELAY_S — pause between requests in seconds (default: 2)
 """
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 IMPORT_PATH = "/api/v2/imported-reports/company"
-# The API accepts up to 5 000 items; we stay well under to avoid timeouts.
-MAX_BATCH_SIZE = 2500
+# API accepts up to 5 000 items per request; default chunk size is much smaller to avoid rate limits.
+DEFAULT_BATCH_SIZE = 10
+API_MAX_BATCH_SIZE = 5000
+DEFAULT_BATCH_DELAY_S = 2.0
+MAX_POST_RETRIES = 6
 TOP_LEVEL_FIELDS = {
     "timestamp",
     "framework",
     "source_file",
     "run_log_dir",
     "compliance_log",
-    "adversarial_results",
+    "compliance_results",
 }
 RESULT_FIELDS = {
     "id",
@@ -44,7 +50,6 @@ RESULT_FIELDS = {
     "ok",
     "status",
     "error",
-    "response_html",
 }
 VALID_RISK_LEVELS = {
     "indeterminate",
@@ -64,32 +69,106 @@ def _build_url(host: str) -> str:
     return host + IMPORT_PATH
 
 
-def _post_json(url: str, api_key: str, program_id: str, payload: dict) -> dict:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-            "X-Program-Id": program_id,
-            # Avoid edge filters that reject Python's default urllib user agent.
-            "User-Agent": "AIRTA-Pipeline-Exporter/1.0",
-        },
-        method="POST",
-    )
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
     try:
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body_text = e.read().decode("utf-8", errors="replace")
+        return int(raw)
+    except ValueError:
+        print(f"[!] Invalid {name}={raw!r}; using default {default}.")
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"[!] Invalid {name}={raw!r}; using default {default}.")
+        return default
+
+
+def _resolve_batch_size(batch_size: int | None) -> int:
+    size = batch_size if batch_size is not None else _env_int("AIRTASYSTEMS_EXPORT_BATCH_SIZE", DEFAULT_BATCH_SIZE)
+    return max(1, min(size, API_MAX_BATCH_SIZE))
+
+
+def _resolve_batch_delay(batch_delay_s: float | None) -> float:
+    delay = batch_delay_s if batch_delay_s is not None else _env_float("AIRTASYSTEMS_EXPORT_BATCH_DELAY_S", DEFAULT_BATCH_DELAY_S)
+    return max(0.0, delay)
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return max(0.0, float(text))
+    except ValueError:
+        return None
+
+
+def _http_error_message(e: urllib.error.HTTPError) -> str:
+    body_text = e.read().decode("utf-8", errors="replace")
+    try:
+        error_body = json.loads(body_text)
+    except Exception:
+        return f"HTTP {e.code}: {body_text}"
+    message = error_body.get("message") or error_body.get("error") or body_text
+    return f"HTTP {e.code}: {message}"
+
+
+def _post_json(
+    url: str,
+    api_key: str,
+    program_id: str,
+    payload: dict,
+    *,
+    max_retries: int = MAX_POST_RETRIES,
+) -> dict:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    last_error: RuntimeError | None = None
+
+    for attempt in range(max_retries):
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "X-Program-Id": program_id,
+                # Avoid edge filters that reject Python's default urllib user agent.
+                "User-Agent": "AIRTA-Pipeline-Exporter/1.0",
+            },
+            method="POST",
+        )
         try:
-            error_body = json.loads(body_text)
-        except Exception:
-            raise RuntimeError(f"HTTP {e.code}: {body_text}") from e
-        message = error_body.get("message") or error_body.get("error") or body_text
-        raise RuntimeError(f"HTTP {e.code}: {message}") from e
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            message = _http_error_message(e)
+            last_error = RuntimeError(message)
+            retryable = e.code in (429, 503)
+            if retryable and attempt < max_retries - 1:
+                retry_after = _parse_retry_after(e.headers.get("Retry-After"))
+                wait_s = retry_after if retry_after is not None else min(60.0, 2.0 ** attempt)
+                print(
+                    f"    HTTP {e.code} — waiting {wait_s:.1f}s before retry "
+                    f"({attempt + 2}/{max_retries})..."
+                )
+                time.sleep(wait_s)
+                continue
+            raise last_error from e
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Export request failed without a response.")
 
 
 def _normalize_timestamp(value: object) -> object:
@@ -131,10 +210,10 @@ def _sanitize_payload(data: dict, results: list[dict], default_level: str | None
     """
     Keep fields accepted by the imported-reports API and drop local rollups.
     """
-    payload = {k: data[k] for k in TOP_LEVEL_FIELDS if k in data and k != "adversarial_results"}
+    payload = {k: data[k] for k in TOP_LEVEL_FIELDS if k in data and k != "compliance_results"}
     if "timestamp" in payload:
         payload["timestamp"] = _normalize_timestamp(payload["timestamp"])
-    payload["adversarial_results"] = [
+    payload["compliance_results"] = [
         _sanitize_result(item, default_level)
         for item in results
     ]
@@ -195,29 +274,35 @@ def export_pipeline_report(
     api_key: str,
     program_id: str,
     default_level: str | None = None,
+    batch_size: int | None = None,
+    batch_delay_s: float | None = None,
 ) -> list[dict]:
     """
     Read pipeline_report.json and POST it to the AIRTA Systems imported-reports
-    endpoint.  For reports with > MAX_BATCH_SIZE results the adversarial_results
-    array is split into batches while keeping the rest of the top-level metadata
-    on each request.
+    endpoint.  compliance_results are split into small batches (default 10 items)
+    with a pause between requests to reduce rate-limit failures.
 
     Returns a list of response dicts (one per batch).
     """
     data = json.loads(report_path.read_text(encoding="utf-8"))
-    results: list[dict] = data.get("adversarial_results", [])
+    results: list[dict] = data.get("compliance_results", [])
 
     if not results:
-        print("[-] No adversarial_results found in report.")
+        print("[-] No compliance_results found in report.")
         return []
 
+    chunk_size = _resolve_batch_size(batch_size)
+    chunk_delay = _resolve_batch_delay(batch_delay_s)
     url = _build_url(host)
     total = len(results)
-    batches = [results[i : i + MAX_BATCH_SIZE] for i in range(0, total, MAX_BATCH_SIZE)]
+    batches = [results[i : i + chunk_size] for i in range(0, total, chunk_size)]
 
-    print(f"[*] Exporting {total} result(s) in {len(batches)} batch(es) to {url}")
+    print(
+        f"[*] Exporting {total} result(s) in {len(batches)} batch(es) "
+        f"({chunk_size} item(s) max per request, {chunk_delay:.1f}s between batches) to {url}"
+    )
 
-    meta = {k: data[k] for k in TOP_LEVEL_FIELDS if k in data and k != "adversarial_results"}
+    meta = {k: data[k] for k in TOP_LEVEL_FIELDS if k in data and k != "compliance_results"}
 
     responses: list[dict] = []
     for idx, batch in enumerate(batches, 1):
@@ -233,6 +318,8 @@ def export_pipeline_report(
                 "error": str(e),
                 "summary": {"total": len(batch), "created": 0, "failed": len(batch)},
             })
+            if idx < len(batches) and chunk_delay > 0:
+                time.sleep(chunk_delay)
             continue
 
         success = resp.get("success", False)
@@ -260,6 +347,9 @@ def export_pipeline_report(
 
         resp["batch"] = idx
         responses.append(resp)
+
+        if idx < len(batches) and chunk_delay > 0:
+            time.sleep(chunk_delay)
 
     created_total = sum(r.get("summary", {}).get("created", 0) for r in responses if "summary" in r)
     failed_total = sum(r.get("summary", {}).get("failed", 0) for r in responses if "summary" in r)

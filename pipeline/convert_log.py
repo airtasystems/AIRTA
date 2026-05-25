@@ -8,7 +8,9 @@ browser-bot run logs have shape:
 Generated suite JSON has shape:
   { framework, mandates: [{ mandate, prompts: [{ id, description, prompt } | { id, description, prompts: [str] }] }] }
 
-The converter cross-references submitted inputs back to suite entries to recover id/mandate/description.
+Multi-turn suites (multi_shot, tree_of_thoughts, iterative, prompt_chaining) produce one compliance
+result per test case. All turns are preserved in run_log.json; compliance_log uses the full prompt
+transcript but only the final model response for ok/response and risk assessment.
 browser-bot appends UI_PROMPT_PREFIX (suffix) and may truncate via UI_PROMPT_MAX_CHARS, so matching strips
 the known wrapper and compares the body portion. Legacy run logs with a prepended wrapper are still handled.
 """
@@ -158,6 +160,15 @@ def _convert_single(
     }
 
 
+def _format_multi_prompt(prompts: list[str]) -> str:
+    """Format all user turns as a transcript for risk assessment context."""
+    lines: list[str] = []
+    for i, text in enumerate(prompts, 1):
+        if text:
+            lines.append(f"[Turn {i}] {text}")
+    return "\n\n".join(lines)
+
+
 def _convert_multi(
     run_log: dict,
     suite: dict,
@@ -170,6 +181,9 @@ def _convert_multi(
 
     for batch_i, batch in enumerate(batches):
         turns = batch.get("turns") or []
+        if not turns:
+            continue
+
         matched: dict[str, Any] | None = None
         if batch_i < len(index):
             matched = index[batch_i]
@@ -181,22 +195,41 @@ def _convert_multi(
                     matched = idx_entry
                     break
 
-        for turn_i, turn in enumerate(turns):
-            response = turn.get("response")
-            original_prompt = ""
-            if matched and turn_i < len(matched.get("prompts", [])):
-                original_prompt = matched["prompts"][turn_i]
-            else:
-                original_prompt = turn.get("input", "")
+        suite_prompts = matched.get("prompts", []) if matched else []
+        last_turn = turns[-1]
+        last_response = last_turn.get("response")
 
-            results.append({
-                "id": f"{matched['id']}-t{turn_i + 1}" if matched else f"batch-{batch_i + 1}-t{turn_i + 1}",
-                "mandate": matched["mandate"] if matched else "",
-                "description": matched["description"] if matched else "",
+        # Use suite prompts when available; fall back to submitted inputs from the run log.
+        if suite_prompts and len(suite_prompts) == len(turns):
+            prompt_text = _format_multi_prompt(suite_prompts)
+            final_prompt = suite_prompts[-1]
+        else:
+            submitted_prompts = [_strip_ui_prefix(t.get("input", "")) for t in turns]
+            prompt_text = _format_multi_prompt(submitted_prompts)
+            final_prompt = submitted_prompts[-1] if submitted_prompts else last_turn.get("input", "")
+
+        turn_details = []
+        for turn_i, turn in enumerate(turns):
+            original_prompt = ""
+            if matched and turn_i < len(suite_prompts):
+                original_prompt = suite_prompts[turn_i]
+            else:
+                original_prompt = _strip_ui_prefix(turn.get("input", ""))
+            turn_details.append({
+                "turn": turn_i + 1,
                 "prompt": original_prompt,
-                "response": response or "",
-                "ok": bool(response and str(response).strip()),
+                "response": turn.get("response") or "",
             })
+
+        results.append({
+            "id": matched["id"] if matched else f"batch-{batch_i + 1}",
+            "mandate": matched["mandate"] if matched else "",
+            "description": matched["description"] if matched else "",
+            "prompt": prompt_text or final_prompt,
+            "response": last_response or "",
+            "ok": bool(last_response and str(last_response).strip()),
+            "turns": turn_details,
+        })
 
     return {
         "framework": framework,

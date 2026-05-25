@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIRTA</title>
+<title>AIRTA — AI Risk Testing Agent</title>
 <link rel="icon" href="/img/AIRTA Systems.ico" sizes="any">
 <link rel="icon" type="image/svg+xml" href="/img/airtasystems-logo.png">
 <link rel="apple-touch-icon" href="/img/airtasystems-logo.png">
@@ -112,6 +112,84 @@
     </div>
   </div>
 
+  <!-- Run preview lightbox -->
+  <div v-if="runPreviewLightbox" class="modal-backdrop run-preview-lightbox" @click.self="closeRunPreviewLightbox">
+    <div class="run-preview-lightbox-inner">
+      <div class="run-preview-lightbox-header">
+        <span>{{ runPreviewLightbox.label }}</span>
+        <button type="button" class="btn btn-ghost btn-sm" @click="closeRunPreviewLightbox">Close</button>
+      </div>
+      <div class="run-preview-lightbox-frame">
+        <img :src="runPreviewLightbox.url" :alt="runPreviewLightbox.label" class="run-preview-lightbox-img" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Run rate limit modal -->
+  <div v-if="showRunRateLimitModal" class="modal-backdrop" @click.self="dismissRunRateLimitModal">
+    <div class="modal modal-wide">
+      <div class="modal-sub" style="margin-bottom:12px;">Rate limited</div>
+      <div class="modal-help">
+        <p>Tests paused — the target is showing a <strong>too many requests</strong> dialog (rate limit).</p>
+        <p v-if="runBlockedInfo && runBlockedInfo.auto_wait_attempted === false">
+          Auto-wait is off in Settings. Wait at least <strong>{{ formatRateLimitWait(runRateLimitBackoff) }}</strong>, then retry.
+        </p>
+        <p v-else>
+          AIRTA already waited once automatically. Wait at least <strong>{{ formatRateLimitWait(runRateLimitBackoff) }}</strong> before retrying, or use a longer backoff in Settings → Browser.
+        </p>
+        <p v-if="rateLimitCountdown > 0">Retrying in <strong>{{ rateLimitCountdown }}s</strong>…</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="dismissRunRateLimitModal" :disabled="rateLimitWaiting">Cancel</button>
+        <button type="button" class="btn btn-ghost" @click="retryRunAfterRateLimit(false)" :disabled="rateLimitWaiting">Retry now</button>
+        <button type="button" class="btn btn-primary" @click="retryRunAfterRateLimit(true)" :disabled="rateLimitWaiting">
+          {{ rateLimitWaiting ? 'Waiting…' : 'Wait & retry' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run login required modal -->
+  <div v-if="showRunLoginModal" class="modal-backdrop" @click.self="dismissRunLoginModal">
+    <div class="modal modal-wide">
+      <div class="modal-sub" style="margin-bottom:12px;">Sign-in required</div>
+      <div class="modal-help">
+        <p>Tests paused — <strong>{{ site }}</strong> is showing a login screen and saved auth is missing or expired.</p>
+        <template v-if="!loginRunning">
+          <p>Click <strong>Log in</strong> to open a browser window. Sign in to the target app, then click <strong>Save auth</strong>. Tests will re-run automatically.</p>
+        </template>
+        <template v-else>
+          <p>Complete sign-in in the browser window, then click <strong>Save auth</strong> below.</p>
+        </template>
+      </div>
+      <div class="console" v-if="loginRunning && activeOutput('login').length" style="max-height:140px;margin-top:12px;">
+        <div v-for="(line, i) in activeOutput('login')" :key="i" :class="lineClass(line)">{{ line }}</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" @click="dismissRunLoginModal">Cancel</button>
+        <button
+          v-if="!loginRunning"
+          type="button"
+          class="btn btn-primary"
+          @click="confirmRunLogin"
+          :disabled="!site || !runLoginUrl"
+        >
+          Log in
+        </button>
+        <button
+          v-else
+          type="button"
+          class="btn btn-primary"
+          @click="saveAuth"
+          :disabled="!loginJobId || authSaving"
+        >
+          {{ authSaving ? 'Saving…' : 'Save auth' }}
+        </button>
+      </div>
+      <p v-if="authSaveError" class="modal-error">{{ authSaveError }}</p>
+    </div>
+  </div>
+
   <!-- Run troubleshooting modal -->
   <div v-if="showRunTroubleshoot" class="modal-backdrop" @click.self="showRunTroubleshoot = false">
     <div class="modal modal-wide">
@@ -123,6 +201,7 @@
         <p><strong>Increase timeout.</strong> In Settings -> Component, raise Response wait (ms), especially for slow model responses or streaming UIs.</p>
         <p><strong>Check selectors.</strong> Re-run Connect Target -> Start Discovery if the prompt box, send button, or response container changed. Prefer stable selectors such as <code>#prompt-textarea</code>, <code>button[data-testid="send-button"]</code>, and <code>div[data-message-author-role="assistant"]</code>.</p>
         <p><strong>Refresh auth.</strong> If the page opens logged out or gets redirected, run Add Login again for the site.</p>
+        <p><strong>Cookie banners &amp; blockers.</strong> If a run stops with a blocked message, check the live preview. AIRTA tries to dismiss common cookie dialogs and saves selectors to component config for next time. Complete login once with Headless off if needed.</p>
         <p><strong>Reduce concurrency.</strong> If you see rate limits or flaky responses, lower pool/cluster sizes or switch to Human mode before running larger suites.</p>
       </div>
       <div class="modal-actions">
@@ -172,7 +251,7 @@
           <div class="form-row">
             <label>Framework</label>
             <select v-model="gen.framework">
-              <option v-for="f in allFrameworks" :key="f" :value="f">{{ pretty(f) }}</option>
+              <option v-for="f in allFrameworks" :key="f.slug" :value="f.slug">{{ f.label }}</option>
             </select>
           </div>
           <div class="form-row">
@@ -209,7 +288,7 @@
                 </span>
               </div>
               <div class="setup-step-body">
-                <template v-if="authConfigured">
+                <template v-if="authConfigured && authLoginChoice !== true && !pendingRunAfterLogin">
                   <p v-if="authMode === 'none'">
                     This target is set up for <strong>public access</strong> - no login session is stored.
                     Browser tests will run without saved cookies.
@@ -220,7 +299,7 @@
                   <button type="button" class="btn btn-ghost btn-sm" @click="resetAuthSetup">Change access type</button>
                 </template>
 
-                <template v-else-if="authLoginChoice === null">
+                <template v-else-if="authLoginChoice === null && !pendingRunAfterLogin">
                   <p>Does this target require you to log in before you can use the LLM?</p>
                   <div class="auth-choice-btns">
                     <button type="button" class="btn btn-primary" @click="chooseAuthRequired">Yes - login required</button>
@@ -381,24 +460,88 @@
             <button class="btn btn-ghost" @click="startSampleRequest" :disabled="!site || !component || sampleRequestRunning">
               {{ sampleRequestRunning ? 'Sending Sample…' : 'Send Sample Request' }}
             </button>
-            <button class="btn btn-ghost" @click="showRunTroubleshoot = true">
+            <button
+              class="btn"
+              :class="runBlockedInfo ? 'btn-troubleshoot-alert' : 'btn-ghost'"
+              @click="onRunTroubleshoot"
+            >
               Troubleshoot
             </button>
           </div>
-          <div
-            v-if="runProgress && activeJobs.run_tests"
-            class="run-progress-wrap"
-          >
-            <div class="run-progress-meta">
-              <span>{{ runProgressBarLabel }}</span>
-              <span class="run-progress-eta">{{ runProgressEtaText }}</span>
+          <div v-if="loginRunning && pendingRunAfterLogin" class="run-auth-save-bar">
+            <div class="run-auth-save-text">
+              <strong>Sign-in in progress.</strong>
+              Complete login in the browser window, then save your session to continue tests.
             </div>
-            <div class="run-progress-track">
-              <div class="run-progress-fill" :style="{ width: (runProgress.pct || 0) + '%' }"></div>
-            </div>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              @click="saveAuth"
+              :disabled="!loginJobId || authSaving"
+            >
+              {{ authSaving ? 'Saving…' : 'Save auth' }}
+            </button>
+            <p v-if="authSaveError" class="run-auth-save-error">{{ authSaveError }}</p>
           </div>
-          <div class="console" v-if="activeOutput('run_tests').length" ref="runConsole">
-            <div v-for="(line, i) in activeOutput('run_tests')" :key="i" :class="lineClass(line)">{{ line }}</div>
+          <div
+            v-if="activeJobs.run_tests || activeOutput('run_tests').length"
+            class="run-live-grid"
+            :class="{
+              'has-preview': activeJobs.run_tests,
+              'has-preview-row': activeJobs.run_tests && runPreviewSlots.length >= 3
+            }"
+          >
+            <div v-if="activeJobs.run_tests" class="run-preview-panel">
+              <div class="run-preview-header">
+                <span>Live browser preview</span>
+                <span v-if="runPreviewSlots.length > 1" class="run-preview-hint">{{ runPreviewSlots.length }} instances</span>
+              </div>
+              <div
+                class="run-preview-grid"
+                :class="{
+                  'run-preview-grid-duo': runPreviewSlots.length > 1 && runPreviewSlots.length < 3,
+                  'run-preview-grid-row': runPreviewSlots.length >= 3
+                }"
+              >
+                <div
+                  v-for="s in runPreviewSlots"
+                  :key="s.slot"
+                  class="run-preview-wrap"
+                >
+                  <div v-if="runPreviewSlots.length > 1" class="run-preview-slot-label">
+                    Browser {{ s.slot + 1 }}
+                  </div>
+                  <div class="run-preview-frame" :class="{ 'run-preview-frame-clickable': s.url }" @click="s.url && openRunPreviewLightbox(s)">
+                    <img
+                      v-if="s.url"
+                      :src="s.url"
+                      :alt="'Live browser preview ' + (s.slot + 1)"
+                      class="run-preview-img"
+                      title="Click to enlarge"
+                    />
+                    <div v-else class="run-preview-placeholder">Waiting for browser…</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="run-live-main">
+              <div
+                v-if="runProgress && activeJobs.run_tests"
+                class="run-progress-wrap"
+                :class="{ 'run-progress-blocked': runProgress.type === 'blocked' || runProgress.phase === 'blocked' || runProgress.phase === 'rate_limit_wait' }"
+              >
+                <div class="run-progress-meta">
+                  <span>{{ runProgressBarLabel }}</span>
+                  <span class="run-progress-eta">{{ runProgressEtaText }}</span>
+                </div>
+                <div class="run-progress-track">
+                  <div class="run-progress-fill" :style="{ width: (runProgress.pct || 0) + '%' }"></div>
+                </div>
+              </div>
+              <div class="console run-console" v-if="activeOutput('run_tests').length" ref="runConsole">
+                <div v-for="(line, i) in activeOutput('run_tests')" :key="i" :class="lineClass(line)">{{ line }}</div>
+              </div>
+            </div>
           </div>
           <div class="console" v-if="activeOutput('sample_request').length">
             <div v-for="(line, i) in activeOutput('sample_request')" :key="i" :class="lineClass(line)">{{ line }}</div>
@@ -519,7 +662,7 @@
                 <thead>
                   <tr>
                     <th style="width:180px;">ID</th>
-                    <th>Prompt</th>
+                    <th>{{ tmIsMultiTurnStrategy() ? 'Turns' : 'Prompt' }}</th>
                     <th style="width:36px;"></th>
                   </tr>
                 </thead>
@@ -527,8 +670,13 @@
                   <template v-for="(p, pi) in mandate.prompts" :key="p.id || pi">
                     <!-- View row -->
                     <tr v-if="tmEditingId !== (mi + ':' + pi)" class="tm-row" @click="tmEditingId = mi + ':' + pi">
-                      <td class="tm-id">{{ p.id }}</td>
-                      <td class="tm-prompt-text">{{ p.prompt }}</td>
+                      <td class="tm-id">
+                        {{ p.id }}
+                        <span v-if="tmEntryIsMultiTurn(p)" class="badge badge-neutral" style="margin-top:4px;display:inline-block;">
+                          {{ p.prompts.length }} turns
+                        </span>
+                      </td>
+                      <td class="tm-prompt-text">{{ tmPromptPreview(p) }}</td>
                       <td><button class="btn-icon tm-del" @click.stop="tmDeletePrompt(mi, pi)" title="Delete">✕</button></td>
                     </tr>
                     <!-- Edit row (expanded) -->
@@ -543,7 +691,29 @@
                             <label>Description</label>
                             <input v-model="p.description" @input="tmMarkDirty" placeholder="What this probes">
                           </div>
-                          <div class="form-row" style="margin:0;grid-column:1/-1;">
+                          <template v-if="tmEntryIsMultiTurn(p) || tmIsMultiTurnStrategy()">
+                            <div
+                              v-for="(turn, ti) in (tmEntryIsMultiTurn(p) ? p.prompts : tmEnsurePromptTurns(p))"
+                              :key="ti"
+                              class="form-row tm-turn-row"
+                              style="margin:0;grid-column:1/-1;"
+                            >
+                              <div class="tm-turn-head">
+                                <label>{{ tmTurnLabel(ti, p.prompts.length) }}</label>
+                                <button
+                                  v-if="p.prompts.length > 1"
+                                  class="btn btn-ghost btn-sm"
+                                  type="button"
+                                  @click="tmRemoveTurn(p, ti)"
+                                >Remove</button>
+                              </div>
+                              <textarea v-model="p.prompts[ti]" @input="tmMarkDirty" rows="3" placeholder="Prompt text for this turn"></textarea>
+                            </div>
+                            <div style="grid-column:1/-1;">
+                              <button class="btn btn-ghost btn-sm" type="button" @click="tmAddTurn(p)">+ Add turn</button>
+                            </div>
+                          </template>
+                          <div v-else class="form-row" style="margin:0;grid-column:1/-1;">
                             <label>Prompt</label>
                             <textarea v-model="p.prompt" @input="tmMarkDirty" rows="3" placeholder="Prompt text sent to the AI"></textarea>
                           </div>
@@ -568,12 +738,27 @@
                     <label>Description</label>
                     <input v-model="tmNewPrompt.description" placeholder="What this probes">
                   </div>
-                  <div class="form-row" style="margin:0;grid-column:1/-1;">
+                  <template v-if="tmIsMultiTurnStrategy()">
+                    <div
+                      v-for="(turn, ti) in tmNewPrompt.prompts"
+                      :key="ti"
+                      class="form-row tm-turn-row"
+                      style="margin:0;grid-column:1/-1;"
+                    >
+                      <label>{{ tmTurnLabel(ti, tmNewPrompt.prompts.length) }}</label>
+                      <textarea v-model="tmNewPrompt.prompts[ti]" rows="3" placeholder="Prompt text for this turn"></textarea>
+                    </div>
+                  </template>
+                  <div v-else class="form-row" style="margin:0;grid-column:1/-1;">
                     <label>Prompt</label>
                     <textarea v-model="tmNewPrompt.prompt" rows="3" placeholder="Prompt text sent to the AI"></textarea>
                   </div>
                   <div style="grid-column:1/-1;display:flex;gap:8px;">
-                    <button class="btn btn-primary btn-sm" @click="tmConfirmAdd(mi)" :disabled="!tmNewPrompt.id || !tmNewPrompt.prompt">Add</button>
+                    <button
+                      class="btn btn-primary btn-sm"
+                      @click="tmConfirmAdd(mi)"
+                      :disabled="!tmNewPrompt.id || (tmIsMultiTurnStrategy() ? !tmNewPrompt.prompts.some(t => (t || '').trim()) : !tmNewPrompt.prompt)"
+                    >Add</button>
                     <button class="btn btn-ghost btn-sm" @click="tmAddingMandate = ''">Cancel</button>
                   </div>
                 </div>
@@ -1019,6 +1204,14 @@
                 <label>Max retries</label>
                 <input type="number" v-model.number="cfg.EVASION_MAX_RETRIES" min="0" max="10">
               </div>
+              <div class="form-row">
+                <label>Rate limit backoff (s)</label>
+                <input type="number" v-model.number="cfg.RATE_LIMIT_BACKOFF_S" min="0" step="1">
+              </div>
+              <div class="checkbox-row">
+                <input type="checkbox" id="rateLimitAutoWait" v-model="cfg.RATE_LIMIT_AUTO_WAIT">
+                <label for="rateLimitAutoWait">Auto-wait on rate limit modal</label>
+              </div>
             </div>
 
             <div class="cfg-section">
@@ -1103,9 +1296,12 @@
       </div>
 
       <!-- Jobs drawer -->
-      <div class="jobs-drawer" v-if="jobs.length">
-        <div class="jobs-header" @click="jobsOpen = !jobsOpen">
-          Jobs <span>{{ jobs.filter(j => j.status === 'running').length }} running</span>
+      <div class="jobs-drawer" v-if="jobs.length" :class="{ 'jobs-drawer-collapsed': !jobsOpen }">
+        <div class="jobs-header" @click="jobsOpen = !jobsOpen" :title="jobsOpen ? 'Click to minimize' : 'Click to expand'">
+          <span class="jobs-chevron" :class="{ open: jobsOpen }" aria-hidden="true">›</span>
+          <span class="jobs-title">Jobs</span>
+          <span class="jobs-hint">{{ jobsOpen ? 'Click to minimize' : 'Click to expand' }}</span>
+          <span class="jobs-running-count">{{ jobs.filter(j => j.status === 'running').length }} running</span>
         </div>
         <div class="jobs-body" v-show="jobsOpen">
           <table>
@@ -1117,7 +1313,7 @@
                 <td>{{ j.site }}/{{ j.component }}</td>
                 <td><span class="badge" :class="'badge-' + j.status">{{ j.status }}</span></td>
                 <td>
-                  <button v-if="j.status === 'running'" class="btn btn-danger btn-sm" @click="cancelJob(j.id)">Cancel</button>
+                  <button v-if="j.status === 'running'" class="btn btn-danger btn-sm" @click.stop="cancelJob(j.id)">Cancel</button>
                 </td>
               </tr>
             </tbody>
