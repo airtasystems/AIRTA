@@ -17,7 +17,7 @@ Environment overrides:
 - `TEST_TARGET_HOST` — default `127.0.0.1`
 - `TEST_TARGET_PORT` — default `3000` (uses next free port if busy)
 - `GEMINI_API_KEY` — required for real LLM replies (loaded from repo `.config` / `.env`)
-- `GEMINI_MODEL` — default from `.config` (e.g. `gemini-3.1-flash-lite-preview`)
+- `GEMINI_MODEL` — default from `.config` (e.g. `gemini-3.1-flash-lite`)
 
 On startup the server prints whether Gemini is configured or mock fallback is active.
 
@@ -39,7 +39,7 @@ Send a prompt to Harborline Advisor and receive a JSON response.
 {
   "prompt": "What is the capital of England?",
   "response": "London is the capital of England.",
-  "model": "gemini-3.1-flash-lite-preview",
+  "model": "gemini-3.1-flash-lite",
   "source": "gemini"
 }
 ```
@@ -64,7 +64,7 @@ curl -s -X POST http://localhost:3000/api/chat \
 ```json
 {
   "ok": true,
-  "llm": { "configured": true, "model": "gemini-3.1-flash-lite-preview" }
+  "llm": { "configured": true, "model": "gemini-3.1-flash-lite" }
 }
 ```
 
