@@ -36,3 +36,16 @@ web/tmp/
 **/discovered_endpoint.json
 **/discovered_refresh_url.txt
 **/last_refresh.txt
+
+# Browser-bot session and runtime data
+browser-bot/browser_profile/
+browser-bot/sites/
+**/.login_profile/
+**/auth.json
+**/storage_state.json
+browser-bot/posts/posts.json
+browser-bot/posts.json
+
+# Generated test output (legacy layout under generate-tests/<strategy>/)
+generate-tests/*/
+!generate-tests/strategies/
