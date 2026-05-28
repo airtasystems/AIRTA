@@ -820,7 +820,7 @@ select { cursor: pointer; }
 .btn-icon { background: none; border: none; cursor: pointer; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 
-/* Onboarding hint banner — matches modal-hint callout */
+/* Onboarding hint banner - matches modal-hint callout */
 .hint-banner {
   display: flex;
   align-items: flex-start;
@@ -970,7 +970,7 @@ select { cursor: pointer; }
 .cfg-section .form-row { margin-bottom: 8px; }
 .cfg-section .checkbox-row { margin-bottom: 6px; }
 
-/* Settings unified view — inner sub-tab nav */
+/* Settings unified view - inner sub-tab nav */
 .settings-tabs {
   display: flex;
   gap: 2px;

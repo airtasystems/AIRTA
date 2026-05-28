@@ -1,12 +1,12 @@
 """Record UI submission flow: open browser, capture HTML, extract config via AI.
 
 Discovery runs in 6 steps:
-  1. Interactive browser — user navigates to page, presses Enter
-  2. LLM extracts input selector — user confirms or overrides
-  3. Headless verify input — fills text, reads back, screenshot
-  4. LLM extracts submit selector — user confirms or overrides
-  5. Headless verify submit — fills + clicks, detects response, screenshot
-  6. LLM extracts response selector — user confirms or overrides
+  1. Interactive browser - user navigates to page, presses Enter
+  2. LLM extracts input selector - user confirms or overrides
+  3. Headless verify input - fills text, reads back, screenshot
+  4. LLM extracts submit selector - user confirms or overrides
+  5. Headless verify submit - fills + clicks, detects response, screenshot
+  6. LLM extracts response selector - user confirms or overrides
   Config is saved incrementally after each confirmed step.
 """
 
@@ -280,7 +280,7 @@ _MANUAL_DISCOVERY_SCRIPT = r"""
       }
     }
 
-    // Structural fallback — walk up but anchor on landmarks / stable ancestor attrs early.
+    // Structural fallback - walk up but anchor on landmarks / stable ancestor attrs early.
     // Cap at 5 levels to avoid over-specific positional paths.
     const MAX_DEPTH = 5;
     const parts = [];
@@ -751,7 +751,7 @@ Rules:
 - List fields in ORDER. Include text inputs, textareas, contenteditable divs, select dropdowns.
 - EXCLUDE file inputs, hidden inputs, and submit/send buttons.
 - Prefer stable selectors: #id, [data-testid="x"], [name="x"], tag.class
-- Never use bare "div" or "span" — qualify with attribute or class.
+- Never use bare "div" or "span" - qualify with attribute or class.
 - For contenteditable: use div[contenteditable="true"] or the most specific stable selector.
 - NEVER produce a selector with more than 4 levels of nesting.
 - NEVER use nth-of-type more than once in a selector.
@@ -783,7 +783,7 @@ def _llm_extract_submit(html: str, page_url: str, prompt_input_selectors: list[s
         joined = ", ".join(s.strip() for s in prompt_input_selectors if s and str(s).strip())
         if joined:
             region_hint = f"""
-Region anchoring — these prompt/input field selector(s) are already verified:
+Region anchoring - these prompt/input field selector(s) are already verified:
   {joined}
 The submit button MUST lie in the SAME closest landmark/card/section subtree as those fields
 (wraps both the field and the button in the DOM). If the page repeats the same button pattern
@@ -808,7 +808,7 @@ Rules:
 - You MAY use Playwright CSS: spaces for descendants, and :has-text("visible label") on buttons/links when the label is distinctive (still scope when similar labels could exist elsewhere).
   Example pattern: section[aria-labelledby="x"] .action-row button:has-text("Send")
 - Prefer attributes (data-testid, type=submit, aria-label) when they are unique within that region.
-- Avoid long chains of generic divs with nth-of-type — prefer landmark + short path to the control.
+- Avoid long chains of generic divs with nth-of-type - prefer landmark + short path to the control.
 - Keep selectors short: at most a few descendant steps from the chosen landmark (or from document root if globally unique).
 """
     try:
@@ -839,7 +839,7 @@ def _llm_extract_response_selector(html: str, page_url: str, prompt_input_select
         joined = ", ".join(s.strip() for s in prompt_input_selectors if s and str(s).strip())
         if joined:
             region_hint = f"""
-Region anchoring — verified prompt/input selector(s):
+Region anchoring - verified prompt/input selector(s):
   {joined}
 The response container MUST stay inside the SAME landmark/section/card subtree as those fields.
 If the page has multiple similar chat UIs, do not match messages from another region.
@@ -860,11 +860,11 @@ Return ONLY valid JSON identifying the element that contains the AI's text respo
 
 Rules:
 - Prefer the model/assistant message container within the SAME region as the prompt (use heading ids, aria-labelledby, form or main boundaries visible in the HTML).
-- The selector SHOULD match each assistant turn in THAT conversation when possible (automation uses the last visible match) — still avoid crossing into another parallel widget on the same page.
+- The selector SHOULD match each assistant turn in THAT conversation when possible (automation uses the last visible match) - still avoid crossing into another parallel widget on the same page.
 - Prefer stable signals: [data-message-author-role], data-testid, roles, or short class paths that are not build hashes.
 - Avoid deep nth-of-type ladders; use a landmark + narrow subtree.
 - You MAY use Playwright :has-text only on static chrome, not on free-form model output.
-- Never return an empty string — pick the best candidate if uncertain.
+- Never return an empty string - pick the best candidate if uncertain.
 """
     try:
         resp = client.models.generate_content(model=model, contents=prompt)
@@ -1161,7 +1161,7 @@ async def _headless_verify_submit(
 
 
 # ---------------------------------------------------------------------------
-# API discovery — probe endpoint and save submission config
+# API discovery - probe endpoint and save submission config
 # ---------------------------------------------------------------------------
 
 def run_api_discovery(
@@ -1202,7 +1202,7 @@ def run_api_discovery(
     if api_model:
         submission["api_model"] = api_model
     elif "{{model}}" in api_url:
-        print("  [!] Model is required — URL contains {{model}}. Set the Model field (e.g. gemini-2.0-flash-lite).")
+        print("  [!] Model is required - URL contains {{model}}. Set the Model field (e.g. gemini-2.0-flash-lite).")
         return False
 
     from browser_bot.submit.api_helpers import resolve_api_url
@@ -1225,7 +1225,7 @@ def run_api_discovery(
             print("      Re-save your key in Step 1 with header x-goog-api-key, or add query param key.")
         return False
     if not response_text:
-        print("  [!] Probe returned empty response — check api_response_path")
+        print("  [!] Probe returned empty response - check api_response_path")
         return False
 
     comp_raw = load_component_config_raw(site, component)
@@ -1243,7 +1243,7 @@ def run_api_discovery(
 
 
 # ---------------------------------------------------------------------------
-# run_training — 6-step discovery pipeline
+# run_training - 6-step discovery pipeline
 # ---------------------------------------------------------------------------
 
 def run_manual_training(site: str, component: str) -> bool:
@@ -1382,14 +1382,14 @@ def run_manual_training(site: str, component: str) -> bool:
 
 def run_training(site: str, component: str) -> bool:
     """
-    Bulletproof 6-step discovery — fully automated after the first Enter:
+    Bulletproof 6-step discovery - fully automated after the first Enter:
 
-    1. Interactive browser   — user navigates to page, presses Enter
-    2. LLM extracts inputs   — printed, saved immediately
-    3. Headless verify input — fills 'Hello', reads back, screenshot
-    4. LLM extracts submit   — from filled-input HTML so send button is visible
-    5. Headless verify submit — fills + clicks, detects POST/URL change, captures response HTML
-    6. LLM extracts response selector — from post-response HTML
+    1. Interactive browser   - user navigates to page, presses Enter
+    2. LLM extracts inputs   - printed, saved immediately
+    3. Headless verify input - fills 'Hello', reads back, screenshot
+    4. LLM extracts submit   - from filled-input HTML so send button is visible
+    5. Headless verify submit - fills + clicks, detects POST/URL change, captures response HTML
+    6. LLM extracts response selector - from post-response HTML
     Config saved incrementally; edit config.yaml manually if any selector is wrong.
     """
     profile_path = get_login_profile_path(site)
@@ -1415,10 +1415,10 @@ def run_training(site: str, component: str) -> bool:
     }
 
     # -----------------------------------------------------------------------
-    # Step 1 — Interactive browser: user navigates, presses Enter
+    # Step 1 - Interactive browser: user navigates, presses Enter
     # -----------------------------------------------------------------------
     print("\n" + "─" * 50)
-    print("  [1/6] Opening browser — navigate to the submission page")
+    print("  [1/6] Opening browser - navigate to the submission page")
     print("        and press Enter when the input area is visible.")
     if has_profile:
         print("        Using persistent login profile for session restoration.")
@@ -1476,7 +1476,7 @@ def run_training(site: str, component: str) -> bool:
     save_component_rubric_for_site(site, component, full_html, page_url)
 
     # -----------------------------------------------------------------------
-    # Step 2 — LLM extracts input selector(s)
+    # Step 2 - LLM extracts input selector(s)
     # -----------------------------------------------------------------------
     print("\n" + "─" * 50)
     print("  [2/6] Extracting input selector via AI...")
@@ -1498,7 +1498,7 @@ def run_training(site: str, component: str) -> bool:
     print(f"  Saved {len(llm_inputs)} input(s).")
 
     # -----------------------------------------------------------------------
-    # Step 3 — Headless verify each input
+    # Step 3 - Headless verify each input
     # -----------------------------------------------------------------------
     print("\n" + "─" * 50)
     print("  [3/6] Verifying input selector(s) headlessly...")
@@ -1514,13 +1514,13 @@ def run_training(site: str, component: str) -> bool:
             print(f"  ✓ Input verified. Screenshot: {screenshot}")
         else:
             print(f"  ✗ Verification failed. Screenshot: {screenshot}")
-            print(f"    Proceeding — edit config.yaml if selector is wrong.")
+            print(f"    Proceeding - edit config.yaml if selector is wrong.")
 
     submission["inputs"] = confirmed_inputs
     _save_partial(site, component, submission)
 
     # -----------------------------------------------------------------------
-    # Step 4 — LLM extracts submit selector
+    # Step 4 - LLM extracts submit selector
     # Capture HTML with text already in the input so the send button is visible
     # -----------------------------------------------------------------------
     print("\n" + "─" * 50)
@@ -1556,7 +1556,7 @@ def run_training(site: str, component: str) -> bool:
     _save_partial(site, component, submission)
 
     # -----------------------------------------------------------------------
-    # Step 5 — Headless verify submit + capture response HTML
+    # Step 5 - Headless verify submit + capture response HTML
     # -----------------------------------------------------------------------
     print("\n" + "─" * 50)
     print("  [5/6] Verifying submit selector and capturing response headlessly...")
@@ -1579,10 +1579,10 @@ def run_training(site: str, component: str) -> bool:
             print(f"  Response HTML saved -> {rhtml_path}")
     else:
         print(f"  ✗ Submit verification failed. Screenshot: {screenshot}")
-        print(f"    Proceeding — edit config.yaml if selector is wrong.")
+        print(f"    Proceeding - edit config.yaml if selector is wrong.")
 
     # -----------------------------------------------------------------------
-    # Step 6 — LLM extracts response selector
+    # Step 6 - LLM extracts response selector
     # -----------------------------------------------------------------------
     print("\n" + "─" * 50)
     print("  [6/6] Extracting response selector via AI...")
@@ -1603,7 +1603,7 @@ def run_training(site: str, component: str) -> bool:
             _save_partial(site, component, submission)
             return False
     else:
-        print("  No response HTML available — response selector cannot be extracted.")
+        print("  No response HTML available - response selector cannot be extracted.")
         submission["response_selector"] = ""
         _save_partial(site, component, submission)
         return False

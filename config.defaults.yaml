@@ -26,10 +26,10 @@ settings:
   # --- Fetcher ---------------------------------------------------------------
   # Which browser tier to use for submissions.
   # Options: auto | pool | cluster | human
-  #   auto    — try pool → cluster → human until one works
-  #   pool    — fast shared browser pool (Tier 1)
-  #   cluster — larger parallel cluster (Tier 2)
-  #   human   — new context per request, most stealthy (Tier 3)
+  #   auto    - try pool → cluster → human until one works
+  #   pool    - fast shared browser pool (Tier 1)
+  #   cluster - larger parallel cluster (Tier 2)
+  #   human   - new context per request, most stealthy (Tier 3)
   FETCH_METHOD: pool
 
   # Number of concurrent browser pages in the pool tier (1–32).

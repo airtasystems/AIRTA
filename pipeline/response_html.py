@@ -1,7 +1,7 @@
 """
 Optional LLM step: add ``response_html`` to each compliance result when writing
 ``pipeline_report.json``. Converts raw ``response`` text (plain, Markdown-like,
-or mixed) into a small semantic HTML fragment — no outer wrappers (no html/body/div shell).
+or mixed) into a small semantic HTML fragment - no outer wrappers (no html/body/div shell).
 """
 
 from __future__ import annotations

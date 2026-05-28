@@ -406,7 +406,7 @@ DISCOVERY_VIEWPORT = {"width": 1440, "height": 900}
 
 
 def get_discovery_context_opts():
-    """Locale/geo from HUMAN_COUNTRY but fixed viewport — for login & discovery UIs."""
+    """Locale/geo from HUMAN_COUNTRY but fixed viewport - for login & discovery UIs."""
     country = HUMAN_COUNTRY.upper()
     preset = _COUNTRY_PRESETS.get(country, _COUNTRY_PRESETS["US"])
     vp = dict(DISCOVERY_VIEWPORT)

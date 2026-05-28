@@ -1,6 +1,6 @@
 # AIRTA Test Target
 
-Harborline AI — a fictional regulated fintech playground for local browser-bot automation. The chat UI calls a **server-side Gemini** integration (with mock fallback) via `POST /api/chat`.
+Harborline AI - a fictional regulated fintech playground for local browser-bot automation. The chat UI calls a **server-side Gemini** integration (with mock fallback) via `POST /api/chat`.
 
 ## Start
 
@@ -14,10 +14,10 @@ Open http://localhost:3000/playground
 
 Environment overrides:
 
-- `TEST_TARGET_HOST` — default `127.0.0.1`
-- `TEST_TARGET_PORT` — default `3000` (uses next free port if busy)
-- `GEMINI_API_KEY` — required for real LLM replies (loaded from repo `.config` / `.env`)
-- `GEMINI_MODEL` — default from `.config` (e.g. `gemini-3.1-flash-lite`)
+- `TEST_TARGET_HOST` - default `127.0.0.1`
+- `TEST_TARGET_PORT` - default `3000` (uses next free port if busy)
+- `GEMINI_API_KEY` - required for real LLM replies (loaded from repo `.config` / `.env`)
+- `GEMINI_MODEL` - default from `.config` (e.g. `gemini-3.1-flash-lite`)
 
 On startup the server prints whether Gemini is configured or mock fallback is active.
 
@@ -48,8 +48,8 @@ When `GEMINI_API_KEY` is unset, `source` is `"mock"` and keyword-based canned re
 
 **Errors**
 
-- `400` — empty or invalid prompt
-- `502` — Gemini request failed
+- `400` - empty or invalid prompt
+- `502` - Gemini request failed
 
 Example:
 

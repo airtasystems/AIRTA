@@ -1094,7 +1094,7 @@ createApp({
       },
       component: {
         title: 'Component Config',
-        text: 'Configures how browser-bot interacts with this component\'s UI — the page URL, input selector, submit button, and where to read the AI response from. Settings overrides mirror Browser Config and Cache Control; omitted keys inherit via site config, global config.py/.env, then config.defaults.yaml.',
+        text: 'Configures how browser-bot interacts with this component\'s UI - the page URL, input selector, submit button, and where to read the AI response from. Settings overrides mirror Browser Config and Cache Control; omitted keys inherit via site config, global config.py/.env, then config.defaults.yaml.',
       },
       config: {
         title: 'Global Config',
@@ -1200,7 +1200,7 @@ createApp({
     }
 
     function formatRunEta(sec) {
-      if (sec == null || sec === '' || Number.isNaN(Number(sec))) return '—';
+      if (sec == null || sec === '' || Number.isNaN(Number(sec))) return '-';
       const n = Number(sec);
       if (n <= 0) return '~0s';
       if (n < 90) return `~${Math.round(n)}s`;
@@ -1223,7 +1223,7 @@ createApp({
       if (p.type === 'run_start') return 'Starting tests…';
       if (p.type === 'run_done') return 'Tests complete';
       if (p.type === 'blocked') return p.message || 'Run blocked';
-      if (p.type === 'rate_limit_wait') return p.message || 'Rate limited — waiting…';
+      if (p.type === 'rate_limit_wait') return p.message || 'Rate limited - waiting…';
       return `${p.mode === 'multi' ? 'Multi-turn' : 'Single'} · ${p.current ?? 0} / ${p.total ?? 0} prompts`;
     });
 
@@ -1234,12 +1234,12 @@ createApp({
       if (p.phase === 'risk' || p.type === 'risk_progress' || p.type === 'risk_done') {
         if (p.type === 'risk_done') return `${formatRunEta(p.elapsed_sec)} total`;
         if (p.eta_sec != null && p.eta_sec !== '') return `ETA ${formatRunEta(p.eta_sec)} · ${formatRunEta(p.elapsed_sec)} elapsed`;
-        return '—';
+        return '-';
       }
       if (p.type === 'run_start' || p.type === 'suite') return 'Estimating…';
       if (p.type === 'run_done') return `${formatRunEta(p.elapsed_sec)} total`;
       if (p.eta_sec != null && p.eta_sec !== '') return `ETA ${formatRunEta(p.eta_sec)} · ${formatRunEta(p.elapsed_sec)} elapsed`;
-      return '—';
+      return '-';
     });
 
     /** Risk tab: standalone risk job, or run_tests job while in risk phase (e.g. after tests when “assess after” is on). */
@@ -1304,7 +1304,7 @@ createApp({
       await loadRunTestCatalog({ preserveSelection: true });
     }
 
-    // Lines to suppress in the run_tests console — individual prompt/response
+    // Lines to suppress in the run_tests console - individual prompt/response
     // entries are shown in the results table instead.
     function _isRunDetailLine(line) {
       const t = line.trimStart();
@@ -1617,7 +1617,7 @@ createApp({
       try {
         await api(`/api/sites/${encodeURIComponent(site.value)}/auth`, { method: 'DELETE' });
       } catch {
-        /* no auth file yet — still show choice */
+        /* no auth file yet - still show choice */
       }
       authConfigured.value = false;
       authMode.value = null;
@@ -1884,7 +1884,7 @@ createApp({
       }
       const model = (apiDiscover.model || '').trim();
       if (apiDiscover.url.includes('{{model}}') && !model) {
-        alert('Set the Model field — the API URL contains {{model}} (e.g. gemini-2.0-flash-lite).');
+        alert('Set the Model field - the API URL contains {{model}} (e.g. gemini-2.0-flash-lite).');
         return;
       }
       const j = await startJob('api_discover', {
@@ -2032,7 +2032,7 @@ createApp({
       await loadLlmApiPresets();
       await refreshJobs();
       if (!site.value) {
-        // Check .env for TARGET / COMPONENT defaults — skip modal if both are set
+        // Check .env for TARGET / COMPONENT defaults - skip modal if both are set
         try {
           const defaults = await api('/api/env-defaults');
           if (defaults.target && defaults.component) {

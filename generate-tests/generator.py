@@ -196,7 +196,7 @@ def main() -> None:
             parser.error(f"Rubric not found: {rubric_path} (use --framework <name> for e.g. eu_ai_act, fria_core, nist_ai_rmf)")
         filename = args.output or f"{framework.replace('_', '-')}.json"
 
-    # Resolve the final output path — component-scoped when --site/--component provided
+    # Resolve the final output path - component-scoped when --site/--component provided
     if args.site and args.component:
         browser_bot_dir = project_root / "browser-bot"
         output_path = str(

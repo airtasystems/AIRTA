@@ -1,4 +1,4 @@
-"""Job manager — spawn, track, stream, and cancel long-running tasks."""
+"""Job manager - spawn, track, stream, and cancel long-running tasks."""
 
 from __future__ import annotations
 
@@ -300,14 +300,14 @@ async def _start_generate(job: Job):
         global_spec = _root / "rubrics" / "component.json"
         if job.site and not company_rubric and global_company.is_file():
             job.output.append(
-                f"[warn] No browser-bot/sites/{job.site}/company.json — falling back to rubrics/company.json"
+                f"[warn] No browser-bot/sites/{job.site}/company.json - falling back to rubrics/company.json"
             )
             company_rubric = global_company
         elif not company_rubric and global_company.is_file():
             company_rubric = global_company
         if job.site and job.component and not spec_rubric and global_spec.is_file():
             job.output.append(
-                f"[warn] No browser-bot/sites/{job.site}/{job.component}/component.json — "
+                f"[warn] No browser-bot/sites/{job.site}/{job.component}/component.json - "
                 "falling back to rubrics/component.json"
             )
             spec_rubric = global_spec

@@ -6,14 +6,14 @@ Headers: Authorization: Bearer <key>, X-Program-Id: <id>
 Body: pipeline_report.json fields accepted by the import endpoint.
 
 Required env vars (or supplied via CLI / GUI):
-  AIRTASYSTEMS_HOST        — hostname (e.g. app.airtasystems.com or localhost:4000)
-  AIRTASYSTEMS_API_KEY     — API key scoped to write:bulk_import
-  AIRTASYSTEMS_PROGRAM_ID  — MongoDB ObjectId of the target program
+  AIRTASYSTEMS_HOST        - hostname (e.g. app.airtasystems.com or localhost:4000)
+  AIRTASYSTEMS_API_KEY     - API key scoped to write:bulk_import
+  AIRTASYSTEMS_PROGRAM_ID  - MongoDB ObjectId of the target program
 
 Optional env vars:
-  AIRTASYSTEMS_DEFAULT_LEVEL   — indeterminate | compliant | informational | low | medium | high | critical
-  AIRTASYSTEMS_EXPORT_BATCH_SIZE   — items per request (default: 10)
-  AIRTASYSTEMS_EXPORT_BATCH_DELAY_S — pause between requests in seconds (default: 2)
+  AIRTASYSTEMS_DEFAULT_LEVEL   - indeterminate | compliant | informational | low | medium | high | critical
+  AIRTASYSTEMS_EXPORT_BATCH_SIZE   - items per request (default: 10)
+  AIRTASYSTEMS_EXPORT_BATCH_DELAY_S - pause between requests in seconds (default: 2)
 """
 import json
 import os
@@ -159,7 +159,7 @@ def _post_json(
                 retry_after = _parse_retry_after(e.headers.get("Retry-After"))
                 wait_s = retry_after if retry_after is not None else min(60.0, 2.0 ** attempt)
                 print(
-                    f"    HTTP {e.code} — waiting {wait_s:.1f}s before retry "
+                    f"    HTTP {e.code} - waiting {wait_s:.1f}s before retry "
                     f"({attempt + 2}/{max_retries})..."
                 )
                 time.sleep(wait_s)
@@ -329,7 +329,7 @@ def export_pipeline_report(
 
         if success:
             print(
-                f"[+] Batch {idx} accepted — "
+                f"[+] Batch {idx} accepted - "
                 f"total={summary.get('total', '?')}, "
                 f"created={summary.get('created', '?')}, "
                 f"failed={summary.get('failed', '?')}"
@@ -353,5 +353,5 @@ def export_pipeline_report(
 
     created_total = sum(r.get("summary", {}).get("created", 0) for r in responses if "summary" in r)
     failed_total = sum(r.get("summary", {}).get("failed", 0) for r in responses if "summary" in r)
-    print(f"\n[+] Export complete — {created_total} created, {failed_total} failed across {len(batches)} batch(es).")
+    print(f"\n[+] Export complete - {created_total} created, {failed_total} failed across {len(batches)} batch(es).")
     return responses

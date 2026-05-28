@@ -1,4 +1,4 @@
-"""Subprocess wrapper for discovery — gives run_training its own event loop."""
+"""Subprocess wrapper for discovery - gives run_training its own event loop."""
 import os
 import sys
 from pathlib import Path

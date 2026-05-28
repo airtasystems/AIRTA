@@ -118,7 +118,7 @@ def resolve_api_url(sub: dict[str, Any], *, site: str | None = None) -> tuple[st
     url = (sub.get("api_url") or "").strip()
     model = (sub.get("api_model") or "").strip()
     if "{{model}}" in url and not model:
-        return None, "Model is required: URL contains {{model}} — set the Model field before connecting."
+        return None, "Model is required: URL contains {{model}} - set the Model field before connecting."
     if model and "{{model}}" in url:
         url = url.replace("{{model}}", model)
     url = _merge_url_query(url, auth_query_params_for_site(site))

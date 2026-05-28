@@ -1,4 +1,4 @@
-# Bulk Import API — Client Integration Guide
+# Bulk Import API - Client Integration Guide
 
 ## Endpoint
 
@@ -103,7 +103,7 @@ console.log(await res.json());
 
 ## Responses
 
-### Success — `207 Multi-Status`
+### Success - `207 Multi-Status`
 
 ```json
 {
@@ -146,6 +146,6 @@ Partial failures are reported in an `errors` array alongside successful inserts:
 ## Notes
 
 - `programId` can be provided in the JSON body instead of the header if preferred; body value takes precedence.
-- Requests time out after **5 minutes** — sufficient for the 5,000-item maximum.
+- Requests time out after **5 minutes** - sufficient for the 5,000-item maximum.
 - Imported reports are created with status `submitted` and `pointsAwarded: 0` by default.
 - Manage imported reports after upload via `GET/PUT/DELETE /api/v2/imported-reports/company/[id]`.

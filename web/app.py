@@ -1,4 +1,4 @@
-"""AIRTA — AI Risk Testing Agent. Web UI (FastAPI backend)."""
+"""AIRTA - AI Risk Testing Agent. Web UI (FastAPI backend)."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ STRATEGIES = [
     "directional_stimulus",
 ]
 
-app = FastAPI(title="AIRTA — AI Risk Testing Agent", docs_url="/api/docs")
+app = FastAPI(title="AIRTA - AI Risk Testing Agent", docs_url="/api/docs")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -785,7 +785,7 @@ async def api_export_result(job_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Credentials — stored in root .env, never returned to browser
+# Credentials - stored in root .env, never returned to browser
 # ---------------------------------------------------------------------------
 
 _ENV_FILE = _root / ".env"
@@ -845,7 +845,7 @@ class CredentialsBody(BaseModel):
 
 @app.get("/api/credentials")
 async def api_get_credentials():
-    """Return saved AIRTA Systems credentials — api_key is never sent, only has_api_key flag."""
+    """Return saved AIRTA Systems credentials - api_key is never sent, only has_api_key flag."""
     env = _read_env()
     return {
         "host": env.get("AIRTASYSTEMS_HOST", ""),

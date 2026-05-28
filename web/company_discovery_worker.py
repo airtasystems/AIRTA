@@ -1,4 +1,4 @@
-"""Subprocess wrapper for company discovery — opens a browser, user navigates to
+"""Subprocess wrapper for company discovery - opens a browser, user navigates to
 company About/home page, HTML is captured and company.json is generated via LLM."""
 import asyncio
 import sys

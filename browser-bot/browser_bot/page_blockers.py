@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 ADVICE_BY_KIND: dict[str, list[str]] = {
     "login_required": [
         "Click Log in in the dialog to open a browser window.",
-        "After sign-in, click Save auth — tests will re-run automatically.",
+        "After sign-in, click Save auth - tests will re-run automatically.",
     ],
     "captcha": [
         "Switch Fetch Method to human and disable Headless, complete the captcha during Add Login, then try again.",
@@ -26,7 +26,7 @@ ADVICE_BY_KIND: dict[str, list[str]] = {
         "Click Wait & retry in the dialog, or reduce pool size / concurrency in Settings.",
     ],
     "not_ready": [
-        "Check the live preview — prompt box or send button may be missing.",
+        "Check the live preview - prompt box or send button may be missing.",
         "Re-run Discovery if selectors changed.",
     ],
 }
@@ -64,7 +64,7 @@ LOGIN_PAGE_PHRASES = (
     "continue with microsoft",
 )
 
-# Visible login UI — more reliable than body text alone (ChatGPT keeps #prompt-textarea on login page).
+# Visible login UI - more reliable than body text alone (ChatGPT keeps #prompt-textarea on login page).
 LOGIN_WALL_SELECTORS = (
     'text=Log in or sign up',
     'text=Log in to continue',
@@ -269,7 +269,7 @@ async def _attempt_auth_self_heal(page: Page, site: str, start_url: str) -> bool
     target = start_url or page.url
     if not target:
         return False
-    print("[*] Login screen detected — reloading saved session…", flush=True)
+    print("[*] Login screen detected - reloading saved session…", flush=True)
     try:
         await page.goto(target, wait_until="domcontentloaded", timeout=60000)
         try:
@@ -296,7 +296,7 @@ def _raise_login_blocked(
         )
     login_url = _resolve_login_url(site, component, start_url)
     if _site_has_saved_session(site):
-        msg = "Session expired — sign in to continue tests."
+        msg = "Session expired - sign in to continue tests."
     else:
         msg = "Sign-in required to continue tests."
     advice = ADVICE_BY_KIND["login_required"]
@@ -404,12 +404,12 @@ async def _attempt_rate_limit_self_heal(
     backoff, auto_wait = _rate_limit_settings(site, component)
     if not auto_wait or backoff <= 0:
         return False
-    print(f"[*] Rate limit detected — waiting {backoff:.0f}s before retry…", flush=True)
+    print(f"[*] Rate limit detected - waiting {backoff:.0f}s before retry…", flush=True)
     log_airta_progress(
         {
             "type": "rate_limit_wait",
             "backoff_sec": backoff,
-            "message": f"Rate limited — waiting {backoff:.0f}s…",
+            "message": f"Rate limited - waiting {backoff:.0f}s…",
         }
     )
     await asyncio.sleep(backoff)
@@ -444,7 +444,7 @@ def _raise_rate_limit_blocked(
             component,
             [{"selector": "text=Too many requests", "label": "rate limit", "action": "detect"}],
         )
-    msg = "Rate limited — wait before retrying tests."
+    msg = "Rate limited - wait before retrying tests."
     advice = ADVICE_BY_KIND["rate_limited"]
     _emit_blocked(
         "rate_limited",
@@ -533,7 +533,7 @@ async def detect_heuristic_blockers(page: Page, *, start_url: str = "") -> list[
         found.append(
             {
                 "kind": "rate_limited",
-                "message": "Rate limited — wait before retrying tests.",
+                "message": "Rate limited - wait before retrying tests.",
             }
         )
 
@@ -578,7 +578,7 @@ async def check_submission_readiness(
 ) -> tuple[bool, str]:
     """Return (ready, reason) when prompt inputs are visible.
 
-    Submit button is intentionally not checked here — many chat UIs hide or
+    Submit button is intentionally not checked here - many chat UIs hide or
     disable send until the prompt field has text (_do_one_submit_step handles that).
     """
     del submit_selector  # kept for call-site compatibility
@@ -640,9 +640,9 @@ def _blocked_message(kind: str, detail: str) -> str:
     if kind == "login_required":
         return "Sign-in required to continue tests."
     if kind == "rate_limited":
-        return "Rate limited — wait before retrying tests."
+        return "Rate limited - wait before retrying tests."
     if kind == "captcha":
-        return "Captcha detected — use Add Login with Headless off, then try again."
+        return "Captcha detected - use Add Login with Headless off, then try again."
     if kind == "not_ready":
         return f"Prompt UI not ready: {detail}"
     return f"Cannot proceed: {detail}"

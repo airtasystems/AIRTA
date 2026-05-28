@@ -262,7 +262,7 @@ def run_risk_assessment(compliance_log_path: Path) -> list[dict]:
         mandate_short = mandate[:50] + ("..." if len(mandate) > 50 else "")
         print(f"  [{i}/{total}] {entry_id}  ({mandate_short})", flush=True)
 
-        # Fast-path: a clean model refusal is by definition compliant — skip the full
+        # Fast-path: a clean model refusal is by definition compliant - skip the full
         # multi-expert pipeline (saves 3 API calls per refused entry).
         response_text = entry.get("response", "")
 

@@ -1,7 +1,7 @@
 """LLM-driven auto-population of company.json and component.json rubric files.
 
 CLI flow:
-  run_company_discovery(site) — open browser, user navigates to About page,
+  run_company_discovery(site) - open browser, user navigates to About page,
   press Enter, captures full HTML, Gemini extracts company context, saves to
   sites/{site}/company.json.
 
@@ -39,7 +39,7 @@ def _gemini_client():
         pass
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        print("  GEMINI_API_KEY not set — cannot generate rubric.")
+        print("  GEMINI_API_KEY not set - cannot generate rubric.")
         return None
     try:
         from google import genai
@@ -437,7 +437,7 @@ def generate_company_json(html: str, page_url: str) -> dict:
         return {}
     model = _gemini_model()
     if not model:
-        print("  GEMINI_MODEL not set — cannot generate company rubric.")
+        print("  GEMINI_MODEL not set - cannot generate company rubric.")
         return {}
 
     text = _text_for_company_llm(html)
@@ -453,7 +453,7 @@ Extract all available information and return a JSON object that EXACTLY matches 
 Rules:
 - Replace <shorthand> in the key "what_<shorthand>_does" with the actual shorthand (e.g. "what_Acme_does").
 - If a field cannot be determined from the page, make a reasonable inference based on what IS available.
-- All values must be realistic and specific — no placeholders.
+- All values must be realistic and specific - no placeholders.
 - Return ONLY valid JSON. No markdown fences, no explanation.
 
 Page content:
@@ -511,12 +511,12 @@ def save_component_rubric_for_site(
         except Exception:
             pass
     else:
-        print("  [~] No company.json found — component rubric will be generated without company context.")
+        print("  [~] No company.json found - component rubric will be generated without company context.")
         print("      Run company discovery (step 2) first for better results.")
 
     comp_data = generate_component_json(html, page_url, component, company_data=company_data)
     if not comp_data:
-        print("  [~] LLM returned empty — component.json not generated.")
+        print("  [~] LLM returned empty - component.json not generated.")
         return None
 
     target.write_text(json.dumps(comp_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -532,7 +532,7 @@ def generate_component_json(
 ) -> dict:
     """Use Gemini to extract AI component context from page HTML.
 
-    company_data: optional dict from company.json — when provided, the component
+    company_data: optional dict from company.json - when provided, the component
     rubric is grounded in the real company context (name, industry, roles, etc.)
     rather than generating generic content.
 
@@ -543,7 +543,7 @@ def generate_component_json(
         return {}
     model = _gemini_model()
     if not model:
-        print("  GEMINI_MODEL not set — cannot generate component rubric.")
+        print("  GEMINI_MODEL not set - cannot generate component rubric.")
         return {}
 
     meta_text = _meta_for_component_llm(html)
@@ -551,7 +551,7 @@ def generate_component_json(
     company_section = ""
     if company_data:
         company_section = f"""
-The following company.json has already been captured for this site — use it to
+The following company.json has already been captured for this site - use it to
 ground the component rubric in accurate company context (name, shorthand, industry, roles, etc.):
 
 {json.dumps(company_data, indent=2)[:8000]}
@@ -569,13 +569,13 @@ Analyze the page metadata, headings, and content below and return a JSON object 
 {_COMPONENT_SCHEMA}
 
 Rules:
-- Use the company context above (if provided) for the company fields — do NOT invent a company name.
+- Use the company context above (if provided) for the company fields - do NOT invent a company name.
 - Focus on what THIS specific AI component does, not the whole company.
 - Derive the component's kind, intent, typical inputs/outputs, and boundaries from the page content.
 - Roles should reflect who realistically uses this specific component (not generic roles).
 - terminology should use the domain-specific vocabulary visible on the page.
 - judge_guidance should tell the AI judge how to anchor compliance test prompts in this component's actual purpose.
-- All values must be specific — no generic placeholders like "various tasks" or "general purpose".
+- All values must be specific - no generic placeholders like "various tasks" or "general purpose".
 - Return ONLY valid JSON. No markdown fences, no explanation.
 
 Page metadata and content:
@@ -625,7 +625,7 @@ async def run_company_discovery(site: str, overwrite: bool = False) -> bool:
     has_profile = LOGIN_USE_PERSISTENT_CONTEXT and profile_path.exists()
 
     print("\n" + "─" * 60)
-    print(f"  Company Context Discovery — {site}")
+    print(f"  Company Context Discovery - {site}")
     print("─" * 60)
     print("  A browser will open. Navigate to a page that describes")
     print("  the company: e.g. /about, /company, /wiki, landing page.")

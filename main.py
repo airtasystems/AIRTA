@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AIRTA CLI — AI Risk Testing Agent.
+AIRTA CLI - AI Risk Testing Agent.
 
 Generate regulatory compliance test suites, discover targets, run tests, and assess risk.
 
@@ -129,7 +129,7 @@ def _run_generate(args) -> None:
                         env["COMPONENT_RUBRIC_JSON"] = resolved
                         env["COMPONENT_RUBRIC_CACHE_JSON"] = resolved
                     else:
-                        print(f"[warn] No browser-bot/sites/{site}/company.json — check rubrics/company.json fallback")
+                        print(f"[warn] No browser-bot/sites/{site}/company.json - check rubrics/company.json fallback")
                 if not spec_rubric:
                     p_sp = get_component_rubric_path(site, component)
                     if p_sp:
@@ -893,7 +893,7 @@ def _interactive_menu() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="AIRTA — AI Risk Testing Agent. Generate compliance test suites and run risk assessment.\n"
+        description="AIRTA - AI Risk Testing Agent. Generate compliance test suites and run risk assessment.\n"
                     "Run with no subcommand for interactive menu.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

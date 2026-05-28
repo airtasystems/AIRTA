@@ -147,7 +147,7 @@ def _gemini_call_with_retry(fn, *args, **kwargs):
             exc = retry_state.outcome.exception()
             n = retry_state.attempt_number
             logging.warning(
-                "Gemini transient error (attempt %d/%d): %s — retrying...", n, GEMINI_RETRY_ATTEMPTS, exc
+                "Gemini transient error (attempt %d/%d): %s - retrying...", n, GEMINI_RETRY_ATTEMPTS, exc
             )
 
         decorated = _tenacity_retry(
@@ -170,7 +170,7 @@ def _gemini_call_with_retry(fn, *args, **kwargs):
             jitter = random.uniform(-GEMINI_RETRY_JITTER_SECS, GEMINI_RETRY_JITTER_SECS)
             wait = min(delay + jitter, GEMINI_RETRY_MAX_SECS)
             logging.warning(
-                "Gemini transient error (attempt %d/%d): %s — retrying in %.0fs...",
+                "Gemini transient error (attempt %d/%d): %s - retrying in %.0fs...",
                 attempt, GEMINI_RETRY_ATTEMPTS, exc, wait,
             )
             time.sleep(wait)

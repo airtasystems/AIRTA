@@ -26,7 +26,7 @@ LLM_API_PRESETS: list[dict[str, Any]] = [
     {
         "id": "openai",
         "label": "OpenAI Chat Completions",
-        "description": "POST https://api.openai.com/v1/chat/completions — Step 1: API key, header Authorization (Bearer).",
+        "description": "POST https://api.openai.com/v1/chat/completions - Step 1: API key, header Authorization (Bearer).",
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
         "response_path": "choices.0.message.content",
@@ -57,7 +57,7 @@ LLM_API_PRESETS: list[dict[str, Any]] = [
     {
         "id": "anthropic",
         "label": "Anthropic Messages",
-        "description": "POST https://api.anthropic.com/v1/messages — Step 1: x-api-key. Requires anthropic-version header (preset includes it).",
+        "description": "POST https://api.anthropic.com/v1/messages - Step 1: x-api-key. Requires anthropic-version header (preset includes it).",
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
         "response_path": "content.0.text",
@@ -89,7 +89,7 @@ LLM_API_PRESETS: list[dict[str, Any]] = [
     {
         "id": "test_target",
         "label": "AIRTA test target (local)",
-        "description": "Harborline test app — no API key; start python test-target/app.py first.",
+        "description": "Harborline test app - no API key; start python test-target/app.py first.",
         "url": "http://127.0.0.1:3000/api/chat",
         "method": "POST",
         "response_path": "response",

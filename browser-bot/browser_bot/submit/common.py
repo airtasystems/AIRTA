@@ -103,7 +103,7 @@ _TEXT_TYPES = {"text", "textarea", "contenteditable", "password", "email", "sear
 
 # Matches a leading role label like "Assistant\n", "AI\n", "Bot\n", "User\n" etc.
 # A role label is a short (≤30 char) run of non-newline characters at the very
-# start of the string, followed by a newline — with no spaces (so full sentences
+# start of the string, followed by a newline - with no spaces (so full sentences
 # are not stripped).
 _ROLE_LABEL_RE = re.compile(r"^\S{1,30}\n+", re.UNICODE)
 _EMPTY_RESPONSE_MARKERS = {
@@ -393,7 +393,7 @@ async def _response_selector_text(
 ) -> str:
     """Read inner_text: scope to bubble/container, optionally read from a narrower leaf only.
 
-    Use ``text_within_selector`` when the container includes labels or footer widgets — for
+    Use ``text_within_selector`` when the container includes labels or footer widgets - for
     example a Playwright-relative ``> p`` on the bubble picks the assistant body paragraph
     while the bubble itself stays the visibility anchor during streaming.
     When the leaf is missing (spinner-only phase), falls back to the container's inner_text.
@@ -430,7 +430,7 @@ async def _wait_for_response_selector_text(
 ) -> str:
     """Poll until inner text differs from baseline and stays stable (`stable_ms`), or deadline.
 
-    `timeout_ms` is the maximum time to poll — not a minimum sleep before returning.
+    `timeout_ms` is the maximum time to poll - not a minimum sleep before returning.
     If `previous_text` is ``None`` (baseline could not be read before submit), the first sample
     after waiting starts establishes the baseline so existing DOM copy is not mistaken for the
     new model reply (previously any non‑empty node satisfied `current != ""` and exited in ~1s).
@@ -708,7 +708,7 @@ async def _do_one_submit_step(
 
     # Only retry on genuine server-side transient failures (rate-limit or 5xx).
     # Ignore 4xx from background app calls (analytics, polling, etc.) that happen
-    # to fire during response_wait_ms — those are not submission failures.
+    # to fire during response_wait_ms - those are not submission failures.
     # Also skip if we already captured content: the submit succeeded.
     if full_content is None:
         page_origin = page.url.split("/", 3)[:3]

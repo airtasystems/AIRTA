@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIRTA — AI Risk Testing Agent</title>
+<title>AIRTA - AI Risk Testing Agent</title>
 <link rel="icon" href="/img/AIRTA Systems.ico" sizes="any">
 <link rel="icon" type="image/svg+xml" href="/img/airtasystems-logo.png">
 <link rel="apple-touch-icon" href="/img/airtasystems-logo.png">
@@ -116,7 +116,7 @@
   <div v-if="showTmImportHelpModal" class="modal-backdrop" @click.self="showTmImportHelpModal = false">
     <div class="modal modal-import-help">
       <div class="modal-sub" style="margin-bottom:8px;">Import format reference</div>
-      <p class="modal-import-intro">Upload <code>.json</code> via <strong>Import zero-shot prompts</strong> (saved to <code>tests/zero-shot/&lt;filename&gt;.json</code>). Multi-shot suites use the same mandate wrapper but each case needs a <code>prompts</code> turn array — create those under <code>tests/multi-shot/</code> or edit them in Test Management after generation.</p>
+      <p class="modal-import-intro">Upload <code>.json</code> via <strong>Import zero-shot prompts</strong> (saved to <code>tests/zero-shot/&lt;filename&gt;.json</code>). Multi-shot suites use the same mandate wrapper but each case needs a <code>prompts</code> turn array - create those under <code>tests/multi-shot/</code> or edit them in Test Management after generation.</p>
       <div class="modal-help modal-help-columns">
         <section class="modal-help-col">
           <h4 class="modal-help-col-title">Zero-shot</h4>
@@ -144,7 +144,7 @@
 }</pre>
             </div>
             <div class="modal-format-card modal-format-card-wide">
-              <p><strong>Full suite</strong> — multiple <code>mandates</code>, each with a <code>prompts</code> list of cases.</p>
+              <p><strong>Full suite</strong> - multiple <code>mandates</code>, each with a <code>prompts</code> list of cases.</p>
               <pre>{
   "framework": "EU AI Act",
   "mandates": [{
@@ -225,7 +225,7 @@
     <div class="modal modal-wide">
       <div class="modal-sub" style="margin-bottom:12px;">Rate limited</div>
       <div class="modal-help">
-        <p>Tests paused — the target is showing a <strong>too many requests</strong> dialog (rate limit).</p>
+        <p>Tests paused - the target is showing a <strong>too many requests</strong> dialog (rate limit).</p>
         <p v-if="runBlockedInfo && runBlockedInfo.auto_wait_attempted === false">
           Auto-wait is off in Settings. Wait at least <strong>{{ formatRateLimitWait(runRateLimitBackoff) }}</strong>, then retry.
         </p>
@@ -249,7 +249,7 @@
     <div class="modal modal-wide">
       <div class="modal-sub" style="margin-bottom:12px;">Sign-in required</div>
       <div class="modal-help">
-        <p>Tests paused — <strong>{{ site }}</strong> is showing a login screen and saved auth is missing or expired.</p>
+        <p>Tests paused - <strong>{{ site }}</strong> is showing a login screen and saved auth is missing or expired.</p>
         <template v-if="!loginRunning">
           <p>Click <strong>Log in</strong> to open a browser window. Sign in to the target app, then click <strong>Save auth</strong>. Tests will re-run automatically.</p>
         </template>
@@ -446,7 +446,7 @@
                   <div class="form-row">
                     <label>Query param</label>
                     <input v-model="authApiKeyQueryParam" placeholder="e.g. key (Gemini ?key=)" style="max-width:200px;font-family:var(--mono);font-size:12px;">
-                    <span class="cfg-note" style="margin:0;">Optional — appended to API URL</span>
+                    <span class="cfg-note" style="margin:0;">Optional - appended to API URL</span>
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
                     <button type="button" class="btn btn-primary" @click="saveAuthApiKey" :disabled="!site || !authApiKey.trim() || authApiKeySaving">
@@ -527,7 +527,7 @@
                 </template>
 
                 <template v-else>
-                  <p>Pick a provider preset, set URL/model/body/response path, then probe the API. Use <code>{{ PROMPT_TEMPLATE_HINT }}</code> for the test prompt and <code>{{ PROMPT_MODEL_HINT }}</code> for model/deployment ids. Keys from Step 1 are sent automatically — do not paste secrets into the body.</p>
+                  <p>Pick a provider preset, set URL/model/body/response path, then probe the API. Use <code>{{ PROMPT_TEMPLATE_HINT }}</code> for the test prompt and <code>{{ PROMPT_MODEL_HINT }}</code> for model/deployment ids. Keys from Step 1 are sent automatically - do not paste secrets into the body.</p>
                   <div v-if="apiNeedsAuth && !apiAuthReady" class="hint-banner" style="margin-bottom:12px;">
                     <div><strong>API key required</strong><p>Save your provider API key in Step 1 (Target access → API key) before connecting.</p></div>
                     <button type="button" class="btn btn-ghost btn-sm" @click="chooseAuthApiKey">Set up API key</button>

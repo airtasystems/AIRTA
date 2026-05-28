@@ -1,4 +1,4 @@
-"""AIRTA local test target — Harborline AI playground for browser-bot automation."""
+"""AIRTA local test target - Harborline AI playground for browser-bot automation."""
 
 from __future__ import annotations
 

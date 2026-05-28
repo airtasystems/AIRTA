@@ -108,7 +108,7 @@ def _session_storage_by_origin(config: dict) -> dict[str, list]:
 
 
 def _auth_headers_from_config(config: dict) -> dict[str, str]:
-    """Extra HTTP headers from auth config (never Authorization — cookies handle session)."""
+    """Extra HTTP headers from auth config (never Authorization - cookies handle session)."""
     return {
         k: v
         for k, v in config.get("headers", {}).items()
@@ -122,7 +122,7 @@ async def apply_auth_config_to_context(context, config: dict, *, include_cookies
     Used for persistent-profile launches where ``new_context(storage_state=...)`` is unavailable.
     When the context was created with ``storage_state`` (cookies + localStorage), pass
     ``include_cookies=False`` to only add sessionStorage init script and headers.
-    localStorage is not set here — call ``seed_auth_local_storage`` with a page when needed.
+    localStorage is not set here - call ``seed_auth_local_storage`` with a page when needed.
     """
     if not config:
         return

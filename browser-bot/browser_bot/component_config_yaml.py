@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 COMPONENT_CONFIG_INTRO = """# =============================================================================
-# Component config — browser-bot/sites/<site>/<component>/config.yaml
+# Component config - browser-bot/sites/<site>/<component>/config.yaml
 # =============================================================================
 #
 # Tells browser-bot how to drive this AI product's UI: where to log in, which page
@@ -46,7 +46,7 @@ SETTINGS_OVERRIDES_EXAMPLE = """
 #   EVASION_REQUEST_DELAY_S: 0.5
 """
 
-_INPUT_TYPE_COMMENT = """      # Input type — affects how Playwright fills the field:
+_INPUT_TYPE_COMMENT = """      # Input type - affects how Playwright fills the field:
       #   text | textarea | contenteditable | password | email | search
       #   select | combobox | checkbox | radio"""
 
@@ -100,7 +100,7 @@ def _format_api_submission(submission: dict[str, Any]) -> list[str]:
     import yaml
 
     lines = [
-        "# --- API submission (direct HTTP — no browser selectors required) -------------",
+        "# --- API submission (direct HTTP - no browser selectors required) -------------",
         "submission:",
         "  # Transport: ui (browser automation) | api (HTTP endpoint)",
         "  transport: api",
@@ -161,7 +161,7 @@ def _format_submission(submission: dict[str, Any]) -> list[str]:
     if transport == "api":
         return _format_api_submission(submission)
     lines = [
-        "# --- UI submission (browser automation — Run Tests / Sample Request) ----------",
+        "# --- UI submission (browser automation - Run Tests / Sample Request) ----------",
         "submission:",
         "  # Transport: ui (browser automation) | api (HTTP endpoint)",
         "  transport: ui",
@@ -176,7 +176,7 @@ def _format_submission(submission: dict[str, Any]) -> list[str]:
         "  # Element that sends the prompt (button, etc.).",
         f"  submit_selector: {_yaml_scalar(submission.get('submit_selector', ''))}",
         "",
-        "  # Container(s) for assistant output — roots the response capture.",
+        "  # Container(s) for assistant output - roots the response capture.",
         "  # Often a message list, bubble, or [data-testid=\"assistant-message\"].",
         f"  response_selector: {_yaml_scalar(submission.get('response_selector', ''))}",
         "",
@@ -185,13 +185,13 @@ def _format_submission(submission: dict[str, Any]) -> list[str]:
     within = submission.get("response_within_selector")
     if within:
         lines.extend([
-            "  # Descendant under response_selector — last visible match wins.",
+            "  # Descendant under response_selector - last visible match wins.",
             f"  response_within_selector: {_yaml_scalar(within)}",
             "",
         ])
     else:
         lines.extend([
-            "  # Optional: descendant under response_selector — last visible match wins.",
+            "  # Optional: descendant under response_selector - last visible match wins.",
             "  # Use when the root holds multiple messages and you want the latest bubble.",
             "  # response_within_selector: div.message-body",
             "",
@@ -217,7 +217,7 @@ def _format_submission(submission: dict[str, Any]) -> list[str]:
     if blockers:
         lines.extend([
             "",
-            "  # Optional blockers — cookie banners, dialogs (action: click | detect).",
+            "  # Optional blockers - cookie banners, dialogs (action: click | detect).",
             "  # Auto-discovered on failed runs and saved here for next time.",
             "  blockers:",
         ])
@@ -250,8 +250,8 @@ def _format_submission(submission: dict[str, Any]) -> list[str]:
     lines.extend([
         "",
         "  # Optional multi-turn UI mode (for tree-of-thoughts / batched suites):",
-        "  # mode: single | multi     — single = one prompt per case (default)",
-        "  # batch_size: 3           — if >1 without mode, implies multi",
+        "  # mode: single | multi     - single = one prompt per case (default)",
+        "  # batch_size: 3           - if >1 without mode, implies multi",
     ])
     return lines
 
@@ -277,8 +277,8 @@ def _format_settings(settings: dict[str, Any]) -> list[str]:
 def _format_submission_skeleton() -> list[str]:
     return [
         "# --- Submission (choose one transport) -----------------------------------------",
-        "# transport: ui   — browser automation (Discovery records selectors)",
-        "# transport: api  — direct HTTP endpoint (Connect via API below)",
+        "# transport: ui   - browser automation (Discovery records selectors)",
+        "# transport: api  - direct HTTP endpoint (Connect via API below)",
         "#",
         "# UI example:",
         "# submission:",
@@ -329,7 +329,7 @@ def format_component_config_yaml(config: dict[str, Any]) -> str:
     optional_auth: list[tuple[str, str]] = [
         ("endpoint_url", "# Optional: API endpoint URL for legacy fetch modes."),
         ("refresh_url", "# Optional: token refresh URL (often set at site level)."),
-        ("refresh_mode", "# Optional: cookie | both — how refresh requests are sent."),
+        ("refresh_mode", "# Optional: cookie | both - how refresh requests are sent."),
         ("refresh_cookies", "# Optional: cookie names to send on refresh."),
     ]
     has_optional_auth = False

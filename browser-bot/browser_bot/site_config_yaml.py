@@ -8,7 +8,7 @@ from typing import Any
 from browser_bot.component_config_yaml import DEFAULT_SETTINGS_OVERRIDES, SETTINGS_OVERRIDES_EXAMPLE, _yaml_scalar
 
 SITE_CONFIG_INTRO = """# =============================================================================
-# Site config — browser-bot/sites/<site>/config.yaml
+# Site config - browser-bot/sites/<site>/config.yaml
 # =============================================================================
 #
 # Shared settings for every component on this site. Component config.yaml

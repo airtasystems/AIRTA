@@ -81,8 +81,8 @@ def main() -> None:
         print(f"No rubrics found in {rubrics_dir}.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[*] Strategies: {len(strategies)} — {strategies}")
-    print(f"[*] Frameworks: {len(frameworks)} — {frameworks}")
+    print(f"[*] Strategies: {len(strategies)} - {strategies}")
+    print(f"[*] Frameworks: {len(frameworks)} - {frameworks}")
     print()
 
     to_run: list[tuple[str, str]] = []

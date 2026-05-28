@@ -1,4 +1,4 @@
-"""Subprocess wrapper for login — opens a browser, user logs in, auth state is saved."""
+"""Subprocess wrapper for login - opens a browser, user logs in, auth state is saved."""
 import asyncio
 import sys
 from pathlib import Path

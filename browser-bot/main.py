@@ -215,7 +215,7 @@ async def run_with_page_from_fetchers(
     Run callback(page) using first successful fetcher.
     interactive=True: headless=False, allow_all=True (for login, create config). Only Human supports this.
     allow_all: when True, skip resource blocking (e.g. for refresh). Can be used without interactive.
-    headless: explicit override — True forces headless regardless of config, False forces visible.
+    headless: explicit override - True forces headless regardless of config, False forces visible.
               When None (default), interactive=True → False, interactive=False → uses config HEADLESS.
     storage_state: optional dict (overrides storage_path). Only Human supports this.
     human_only: when True, skip pool/cluster setup and fetchers (same as FETCH_METHOD=human). Use for discovery / selector recording.
@@ -467,9 +467,9 @@ async def run_posts(site: str | None = None, component: str | None = None, *, mo
                 tier = parts[0].strip()
                 rest = parts[1].strip()
                 vals = rest.replace("s", "").split()
-                total = vals[1] if len(vals) > 1 else "—"
-                avg = vals[3] if len(vals) > 3 else "—"
-                count = vals[5] if len(vals) > 5 else "—"
+                total = vals[1] if len(vals) > 1 else "-"
+                avg = vals[3] if len(vals) > 3 else "-"
+                count = vals[5] if len(vals) > 5 else "-"
                 table.add_row(tier, f"{total}s", f"{avg}s", count)
         console.print()
         console.print(table)
