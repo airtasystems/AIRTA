@@ -1811,7 +1811,7 @@ createApp({
     const discoverTransport = ref('browser');
     const apiDiscover = reactive({
       presetId: 'custom',
-      url: '',
+      url: 'http://localhost:3000/api/chat',
       method: 'POST',
       responsePath: 'response',
       model: '',

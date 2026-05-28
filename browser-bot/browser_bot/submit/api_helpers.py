@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import urllib.error
 import urllib.request
 from typing import Any
+
+ConversationTurn = tuple[str, str | None]
 
 
 def apply_prompt_template(obj: Any, prompt: str, *, model: str = "") -> Any:
@@ -113,6 +116,73 @@ def auth_query_params_for_site(site: str | None) -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items() if v is not None and str(v).strip()}
 
 
+def _body_contains_messages_placeholder(obj: Any) -> bool:
+    if isinstance(obj, str):
+        return "{{messages}}" in obj
+    if isinstance(obj, dict):
+        return any(_body_contains_messages_placeholder(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_body_contains_messages_placeholder(v) for v in obj)
+    return False
+
+
+def uses_messages_context(sub: dict[str, Any]) -> bool:
+    """True when API runs should send a growing chat ``messages`` array (multi-turn)."""
+    mode = (sub.get("api_context_mode") or "").strip().lower()
+    if mode == "messages":
+        return True
+    return _body_contains_messages_placeholder(sub.get("api_body") or {})
+
+
+def build_conversation_messages(
+    sub: dict[str, Any],
+    user_prompt: str,
+    conversation_history: list[ConversationTurn] | None,
+) -> list[dict[str, str]]:
+    """Build OpenAI-style messages: optional prefix, prior user/assistant turns, current user."""
+    messages: list[dict[str, str]] = []
+    prefix = sub.get("api_messages_prefix") or []
+    if isinstance(prefix, list):
+        for item in prefix:
+            if not isinstance(item, dict):
+                continue
+            role = (item.get("role") or "").strip()
+            content = item.get("content")
+            if role and content is not None:
+                messages.append({"role": role, "content": str(content)})
+    for prompt_text, response_text in conversation_history or []:
+        messages.append({"role": "user", "content": prompt_text})
+        if response_text:
+            messages.append({"role": "assistant", "content": response_text})
+    messages.append({"role": "user", "content": user_prompt})
+    return messages
+
+
+def _substitute_messages_placeholder(obj: Any, messages: list[dict[str, str]]) -> Any:
+    if isinstance(obj, str):
+        return messages if obj.strip() == "{{messages}}" else obj
+    if isinstance(obj, dict):
+        return {k: _substitute_messages_placeholder(v, messages) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_substitute_messages_placeholder(v, messages) for v in obj]
+    return obj
+
+
+def build_api_request_body(
+    sub: dict[str, Any],
+    prompt: str,
+    *,
+    model: str = "",
+    conversation_history: list[ConversationTurn] | None = None,
+) -> Any:
+    """Build the JSON body for one API request (single-turn or messages context)."""
+    template = copy.deepcopy(sub.get("api_body") or {"prompt": "{{prompt}}"})
+    if uses_messages_context(sub):
+        chat_messages = build_conversation_messages(sub, prompt, conversation_history)
+        template = _substitute_messages_placeholder(template, chat_messages)
+    return apply_prompt_template(template, prompt, model=model)
+
+
 def resolve_api_url(sub: dict[str, Any], *, site: str | None = None) -> tuple[str | None, str | None]:
     """Resolve final request URL (model + auth query). Returns ``(url, error)``."""
     url = (sub.get("api_url") or "").strip()
@@ -130,6 +200,7 @@ def do_api_request(
     prompt: str,
     *,
     site: str | None = None,
+    conversation_history: list[ConversationTurn] | None = None,
     timeout: float = 120.0,
 ) -> tuple[int, str | None, str | None]:
     """Send one API submission. Returns ``(status_code, response_text, error)``."""
@@ -142,10 +213,11 @@ def do_api_request(
     headers.update(auth_headers_for_site(site, url=url or ""))
 
     model = (sub.get("api_model") or "").strip()
-    body_obj = apply_prompt_template(
-        sub.get("api_body") or {"prompt": "{{prompt}}"},
+    body_obj = build_api_request_body(
+        sub,
         prompt,
         model=model,
+        conversation_history=conversation_history,
     )
 
     if "generativelanguage.googleapis.com" in (url or "").lower():

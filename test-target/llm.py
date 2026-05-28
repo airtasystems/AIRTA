@@ -70,11 +70,20 @@ def _gemini_client():
         return None
 
 
-def generate_reply(prompt: str) -> ChatResult:
-    """Return an LLM reply via Gemini, or mock text when Gemini is not configured."""
-    text = (prompt or "").strip()
+def _last_user_content(messages: list[dict[str, str]]) -> str:
+    for item in reversed(messages):
+        if (item.get("role") or "").strip().lower() == "user":
+            return str(item.get("content") or "").strip()
+    return ""
+
+
+def generate_reply_from_messages(messages: list[dict[str, str]]) -> ChatResult:
+    """Return an LLM reply using a full OpenAI-style message list (multi-turn API tests)."""
+    if not messages:
+        raise ValueError("messages is required")
+    text = _last_user_content(messages)
     if not text:
-        raise ValueError("prompt is required")
+        raise ValueError("messages must include at least one user turn")
 
     model = gemini_model()
     client = _gemini_client()
@@ -84,9 +93,22 @@ def generate_reply(prompt: str) -> ChatResult:
     try:
         from google.genai import types
 
+        contents: list = []
+        for item in messages:
+            role = (item.get("role") or "").strip().lower()
+            content = str(item.get("content") or "").strip()
+            if not content or role == "system":
+                continue
+            gemini_role = "user" if role == "user" else "model"
+            contents.append(
+                types.Content(role=gemini_role, parts=[types.Part(text=content)])
+            )
+        if not contents:
+            raise ValueError("messages must include at least one user or assistant turn")
+
         resp = client.models.generate_content(
             model=model,
-            contents=text,
+            contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0.4,
@@ -99,3 +121,11 @@ def generate_reply(prompt: str) -> ChatResult:
         return ChatResult(prompt=text, response=reply, model=model, source="gemini")
     except Exception as exc:
         raise RuntimeError(f"Gemini request failed: {exc}") from exc
+
+
+def generate_reply(prompt: str) -> ChatResult:
+    """Return an LLM reply via Gemini, or mock text when Gemini is not configured."""
+    text = (prompt or "").strip()
+    if not text:
+        raise ValueError("prompt is required")
+    return generate_reply_from_messages([{"role": "user", "content": text}])

@@ -8,7 +8,7 @@ from pathlib import Path
 from browser_bot.config import API_CONCURRENCY, EVASION_REQUEST_DELAY_S, get_posts_batches, get_posts_strings
 from browser_bot.sites import get_submission_config
 
-from browser_bot.submit.api_helpers import do_api_request
+from browser_bot.submit.api_helpers import ConversationTurn, do_api_request, uses_messages_context
 from browser_bot.submit.common import SubmissionProgressTracker, _write_run_log, append_test_prompt_delimiter, log_evasion
 
 
@@ -17,9 +17,14 @@ async def _api_request_one(
     text: str,
     *,
     site: str | None,
+    conversation_history: list[ConversationTurn] | None = None,
 ) -> tuple[str, str | None]:
     status, response_text, err = await asyncio.to_thread(
-        do_api_request, sub, text, site=site
+        do_api_request,
+        sub,
+        text,
+        site=site,
+        conversation_history=conversation_history,
     )
     if err and not response_text:
         print(f"  [api] prompt failed ({status}): {err}")
@@ -34,9 +39,17 @@ async def _api_request_batch(
     tracker: SubmissionProgressTracker,
 ) -> list[tuple[str, str | None]]:
     results: list[tuple[str, str | None]] = []
+    history: list[ConversationTurn] | None = [] if uses_messages_context(sub) else None
     for text in batch:
-        pair = await _api_request_one(sub, text, site=site)
+        pair = await _api_request_one(
+            sub,
+            text,
+            site=site,
+            conversation_history=history,
+        )
         results.append(pair)
+        if history is not None:
+            history.append(pair)
         tracker.record_completed(1)
     return results
 

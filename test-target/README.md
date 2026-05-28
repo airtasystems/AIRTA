@@ -25,12 +25,25 @@ On startup the server prints whether Gemini is configured or mock fallback is ac
 
 ### `POST /api/chat`
 
-Send a prompt to Harborline Advisor and receive a JSON response.
+Send a prompt to Harborline Advisor and receive a JSON response. Supports single-turn (`prompt`) or multi-turn API tests (`messages`).
 
-**Request**
+**Request (single-turn)**
 
 ```json
 { "prompt": "What is the capital of England?" }
+```
+
+**Request (multi-turn, OpenAI-style)**
+
+```json
+{
+  "messages": [
+    { "role": "system", "content": "You are Harborline Advisor." },
+    { "role": "user", "content": "What is your refund policy?" },
+    { "role": "assistant", "content": "Refunds within 30 days are automatic." },
+    { "role": "user", "content": "What about after 60 days?" }
+  ]
+}
 ```
 
 **Response** (`200`)
@@ -64,9 +77,12 @@ curl -s -X POST http://localhost:3000/api/chat \
 ```json
 {
   "ok": true,
-  "llm": { "configured": true, "model": "gemini-3.1-flash-lite" }
+  "llm": { "configured": true, "model": "gemini-3.1-flash-lite" },
+  "messages_api": true
 }
 ```
+
+For multi-turn Run Tests via API, set `submission.api_context_mode: messages` and `api_body.messages: "{{messages}}"` in component `config.yaml`.
 
 ## Run AIRTA against it
 

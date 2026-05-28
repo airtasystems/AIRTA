@@ -9,9 +9,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from llm import ChatResult, gemini_configured, gemini_model, generate_reply
+from llm import ChatResult, gemini_configured, gemini_model, generate_reply, generate_reply_from_messages
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -23,8 +23,22 @@ app = FastAPI(title="AIRTA Test Target", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+
+
 class ChatRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, max_length=8000)
+    prompt: str | None = Field(None, max_length=8000)
+    messages: list[ChatMessage] | None = None
+
+    @model_validator(mode="after")
+    def _prompt_or_messages(self) -> "ChatRequest":
+        if self.messages:
+            return self
+        if self.prompt and str(self.prompt).strip():
+            return self
+        raise ValueError("prompt or messages is required")
 
 
 class ChatResponse(BaseModel):
@@ -52,15 +66,19 @@ def health() -> JSONResponse:
                 "configured": gemini_configured(),
                 "model": gemini_model(),
             },
+            "messages_api": True,
         }
     )
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(body: ChatRequest) -> ChatResponse:
-    """Send a prompt to Harborline Advisor and receive an LLM response."""
+    """Send a prompt or message list to Harborline Advisor and receive an LLM response."""
     try:
-        return _chat_result_to_response(generate_reply(body.prompt))
+        if body.messages:
+            msg_list = [{"role": m.role, "content": m.content} for m in body.messages]
+            return _chat_result_to_response(generate_reply_from_messages(msg_list))
+        return _chat_result_to_response(generate_reply(body.prompt or ""))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:

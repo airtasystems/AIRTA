@@ -128,8 +128,35 @@ def _format_api_submission(submission: dict[str, Any]) -> list[str]:
         ])
 
     api_body = submission.get("api_body") or submission.get("api_body_template") or {"prompt": "{{prompt}}"}
+    context_mode = (submission.get("api_context_mode") or "").strip()
+    if context_mode:
+        lines.extend([
+            "  # Multi-turn API: messages (growing user/assistant history per batch).",
+            f"  api_context_mode: {_yaml_scalar(context_mode)}",
+            "",
+        ])
+    else:
+        lines.extend([
+            "  # Multi-turn API: set api_context_mode: messages and use {{messages}} in api_body.",
+            "  # api_context_mode: messages",
+            "",
+        ])
+    prefix = submission.get("api_messages_prefix")
+    if isinstance(prefix, list) and prefix:
+        lines.append("  # Optional system/few-shot prefix before each conversation batch.")
+        lines.append("  api_messages_prefix:")
+        prefix_yaml = yaml.dump(prefix, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        for line in prefix_yaml.splitlines():
+            lines.append(f"    {line}" if line.strip() else "")
+        lines.append("")
+    else:
+        lines.extend([
+            "  # Optional prefix messages, e.g. [{role: system, content: \"...\"}]",
+            "  # api_messages_prefix: []",
+            "",
+        ])
     lines.extend([
-        "  # JSON request body. Use {{prompt}} where the test prompt should be inserted.",
+        "  # JSON request body. {{prompt}} single-turn; {{messages}} multi-turn chat array.",
         "  api_body:",
     ])
     body_yaml = yaml.dump(api_body, default_flow_style=False, sort_keys=False, allow_unicode=True)

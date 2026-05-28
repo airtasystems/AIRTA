@@ -543,7 +543,7 @@
                   </p>
                   <div class="form-row">
                     <label>API URL</label>
-                    <input v-model="apiDiscover.url" placeholder="https://api.openai.com/v1/chat/completions" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                    <input v-model="apiDiscover.url" placeholder="http://localhost:3000/api/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
                   </div>
                   <div class="form-row" v-if="apiDiscover.model !== undefined">
                     <label>Model</label>
@@ -1141,7 +1141,7 @@
                   </div>
                   <div class="form-row">
                     <label>API URL</label>
-                    <input v-model="compCfg.submission.api_url" placeholder="https://api.openai.com/v1/chat/completions" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                    <input v-model="compCfg.submission.api_url" placeholder="http://localhost:3000/api/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
                   </div>
                   <div class="form-row">
                     <label>Model</label>
