@@ -2,6 +2,8 @@
 
 **Automated regulatory compliance testing for AI systems.** Generate framework-aligned test suites, exercise live UIs and APIs, and produce multi-expert risk assessments - from one open-source pipeline.
 
+![AIRTA web dashboard](web/IMG/airta-dashboard-screenshot.png)
+
 AIRTA is a free, production-ready **AI Risk Testing Agent**. Point it at your chatbot, copilot, or API; build structured compliance tests from rubrics such as the EU AI Act and OECD; run them through browser automation with saved auth and live previews; then assess every response against regulatory mandates. Export structured reports to [AIRTA Systems](https://airtasystems.com) when you are ready to operationalize results.
 
 ```bash

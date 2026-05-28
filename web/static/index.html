@@ -648,11 +648,11 @@
             v-if="activeJobs.run_tests || activeOutput('run_tests').length"
             class="run-live-grid"
             :class="{
-              'has-preview': activeJobs.run_tests,
-              'has-preview-row': activeJobs.run_tests && runPreviewSlots.length >= 3
+              'has-preview': activeJobs.run_tests && runShowsBrowserPreview,
+              'has-preview-row': activeJobs.run_tests && runShowsBrowserPreview && runPreviewSlots.length >= 3
             }"
           >
-            <div v-if="activeJobs.run_tests" class="run-preview-panel">
+            <div v-if="activeJobs.run_tests && runShowsBrowserPreview" class="run-preview-panel">
               <div class="run-preview-header">
                 <span>Live browser preview</span>
                 <span v-if="runPreviewSlots.length > 1" class="run-preview-hint">{{ runPreviewSlots.length }} instances</span>

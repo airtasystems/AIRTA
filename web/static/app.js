@@ -528,6 +528,10 @@ createApp({
     const settingsSchema = ref(null);
     const compSettings = reactive({});
     const compSettingsInherited = reactive({});
+    const submissionTransport = ref('ui');
+    const runShowsBrowserPreview = computed(
+      () => (submissionTransport.value || 'ui').toLowerCase() !== 'api',
+    );
     const compCfgSaved = ref(false);
     const compCfgError = ref('');
     const compCfgEmpty = ref(false);
@@ -629,6 +633,7 @@ createApp({
     function applySubmissionToCompCfg(sub) {
       const s = sub || {};
       compCfg.submission.transport = s.transport === 'api' ? 'api' : 'ui';
+      submissionTransport.value = compCfg.submission.transport;
       compCfg.submission.start_url = s.start_url || '';
       compCfg.submission.submit_selector = s.submit_selector || '';
       compCfg.submission.response_selector = s.response_selector || '';
@@ -1289,8 +1294,25 @@ createApp({
       }
     }
 
+    async function loadSubmissionTransport() {
+      if (!site.value || !component.value) {
+        submissionTransport.value = 'ui';
+        return;
+      }
+      try {
+        const data = await api(
+          `/api/sites/${encodeURIComponent(site.value)}/${encodeURIComponent(component.value)}/config`,
+        );
+        const t = (data.submission?.transport || 'ui').toLowerCase();
+        submissionTransport.value = t === 'api' ? 'api' : 'ui';
+      } catch {
+        submissionTransport.value = 'ui';
+      }
+    }
+
     async function loadContext() {
       if (site.value && component.value) {
+        await loadSubmissionTransport();
         await loadRunTestCatalog();
         await loadLogs();
         if (tab.value === 'settings' && settingsTab.value === 'component') loadCompCfg();
@@ -2113,6 +2135,7 @@ createApp({
       chooseAuthRequired, chooseAuthApiKey, saveAuthApiKey, chooseAuthNotRequired, resetAuthSetup,
       startLogin, saveAuth, sendLoginEnter, confirmRunLogin, dismissRunLoginModal, onRunTroubleshoot,
       pretty, lineClass, activeOutput, runProgress, runProgressBarLabel, runProgressEtaText, riskTabProgressBarVisible, formatRunEta,
+      submissionTransport, runShowsBrowserPreview,
       runPreviewSlots, initRunPreviewSlots, setRunPreviewSlot, clearRunPreview,
       runPreviewLightbox, openRunPreviewLightbox, closeRunPreviewLightbox,
       runBlockedInfo,
