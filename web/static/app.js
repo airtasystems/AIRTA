@@ -14,7 +14,7 @@ createApp({
     const component = ref('');
     const sites = ref([]);
     const components = ref([]);
-    const tab = ref('generate');
+    const tab = ref('discover');
     const settingsTab = ref('component');
     const jobsOpen = ref(true);
     const jobs = ref([]);
