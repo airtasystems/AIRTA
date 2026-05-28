@@ -36,8 +36,7 @@ createApp({
     const allStrategies = ref([]);
     const allFrameworks = ref([]);
     const runStrategies = ref([]);
-    const runFrameworks = ref([]);
-    const runAllFrameworks = ref([]);
+    const runTestFiles = ref([]);
     const logs = reactive({ runs: [], compliance: [], reports: [] });
 
     // --- Test Management tab ---
@@ -45,6 +44,7 @@ createApp({
     const tmFramework = ref('');
     const tmStrategies = ref([]);
     const tmFrameworks = ref([]);
+    const tmTestFiles = ref([]);
     const tmFile = ref(null);       // loaded test file { framework, description, mandates }
     const tmDirty = ref(false);
     const tmSaving = ref(false);
@@ -56,6 +56,7 @@ createApp({
     const tmImportName = ref('');
     const tmImporting = ref(false);
     const tmImportMsg = ref('');
+    const showTmImportHelpModal = ref(false);
 
     const TM_MULTI_TURN_STRATEGIES = {
       'multi-shot': 3,
@@ -123,26 +124,83 @@ createApp({
       tmNewPrompt.prompts = Array.from({ length: tmDefaultTurnCount() }, () => '');
     }
 
+    const tmVisibleFrameworks = computed(() => {
+      const seen = new Map();
+      for (const f of tmTestFiles.value) {
+        if (!seen.has(f.slug)) seen.set(f.slug, { slug: f.slug, label: f.label });
+      }
+      return Array.from(seen.values());
+    });
+
+    const tmVisibleStrategies = computed(() => {
+      if (!tmFramework.value) return [];
+      const available = new Set(
+        tmTestFiles.value
+          .filter(f => f.slug === tmFramework.value)
+          .map(f => f.strategy),
+      );
+      return tmStrategies.value.filter(s => available.has(s.slug));
+    });
+
+    function tmSelectedTestFile() {
+      if (!tmFramework.value || !tmStrategy.value) return null;
+      return tmTestFiles.value.find(
+        f => f.slug === tmFramework.value && f.strategy === tmStrategy.value,
+      ) || null;
+    }
+
     async function tmLoadStrategies() {
       tmStrategies.value = [];
       tmStrategy.value = '';
       tmFrameworks.value = [];
+      tmTestFiles.value = [];
       tmFramework.value = '';
       tmFile.value = null;
       if (!site.value || !component.value) return;
       const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      tmStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
+      const strategies = await api(`/api/sites/${s}/${c}/strategies`);
+      tmStrategies.value = strategies.slice().reverse();
+
+      const allFiles = [];
+      for (const strat of tmStrategies.value) {
+        const files = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(strat.slug)}/frameworks`);
+        for (const f of files.slice().reverse()) {
+          allFiles.push({ ...f, strategy: strat.slug });
+        }
+      }
+      tmTestFiles.value = allFiles;
+    }
+
+    async function tmOnStrategyChange() {
+      tmFile.value = null;
+      tmDirty.value = false;
+      if (tmFramework.value && tmStrategy.value) {
+        await tmLoadFile();
+      }
+    }
+
+    async function tmOnFrameworkChange() {
+      tmFile.value = null;
+      tmDirty.value = false;
+      tmEditingId.value = null;
+      tmAddingMandate.value = '';
+      if (!tmFramework.value) {
+        tmStrategy.value = '';
+        return;
+      }
+      if (tmStrategy.value && !tmVisibleStrategies.value.some(s => s.slug === tmStrategy.value)) {
+        tmStrategy.value = '';
+      }
+      if (tmFramework.value && tmVisibleStrategies.value.length === 1) {
+        tmStrategy.value = tmVisibleStrategies.value[0].slug;
+      }
+      if (tmFramework.value && tmStrategy.value) {
+        await tmLoadFile();
+      }
     }
 
     async function tmLoadFrameworks() {
-      tmFrameworks.value = [];
-      tmFramework.value = '';
-      tmFile.value = null;
-      tmDirty.value = false;
-      if (tmStrategy.value && site.value && component.value) {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        tmFrameworks.value = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(tmStrategy.value)}/frameworks`);
-      }
+      await tmOnFrameworkChange();
     }
 
     async function tmLoadFile() {
@@ -151,12 +209,11 @@ createApp({
       tmEditingId.value = null;
       tmAddingMandate.value = '';
       if (!tmFramework.value || !tmStrategy.value) return;
+      const picked = tmSelectedTestFile();
+      if (!picked) return;
       const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      const fw = encodeURIComponent(tmFramework.value);
       const strat = encodeURIComponent(tmStrategy.value);
-      // tmFramework.value holds the full path; extract stem from it
-      const stem = tmFramework.value.split('/').pop().replace(/\.json$/, '');
-      tmFile.value = await api(`/api/sites/${s}/${c}/tests/${strat}/${encodeURIComponent(stem)}`);
+      tmFile.value = await api(`/api/sites/${s}/${c}/tests/${strat}/${encodeURIComponent(picked.slug)}`);
     }
 
     function tmSnapshotPlain() {
@@ -170,8 +227,7 @@ createApp({
       try {
         const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
         const strat = encodeURIComponent(tmStrategy.value);
-        const stem = tmFramework.value.split('/').pop().replace(/\.json$/, '');
-        await api(`/api/sites/${s}/${c}/tests/${strat}/${encodeURIComponent(stem)}`, {
+        await api(`/api/sites/${s}/${c}/tests/${strat}/${encodeURIComponent(tmFramework.value)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: tmSnapshotPlain() }),
@@ -261,9 +317,8 @@ createApp({
           body: JSON.stringify({ filename: tmImportName.value || tmImportFile.value.name, data }),
         });
         await tmLoadStrategies();
+        tmFramework.value = result.framework;
         tmStrategy.value = result.strategy;
-        await tmLoadFrameworks();
-        tmFramework.value = result.path;
         await tmLoadFile();
         tmImportMsg.value = `Imported ${result.framework} into Zero-shot`;
       } catch (e) {
@@ -275,6 +330,81 @@ createApp({
 
     const gen = reactive({ strategy: 'zero_shot', framework: 'eu_ai_act' });
     const run = reactive({ strategy: '', framework: '', assess: false });
+
+    const runVisibleFrameworks = computed(() => {
+      const seen = new Map();
+      for (const f of runTestFiles.value) {
+        if (!seen.has(f.slug)) seen.set(f.slug, { slug: f.slug, label: f.label });
+      }
+      return Array.from(seen.values());
+    });
+
+    const runVisibleStrategies = computed(() => {
+      if (!run.framework) return [];
+      const available = new Set(
+        runTestFiles.value
+          .filter(f => f.slug === run.framework)
+          .map(f => f.strategy),
+      );
+      return runStrategies.value.filter(s => available.has(s.slug));
+    });
+
+    function runSelectedTestFile() {
+      if (!run.framework || !run.strategy || run.strategy === '__all__') return null;
+      return runTestFiles.value.find(
+        f => f.slug === run.framework && f.strategy === run.strategy,
+      ) || null;
+    }
+
+    async function loadRunTestCatalog({ preserveSelection = false } = {}) {
+      const prevFramework = preserveSelection ? run.framework : '';
+      const prevStrategy = preserveSelection ? run.strategy : '';
+      runStrategies.value = [];
+      runTestFiles.value = [];
+      if (!preserveSelection) {
+        run.framework = '';
+        run.strategy = '';
+      }
+      if (!site.value || !component.value) return;
+      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
+      const strategies = await api(`/api/sites/${s}/${c}/strategies`);
+      runStrategies.value = strategies.slice().reverse();
+      const allFiles = [];
+      for (const strat of runStrategies.value) {
+        const files = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(strat.slug)}/frameworks`);
+        for (const f of files.slice().reverse()) {
+          allFiles.push({ ...f, strategy: strat.slug });
+        }
+      }
+      runTestFiles.value = allFiles;
+      if (preserveSelection && prevFramework && runVisibleFrameworks.value.some(f => f.slug === prevFramework)) {
+        run.framework = prevFramework;
+        if (prevStrategy === '__all__') {
+          run.strategy = '__all__';
+        } else if (prevStrategy && runVisibleStrategies.value.some(st => st.slug === prevStrategy)) {
+          run.strategy = prevStrategy;
+        } else {
+          run.strategy = '';
+        }
+      }
+    }
+
+    function onRunFrameworkChange() {
+      if (!run.framework) {
+        run.strategy = '';
+        return;
+      }
+      if (run.strategy && run.strategy !== '__all__' && !runVisibleStrategies.value.some(s => s.slug === run.strategy)) {
+        run.strategy = '';
+      }
+      if (runVisibleStrategies.value.length === 1 && run.strategy !== '__all__') {
+        run.strategy = runVisibleStrategies.value[0].slug;
+      }
+    }
+
+    function onRunStrategyChange() {
+      // Selection validated via computed lists and startRunTests guard.
+    }
     const risk = reactive({ log: '' });
     const exp = reactive({ report: '', program_id: '' });
     const expResult = ref(null);
@@ -378,6 +508,7 @@ createApp({
 
     // Component config
     const PROMPT_TEMPLATE_HINT = '{{prompt}}';
+    const PROMPT_MODEL_HINT = '{{model}}';
     const PROMPT_BODY_PLACEHOLDER = '{"prompt": "' + PROMPT_TEMPLATE_HINT + '"}';
 
     const INPUT_TYPES = ['text', 'textarea', 'contenteditable', 'password', 'email', 'search', 'select', 'combobox', 'checkbox', 'radio'];
@@ -388,11 +519,12 @@ createApp({
         start_url: '', inputs: [], submit_selector: '', response_selector: '',
         response_within_selector: '', response_text_within_selector: '',
         submit_via: 'click', response_wait_ms: 5000,
-        api_url: '', api_method: 'POST', api_response_path: 'response',
+        api_url: '', api_method: 'POST', api_response_path: 'response', api_model: '',
         api_body_json: '{\n  "prompt": "{{prompt}}"\n}',
         api_headers_json: '{}',
       },
     });
+    const llmApiPresets = ref([]);
     const settingsSchema = ref(null);
     const compSettings = reactive({});
     const compSettingsInherited = reactive({});
@@ -508,16 +640,22 @@ createApp({
       compCfg.submission.api_url = s.api_url || '';
       compCfg.submission.api_method = s.api_method || 'POST';
       compCfg.submission.api_response_path = s.api_response_path || 'response';
+      compCfg.submission.api_model = s.api_model || '';
       compCfg.submission.api_body_json = JSON.stringify(s.api_body || { prompt: '{{prompt}}' }, null, 2);
       compCfg.submission.api_headers_json = JSON.stringify(s.api_headers || {}, null, 2);
       if (compCfg.submission.transport === 'api') {
         discoverTransport.value = 'api';
-        apiDiscover.url = compCfg.submission.api_url;
-        apiDiscover.method = compCfg.submission.api_method;
-        apiDiscover.responsePath = compCfg.submission.api_response_path;
-        apiDiscover.bodyJson = compCfg.submission.api_body_json;
-        apiDiscover.headersJson = compCfg.submission.api_headers_json;
+        syncApiDiscoverFromCompCfg();
       }
+    }
+
+    function syncApiDiscoverFromCompCfg() {
+      apiDiscover.url = compCfg.submission.api_url;
+      apiDiscover.method = compCfg.submission.api_method;
+      apiDiscover.responsePath = compCfg.submission.api_response_path;
+      apiDiscover.model = compCfg.submission.api_model;
+      apiDiscover.bodyJson = compCfg.submission.api_body_json;
+      apiDiscover.headersJson = compCfg.submission.api_headers_json;
     }
 
     function buildSubmissionPayload() {
@@ -527,7 +665,7 @@ createApp({
         let api_headers = {};
         try { api_body = JSON.parse(compCfg.submission.api_body_json || '{}'); } catch { /* keep default */ }
         try { api_headers = JSON.parse(compCfg.submission.api_headers_json || '{}'); } catch { /* ignore */ }
-        return {
+        const out = {
           transport: 'api',
           api_url: compCfg.submission.api_url,
           api_method: compCfg.submission.api_method || 'POST',
@@ -535,6 +673,10 @@ createApp({
           api_body,
           api_response_path: compCfg.submission.api_response_path || 'response',
         };
+        if ((compCfg.submission.api_model || '').trim()) {
+          out.api_model = compCfg.submission.api_model.trim();
+        }
+        return out;
       }
       return {
         transport: 'ui',
@@ -928,11 +1070,11 @@ createApp({
       },
       discover: {
         title: 'Connect Target',
-        text: 'Step 1: choose public access or save a login session. Step 2: optional company context. Step 3: connect via browser UI (Discovery) or API endpoint when the app exposes a chat API (e.g. POST /api/chat). Both paths write config.yaml for Run Tests.',
+        text: 'UI components: Step 1 log in to the target app, Step 3 record browser selectors. LLM APIs: Step 1 save an API key (or public access for open endpoints), Step 3 pick an API format preset, set URL/model/body/response path, then Connect via API. Run Tests sends prompts through whichever transport is in config.yaml.',
       },
       run: {
         title: 'Run Tests',
-        text: 'Submits each test prompt to the target UI using the configured browser tier. Select a strategy then a framework from your generated tests and click Run. Results appear in the table below and are saved to a timestamped log directory.',
+        text: 'Submits each test prompt to the target using browser UI or API transport (from Connect Target). Select a strategy and framework, then Run. Use Send Sample Request to verify the connection. Results appear in the table and are saved to a timestamped log directory.',
       },
       tests: {
         title: 'Test Management',
@@ -1136,7 +1278,12 @@ createApp({
       authConfigured.value = false;
       if (site.value) {
         components.value = await api(`/api/sites/${encodeURIComponent(site.value)}/components`);
-        await loadAuthStatus();
+        if (components.value.length === 1) {
+          component.value = components.value[0];
+          await onComponentChange();
+        } else {
+          await loadAuthStatus();
+        }
       } else {
         components.value = [];
       }
@@ -1144,8 +1291,7 @@ createApp({
 
     async function loadContext() {
       if (site.value && component.value) {
-        const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-        runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
+        await loadRunTestCatalog();
         await loadLogs();
         if (tab.value === 'settings' && settingsTab.value === 'component') loadCompCfg();
         if (tab.value === 'settings' && settingsTab.value === 'rubrics') loadRubrics();
@@ -1153,34 +1299,9 @@ createApp({
       }
     }
 
-    async function loadRunFrameworks() {
-      runFrameworks.value = [];
-      runAllFrameworks.value = [];
-      run.framework = '';
-      if (!run.strategy || !site.value || !component.value) return;
-      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      if (run.strategy === '__all__') {
-        runAllFrameworks.value = await api(`/api/sites/${s}/${c}/all-frameworks`);
-      } else {
-        runFrameworks.value = await api(`/api/sites/${s}/${c}/strategies/${encodeURIComponent(run.strategy)}/frameworks`);
-      }
-    }
-
     async function refreshRunTests() {
       if (!site.value || !component.value) return;
-      const s = encodeURIComponent(site.value), c = encodeURIComponent(component.value);
-      const prevStrategy = run.strategy;
-      runStrategies.value = await api(`/api/sites/${s}/${c}/strategies`);
-      // Keep current strategy selection if it still exists after refresh
-      if (prevStrategy && runStrategies.value.some(x => x.slug === prevStrategy)) {
-        run.strategy = prevStrategy;
-        await loadRunFrameworks();
-      } else {
-        run.strategy = '';
-        run.framework = '';
-        runFrameworks.value = [];
-        runAllFrameworks.value = [];
-      }
+      await loadRunTestCatalog({ preserveSelection: true });
     }
 
     // Lines to suppress in the run_tests console — individual prompt/response
@@ -1406,6 +1527,11 @@ createApp({
     const authMode = ref(null);
     const authLoginChoice = ref(null);
     const authPublicSaving = ref(false);
+    const authApiKey = ref('');
+    const authApiKeyHeader = ref('Authorization');
+    const authApiKeyQueryParam = ref('');
+    const authUseBearer = ref(true);
+    const authApiKeySaving = ref(false);
 
     async function loadAuthStatus() {
       if (!site.value) {
@@ -1421,8 +1547,13 @@ createApp({
         const s = await api(`/api/sites/${encodeURIComponent(site.value)}/auth-status`);
         authConfigured.value = s.configured;
         authMode.value = s.mode || null;
+        if (s.auth_header) authApiKeyHeader.value = s.auth_header;
+        if (s.auth_query_param) authApiKeyQueryParam.value = s.auth_query_param;
         if (s.configured) {
-          authLoginChoice.value = s.mode === 'none' ? false : true;
+          authLoginChoice.value = (s.mode === 'none' || s.mode === 'api_key') ? false : true;
+          if (s.mode === 'api_key' && s.auth_header) {
+            authUseBearer.value = s.auth_header.toLowerCase() === 'authorization';
+          }
         } else {
           authLoginChoice.value = null;
         }
@@ -1435,6 +1566,37 @@ createApp({
 
     function chooseAuthRequired() {
       authLoginChoice.value = true;
+    }
+
+    function chooseAuthApiKey() {
+      authLoginChoice.value = 'api_key';
+      authApiKey.value = '';
+      if (discoverTransport.value === 'api' && apiDiscover.presetId) {
+        applyApiPreset(apiDiscover.presetId, { authOnly: true });
+      }
+    }
+
+    async function saveAuthApiKey() {
+      if (!site.value || !authApiKey.value.trim() || authApiKeySaving.value) return;
+      authApiKeySaving.value = true;
+      try {
+        await api(`/api/sites/${encodeURIComponent(site.value)}/auth/api-key`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: authApiKey.value.trim(),
+            header_name: authApiKeyHeader.value || 'Authorization',
+            use_bearer: authUseBearer.value,
+            query_param_name: authApiKeyQueryParam.value.trim(),
+          }),
+        });
+        authApiKey.value = '';
+        await loadAuthStatus();
+      } catch (e) {
+        alert('Could not save API key: ' + e.message);
+      } finally {
+        authApiKeySaving.value = false;
+      }
     }
 
     async function chooseAuthNotRequired() {
@@ -1460,6 +1622,7 @@ createApp({
       authConfigured.value = false;
       authMode.value = null;
       authLoginChoice.value = null;
+      authApiKey.value = '';
     }
 
     async function checkSetupAndNavigate() {
@@ -1479,7 +1642,7 @@ createApp({
     }
 
     async function prepareAuthForLoginCapture() {
-      if (authMode.value === 'none') {
+      if (authMode.value === 'none' || authMode.value === 'api_key') {
         try {
           await api(`/api/sites/${encodeURIComponent(site.value)}/auth`, { method: 'DELETE' });
         } catch { /* ignore */ }
@@ -1625,11 +1788,77 @@ createApp({
 
     const discoverTransport = ref('browser');
     const apiDiscover = reactive({
-      url: 'http://localhost:3000/api/chat',
+      presetId: 'custom',
+      url: '',
       method: 'POST',
       responsePath: 'response',
+      model: '',
       bodyJson: '{\n  "prompt": "{{prompt}}"\n}',
       headersJson: '{}',
+    });
+
+    async function loadLlmApiPresets() {
+      try {
+        const data = await api('/api/llm-api-presets');
+        llmApiPresets.value = data.presets || [];
+        if (!apiDiscover.url && llmApiPresets.value.length) {
+          applyApiPreset(apiDiscover.presetId || 'custom');
+        }
+      } catch { /* ignore */ }
+    }
+
+    function applyApiPreset(presetId, opts = {}) {
+      const preset = llmApiPresets.value.find(p => p.id === presetId);
+      if (!preset) return;
+      apiDiscover.presetId = presetId;
+      if (!opts.authOnly) {
+        apiDiscover.url = preset.url || '';
+        apiDiscover.method = preset.method || 'POST';
+        apiDiscover.responsePath = preset.response_path || 'response';
+        apiDiscover.model = preset.default_model || '';
+        apiDiscover.bodyJson = JSON.stringify(preset.body || { prompt: '{{prompt}}' }, null, 2);
+        apiDiscover.headersJson = JSON.stringify(preset.headers || {}, null, 2);
+        compCfg.submission.transport = 'api';
+        compCfg.submission.api_url = apiDiscover.url;
+        compCfg.submission.api_method = apiDiscover.method;
+        compCfg.submission.api_response_path = apiDiscover.responsePath;
+        compCfg.submission.api_model = apiDiscover.model;
+        compCfg.submission.api_body_json = apiDiscover.bodyJson;
+        compCfg.submission.api_headers_json = apiDiscover.headersJson;
+      }
+      if (preset.auth_header) {
+        authApiKeyHeader.value = preset.auth_header;
+        authUseBearer.value = preset.auth_header.toLowerCase() === 'authorization';
+      } else {
+        authApiKeyHeader.value = 'Authorization';
+        authUseBearer.value = true;
+      }
+      authApiKeyQueryParam.value = preset.auth_query_param || '';
+    }
+
+    function onDiscoverTransportChange() {
+      if (discoverTransport.value === 'api') {
+        loadLlmApiPresets();
+        if (!apiDiscover.url) applyApiPreset(apiDiscover.presetId || 'custom');
+      }
+    }
+
+    function onSettingsApiPreset(ev) {
+      const id = ev?.target?.value;
+      if (!id) return;
+      applyApiPreset(id);
+      syncApiDiscoverFromCompCfg();
+      ev.target.value = '';
+    }
+
+    const apiNeedsAuth = computed(() => {
+      const preset = llmApiPresets.value.find(p => p.id === apiDiscover.presetId);
+      return !!(preset && (preset.auth_header || preset.auth_query_param));
+    });
+
+    const apiAuthReady = computed(() => {
+      if (!apiNeedsAuth.value) return authConfigured.value;
+      return authMode.value === 'api_key' && authConfigured.value;
     });
     const apiDiscoverJobId = ref(null);
     const apiDiscoverRunning = computed(() => {
@@ -1649,10 +1878,20 @@ createApp({
         alert('Invalid headers JSON: ' + e.message);
         return;
       }
+      if (apiNeedsAuth.value && !apiAuthReady.value) {
+        alert('Save an API key in Step 1 (Target access) before connecting.');
+        return;
+      }
+      const model = (apiDiscover.model || '').trim();
+      if (apiDiscover.url.includes('{{model}}') && !model) {
+        alert('Set the Model field — the API URL contains {{model}} (e.g. gemini-2.0-flash-lite).');
+        return;
+      }
       const j = await startJob('api_discover', {
         api_url: apiDiscover.url,
         api_method: apiDiscover.method,
         api_response_path: apiDiscover.responsePath,
+        api_model: model,
         api_body,
         api_headers,
       });
@@ -1667,6 +1906,11 @@ createApp({
     async function startManualDiscover() {
       const j = await startJob('manual_discover');
       manualDiscoverJobId.value = j.id;
+    }
+
+    function openComponentSettings() {
+      settingsTab.value = 'component';
+      tab.value = 'settings';
     }
 
     async function sendEnter() {
@@ -1693,7 +1937,9 @@ createApp({
       if (run.strategy === '__all__') {
         await startJob('run_tests', { suite: '__all__', framework: run.framework, assess: run.assess });
       } else {
-        await startJob('run_tests', { suite: run.framework, assess: run.assess });
+        const picked = runSelectedTestFile();
+        if (!picked) return;
+        await startJob('run_tests', { suite: picked.path, assess: run.assess });
       }
     }
 
@@ -1779,8 +2025,11 @@ createApp({
       showModal.value = true;
     }
 
+    watch(discoverTransport, onDiscoverTransportChange);
+
     onMounted(async () => {
       await loadSites();
+      await loadLlmApiPresets();
       await refreshJobs();
       if (!site.value) {
         // Check .env for TARGET / COMPONENT defaults — skip modal if both are set
@@ -1830,7 +2079,7 @@ createApp({
       showRunTroubleshoot, showRunLoginModal, showRunRateLimitModal, runLoginUrl,
       runRateLimitBackoff, rateLimitCountdown, rateLimitWaiting, pendingRunAfterRateLimit,
       formatRateLimitWait, dismissRunRateLimitModal, retryRunAfterRateLimit,
-      allStrategies, allFrameworks, runStrategies, runFrameworks, runAllFrameworks, logs,
+      allStrategies, allFrameworks, runStrategies, runTestFiles, runVisibleFrameworks, runVisibleStrategies, logs,
       gen, run, risk, exp, cache,
       showModal, modalSite, modalComponent, modalComponents, modalNewSite, modalNewComponent,
       modalRenameSite, modalRenameComponent, modalError, modalMsg,
@@ -1839,7 +2088,7 @@ createApp({
       modalCreateComponent, modalRenameComponentAction, modalDeleteComponent,
       HINTS, hintDismissed, dismissHint,
       runResults, runResultsLoading, expandedRunRows, toggleRunRow,
-      compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES, PROMPT_TEMPLATE_HINT, PROMPT_BODY_PLACEHOLDER,
+      compCfg, compCfgSaved, compCfgError, compCfgEmpty, INPUT_TYPES, PROMPT_TEMPLATE_HINT, PROMPT_MODEL_HINT, PROMPT_BODY_PLACEHOLDER,
       settingsSchema, compSettings, compSettingsInherited,
       settingMeta, settingLabel, formatSettingGlobal, onCompSettingInheritChange, toggleCompSettingSet,
       loadCompCfg, saveCompCfg, addInput, removeInput,
@@ -1851,26 +2100,29 @@ createApp({
       cfg, cfgSaved, cfgError,
       BLOCKED_OPTIONS, COUNTRIES, CHANNELS, FETCH_METHODS,
       discoverJobId, discoverRunning, manualDiscoverJobId, manualDiscoverRunning,
-      discoverTransport, apiDiscover, apiDiscoverRunning,
+      discoverTransport, apiDiscover, apiDiscoverRunning, llmApiPresets,
+      applyApiPreset, onDiscoverTransportChange, onSettingsApiPreset, syncApiDiscoverFromCompCfg,
+      apiNeedsAuth, apiAuthReady,
+      authApiKeyHeader, authApiKeyQueryParam, authUseBearer,
       startApiDiscover,
       companyDiscoverJobId, companyDiscoverRunning, companyDiscoverDone,
       sampleRequestRunning,
       startCompanyDiscover, sendCompanyDiscoverEnter,
       loginJobId, loginRunning, loginUrl, authConfigured, authMode, authLoginChoice, authPublicSaving,
-      authSaving, authSaveError, pendingRunAfterLogin,
-      chooseAuthRequired, chooseAuthNotRequired, resetAuthSetup,
+      authApiKey, authApiKeySaving, authSaving, authSaveError, pendingRunAfterLogin,
+      chooseAuthRequired, chooseAuthApiKey, saveAuthApiKey, chooseAuthNotRequired, resetAuthSetup,
       startLogin, saveAuth, sendLoginEnter, confirmRunLogin, dismissRunLoginModal, onRunTroubleshoot,
       pretty, lineClass, activeOutput, runProgress, runProgressBarLabel, runProgressEtaText, riskTabProgressBarVisible, formatRunEta,
       runPreviewSlots, initRunPreviewSlots, setRunPreviewSlot, clearRunPreview,
       runPreviewLightbox, openRunPreviewLightbox, closeRunPreviewLightbox,
       runBlockedInfo,
-      onSiteChange, onComponentChange, loadContext, loadRunFrameworks, refreshRunTests,
-      tmStrategy, tmStrategies, tmFramework, tmFrameworks, tmFile, tmDirty, tmSaving, tmSaveMsg,
-      tmEditingId, tmAddingMandate, tmNewPrompt, tmImportFile, tmImportName, tmImporting, tmImportMsg,
+      onSiteChange, onComponentChange, loadContext, loadRunTestCatalog, onRunFrameworkChange, onRunStrategyChange, refreshRunTests,
+      tmStrategy, tmStrategies, tmFramework, tmFrameworks, tmTestFiles, tmVisibleFrameworks, tmVisibleStrategies, tmFile, tmDirty, tmSaving, tmSaveMsg,
+      tmEditingId, tmAddingMandate, tmNewPrompt, tmImportFile, tmImportName, tmImporting, tmImportMsg, showTmImportHelpModal,
       tmIsMultiTurnStrategy, tmEntryIsMultiTurn, tmPromptPreview, tmTurnLabel, tmEnsurePromptTurns, tmAddTurn, tmRemoveTurn,
-      tmLoadStrategies, tmLoadFrameworks, tmLoadFile, tmSave, tmDeletePrompt, tmStartAdd, tmConfirmAdd, tmMarkDirty,
+      tmLoadStrategies, tmLoadFrameworks, tmOnStrategyChange, tmOnFrameworkChange, tmLoadFile, tmSave, tmDeletePrompt, tmStartAdd, tmConfirmAdd, tmMarkDirty,
       tmImportFileChanged, tmImportZeroShot,
-      startGenerate, startDiscover, startManualDiscover, sendEnter,
+      startGenerate, startDiscover, startManualDiscover, openComponentSettings, sendEnter,
       startRunTests, startSampleRequest, startRiskAssess, startExport, startClearCache,
       loadCacheSettings, saveCacheSettings, cacheSettingsSaving, cacheSettingsMsg,
       expResult, expPreview, expCreds, expCredsEdit, expCredsSaving, expCredsMsg,

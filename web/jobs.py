@@ -421,6 +421,7 @@ async def _start_api_discover(job: Job):
         "api_headers": job.params.get("api_headers") or {},
         "api_body": job.params.get("api_body"),
         "api_response_path": job.params.get("api_response_path", "response"),
+        "api_model": job.params.get("api_model", ""),
         "probe_prompt": job.params.get("probe_prompt", "Hello from AIRTA"),
     }
     import json as _json

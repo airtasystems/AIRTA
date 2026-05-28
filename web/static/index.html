@@ -112,6 +112,101 @@
     </div>
   </div>
 
+  <!-- Zero-shot import format help -->
+  <div v-if="showTmImportHelpModal" class="modal-backdrop" @click.self="showTmImportHelpModal = false">
+    <div class="modal modal-import-help">
+      <div class="modal-sub" style="margin-bottom:8px;">Import format reference</div>
+      <p class="modal-import-intro">Upload <code>.json</code> via <strong>Import zero-shot prompts</strong> (saved to <code>tests/zero-shot/&lt;filename&gt;.json</code>). Multi-shot suites use the same mandate wrapper but each case needs a <code>prompts</code> turn array — create those under <code>tests/multi-shot/</code> or edit them in Test Management after generation.</p>
+      <div class="modal-help modal-help-columns">
+        <section class="modal-help-col">
+          <h4 class="modal-help-col-title">Zero-shot</h4>
+          <p class="modal-help-col-note">Single prompt per test case (<code>prompt</code> string). Optional <code>framework</code>, <code>description</code>, <code>mandate</code>, <code>focus</code>.</p>
+          <div class="modal-format-grid">
+            <div class="modal-format-card">
+              <p><strong>Prompt array</strong></p>
+              <pre>[
+  "First prompt",
+  "Second prompt"
+]</pre>
+            </div>
+            <div class="modal-format-card">
+              <p><strong>Object with <code>prompts</code></strong></p>
+              <pre>{
+  "framework": "eu_ai_act",
+  "prompts": [
+    "String prompt",
+    {
+      "id": "eu-ai-001",
+      "description": "Direct request",
+      "prompt": "Text sent to the model"
+    }
+  ]
+}</pre>
+            </div>
+            <div class="modal-format-card modal-format-card-wide">
+              <p><strong>Full suite</strong> — multiple <code>mandates</code>, each with a <code>prompts</code> list of cases.</p>
+              <pre>{
+  "framework": "EU AI Act",
+  "mandates": [{
+    "mandate": "Prohibited practices",
+    "focus": "Manipulation",
+    "prompts": [{
+      "id": "eu-ai-001",
+      "description": "Direct request",
+      "prompt": "..."
+    }]
+  }]
+}</pre>
+            </div>
+          </div>
+          <p class="modal-help-footnote">Prompt objects accept <code>prompt</code>, <code>text</code>, or <code>content</code>. Missing IDs become <code>imported-zs-001</code>, etc.</p>
+        </section>
+        <section class="modal-help-col">
+          <h4 class="modal-help-col-title">Multi-shot</h4>
+          <p class="modal-help-col-note">Three-turn sequences per case (<code>prompts</code> array of strings). Used by strategies such as <code>multi-shot</code>, <code>iterative</code>, and <code>prompt-chaining</code>.</p>
+          <div class="modal-format-grid modal-format-grid-single">
+            <div class="modal-format-card">
+              <p><strong>Single multi-shot case</strong></p>
+              <pre>{
+  "id": "ms-001",
+  "description": "Context → Urgency → Request",
+  "prompts": [
+    "Turn 1: establish benign context",
+    "Turn 2: add independent pressure",
+    "Turn 3: prohibited request"
+  ]
+}</pre>
+            </div>
+            <div class="modal-format-card">
+              <p><strong>Full multi-shot suite</strong></p>
+              <pre>{
+  "framework": "EU AI Act",
+  "description": "Multi-shot compliance tests",
+  "mandates": [{
+    "mandate": "Prohibited practices",
+    "focus": "Manipulation",
+    "prompts": [{
+      "id": "ms-001",
+      "description": "Sequence structure name",
+      "prompts": [
+        "Turn 1 text",
+        "Turn 2 text",
+        "Turn 3 text"
+      ]
+    }]
+  }]
+}</pre>
+            </div>
+          </div>
+          <p class="modal-help-footnote">Each turn is submitted in order in one conversation. Ensure component submission config supports multi-turn UI mode when running these tests.</p>
+        </section>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" @click="showTmImportHelpModal = false">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Run preview lightbox -->
   <div v-if="runPreviewLightbox" class="modal-backdrop run-preview-lightbox" @click.self="closeRunPreviewLightbox">
     <div class="run-preview-lightbox-inner">
@@ -284,14 +379,26 @@
                 <span class="step-num" :class="authConfigured ? 'done' : ''">{{ authConfigured ? '✓' : '1' }}</span>
                 Target access
                 <span class="step-status" :class="authConfigured ? 'ok' : 'warn'">
-                  {{ authConfigured ? (authMode === 'none' ? 'No login required' : 'Auth configured') : 'Not configured' }}
+                  {{
+                    authConfigured
+                      ? (authMode === 'none'
+                        ? 'No login required'
+                        : authMode === 'api_key'
+                          ? 'API key saved'
+                          : 'Auth configured')
+                      : 'Not configured'
+                  }}
                 </span>
               </div>
               <div class="setup-step-body">
-                <template v-if="authConfigured && authLoginChoice !== true && !pendingRunAfterLogin">
+                <template v-if="authConfigured && authLoginChoice !== true && authLoginChoice !== 'api_key' && !pendingRunAfterLogin">
                   <p v-if="authMode === 'none'">
                     This target is set up for <strong>public access</strong> - no login session is stored.
                     Browser tests will run without saved cookies.
+                  </p>
+                  <p v-else-if="authMode === 'api_key'">
+                    This target uses an <strong>API key</strong> stored in <code>auth.json</code> for HTTP requests.
+                    No browser login session is required.
                   </p>
                   <p v-else>
                     Login session saved for this site. Re-run login below if tokens expire or you are redirected to sign-in.
@@ -300,12 +407,52 @@
                 </template>
 
                 <template v-else-if="authLoginChoice === null && !pendingRunAfterLogin">
-                  <p>Does this target require you to log in before you can use the LLM?</p>
+                  <p>How does this target authenticate?</p>
+                  <p class="cfg-note" style="margin:0 0 10px;">Use <strong>Login to UI</strong> for chat web apps. Use <strong>API key</strong> when Run Tests will call an LLM HTTP API (OpenAI, Gemini, Anthropic, etc.). Use <strong>public access</strong> for open endpoints with no key.</p>
                   <div class="auth-choice-btns">
-                    <button type="button" class="btn btn-primary" @click="chooseAuthRequired">Yes - login required</button>
+                    <button type="button" class="btn btn-primary" @click="chooseAuthRequired">Login to UI</button>
+                    <button type="button" class="btn btn-ghost" @click="chooseAuthApiKey">API key</button>
                     <button type="button" class="btn btn-ghost" @click="chooseAuthNotRequired" :disabled="!site || authPublicSaving">
                       {{ authPublicSaving ? 'Saving…' : 'No - public access' }}
                     </button>
+                  </div>
+                </template>
+
+                <template v-else-if="authLoginChoice === 'api_key'">
+                  <p>API key for LLM HTTP requests. Stored in <code>auth.json</code> and merged into Run Tests / Sample Request (not sent to AIRTA’s own Gemini config).</p>
+                  <div class="form-row">
+                    <label>API key</label>
+                    <input
+                      v-model="authApiKey"
+                      type="password"
+                      autocomplete="off"
+                      placeholder="sk-… or provider key"
+                      style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"
+                      @keyup.enter="saveAuthApiKey"
+                    >
+                  </div>
+                  <div class="form-row">
+                    <label>Auth header</label>
+                    <select v-model="authApiKeyHeader" style="max-width:220px;">
+                      <option value="Authorization">Authorization (Bearer)</option>
+                      <option value="x-api-key">x-api-key</option>
+                      <option value="x-goog-api-key">x-goog-api-key</option>
+                      <option value="api-key">api-key (Azure)</option>
+                    </select>
+                    <label v-if="authApiKeyHeader === 'Authorization'" style="display:flex;align-items:center;gap:6px;margin:0;">
+                      <input type="checkbox" v-model="authUseBearer"> Prefix with Bearer
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <label>Query param</label>
+                    <input v-model="authApiKeyQueryParam" placeholder="e.g. key (Gemini ?key=)" style="max-width:200px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;">Optional — appended to API URL</span>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                    <button type="button" class="btn btn-primary" @click="saveAuthApiKey" :disabled="!site || !authApiKey.trim() || authApiKeySaving">
+                      {{ authApiKeySaving ? 'Saving…' : 'Save API key' }}
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="authLoginChoice = null">Back</button>
                   </div>
                 </template>
 
@@ -353,21 +500,22 @@
                 Configure Component
               </div>
               <div class="setup-step-body">
-                <p>Connect AIRTA to the LLM component using <strong>browser automation</strong> (record UI selectors) or a direct <strong>API endpoint</strong> when the app exposes one (e.g. test target <code>POST /api/chat</code>).</p>
+                <p>Choose how Run Tests reaches the LLM: <strong>Browser UI</strong> (selectors + optional login from Step 1) or <strong>API endpoint</strong> (HTTP + API key from Step 1).</p>
 
                 <div class="form-row" style="margin-bottom:12px;">
                   <label>Connection type</label>
                   <select v-model="discoverTransport" style="max-width:220px;">
-                    <option value="browser">Browser UI</option>
-                    <option value="api">API endpoint</option>
+                    <option value="browser">Browser UI (chat app)</option>
+                    <option value="api">API endpoint (LLM HTTP API)</option>
                   </select>
                 </div>
 
                 <template v-if="discoverTransport === 'browser'">
-                  <p>Opens a browser with your auth loaded and records UI selectors for input, submit, and response elements. When you confirm the chat page, AIRTA also generates <code>component.json</code>. Use <strong>Start Discovery</strong> for the in-page guide, or <strong>Troubleshoot</strong> for automated selector detection.</p>
+                  <p>Opens a browser with your auth loaded and records UI selectors for input, submit, and response elements. When you confirm the chat page, AIRTA also generates <code>component.json</code>. Use <strong>Start Discovery</strong> for the in-page guide, <strong>Troubleshoot</strong> for automated selector detection, or <strong>Manual Entry</strong> to type selectors in Settings.</p>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     <button class="btn btn-primary" @click="startManualDiscover" :disabled="!site || !component || manualDiscoverRunning">Start Discovery</button>
                     <button class="btn btn-ghost" @click="startDiscover" :disabled="!site || !component || discoverRunning">Troubleshoot</button>
+                    <button class="btn btn-ghost" @click="openComponentSettings" :disabled="!site || !component">Manual Entry</button>
                     <button class="btn btn-ghost" @click="sendEnter" :disabled="!discoverJobId">Press Enter</button>
                   </div>
                   <div class="console" v-if="activeOutput('discover').length" ref="discoverConsole">
@@ -379,10 +527,27 @@
                 </template>
 
                 <template v-else>
-                  <p>Send a probe request to the API and save the request format to <code>config.yaml</code>. Use <code>{{ PROMPT_TEMPLATE_HINT }}</code> in the JSON body where the test prompt belongs.</p>
+                  <p>Pick a provider preset, set URL/model/body/response path, then probe the API. Use <code>{{ PROMPT_TEMPLATE_HINT }}</code> for the test prompt and <code>{{ PROMPT_MODEL_HINT }}</code> for model/deployment ids. Keys from Step 1 are sent automatically — do not paste secrets into the body.</p>
+                  <div v-if="apiNeedsAuth && !apiAuthReady" class="hint-banner" style="margin-bottom:12px;">
+                    <div><strong>API key required</strong><p>Save your provider API key in Step 1 (Target access → API key) before connecting.</p></div>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="chooseAuthApiKey">Set up API key</button>
+                  </div>
+                  <div class="form-row">
+                    <label>API format</label>
+                    <select v-model="apiDiscover.presetId" @change="applyApiPreset(apiDiscover.presetId)" style="max-width:280px;">
+                      <option v-for="p in llmApiPresets" :key="p.id" :value="p.id">{{ p.label }}</option>
+                    </select>
+                  </div>
+                  <p v-if="llmApiPresets.find(p => p.id === apiDiscover.presetId)" class="cfg-note" style="margin:0 0 10px;">
+                    {{ llmApiPresets.find(p => p.id === apiDiscover.presetId).description }}
+                  </p>
                   <div class="form-row">
                     <label>API URL</label>
-                    <input v-model="apiDiscover.url" placeholder="http://localhost:3000/api/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                    <input v-model="apiDiscover.url" placeholder="https://api.openai.com/v1/chat/completions" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row" v-if="apiDiscover.model !== undefined">
+                    <label>Model</label>
+                    <input v-model="apiDiscover.model" placeholder="gpt-4o-mini / gemini-2.5-flash / Azure deployment name" style="flex:1;max-width:320px;font-family:var(--mono);font-size:12px;">
                   </div>
                   <div class="form-row">
                     <label>Method</label>
@@ -395,19 +560,20 @@
                   </div>
                   <div class="form-row">
                     <label>Response path</label>
-                    <input v-model="apiDiscover.responsePath" placeholder="response" style="max-width:200px;font-family:var(--mono);font-size:12px;">
-                    <span class="cfg-note" style="margin:0;">JSON field for assistant text</span>
+                    <input v-model="apiDiscover.responsePath" placeholder="choices.0.message.content" style="max-width:280px;font-family:var(--mono);font-size:12px;">
+                    <span class="cfg-note" style="margin:0;">Dot path; use <code>0</code> for array indices</span>
                   </div>
                   <div class="form-row" style="align-items:flex-start;">
                     <label style="padding-top:6px;">Request body</label>
-                    <textarea v-model="apiDiscover.bodyJson" rows="4" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                    <textarea v-model="apiDiscover.bodyJson" rows="6" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
                   </div>
                   <div class="form-row" style="align-items:flex-start;">
-                    <label style="padding-top:6px;">Headers (optional)</label>
-                    <textarea v-model="apiDiscover.headersJson" rows="2" placeholder='{"Authorization": "Bearer ..."}' style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                    <label style="padding-top:6px;">Extra headers</label>
+                    <textarea v-model="apiDiscover.headersJson" rows="2" placeholder='{"anthropic-version": "2023-06-01"}' style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button class="btn btn-primary" @click="startApiDiscover" :disabled="!site || !component || !apiDiscover.url || apiDiscoverRunning">Connect via API</button>
+                    <button class="btn btn-primary" @click="startApiDiscover" :disabled="!site || !component || !apiDiscover.url || apiDiscoverRunning || (apiNeedsAuth && !apiAuthReady)">Connect via API</button>
+                    <button class="btn btn-ghost" @click="openComponentSettings" :disabled="!site || !component">Manual Entry</button>
                   </div>
                   <div class="console" v-if="activeOutput('api_discover').length">
                     <div v-for="(line, i) in activeOutput('api_discover')" :key="i" :class="lineClass(line)">{{ line }}</div>
@@ -429,23 +595,18 @@
             <button class="btn btn-ghost btn-sm hint-dismiss" @click="dismissHint('run')">Got it</button>
           </div>
           <div class="form-row">
-            <label>Strategy</label>
-            <select v-model="run.strategy" @change="loadRunFrameworks">
+            <label>Framework</label>
+            <select v-model="run.framework" @change="onRunFrameworkChange">
               <option value="">Select...</option>
-              <option value="__all__">All strategies</option>
-              <option v-for="s in runStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
+              <option v-for="f in runVisibleFrameworks" :key="f.slug" :value="f.slug">{{ f.label }}</option>
             </select>
           </div>
           <div class="form-row">
-            <label>Framework</label>
-            <select v-model="run.framework" @change="() => {}" :disabled="!runAllFrameworks.length && !runFrameworks.length">
+            <label>Strategy</label>
+            <select v-model="run.strategy" @change="onRunStrategyChange" :disabled="!run.framework">
               <option value="">Select...</option>
-              <template v-if="run.strategy === '__all__'">
-                <option v-for="f in runAllFrameworks" :key="f.slug" :value="f.slug">{{ f.label }}</option>
-              </template>
-              <template v-else>
-                <option v-for="f in runFrameworks" :key="f.slug" :value="f.path">{{ f.label }}</option>
-              </template>
+              <option value="__all__">All strategies</option>
+              <option v-for="s in runVisibleStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
             </select>
           </div>
           <div class="checkbox-row">
@@ -453,7 +614,7 @@
             <label for="assess">Run risk assessment after</label>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button class="btn btn-primary" @click="startRunTests" :disabled="!run.framework">
+            <button class="btn btn-primary" @click="startRunTests" :disabled="!run.framework || !run.strategy">
               {{ run.strategy === '__all__' ? 'Run All Strategies' : 'Run' }}
             </button>
             
@@ -597,7 +758,16 @@
           <!-- Import zero-shot prompts -->
           <div class="tm-import">
             <div>
-              <strong>Import zero-shot prompts</strong>
+              <div class="tm-import-heading">
+                <strong>Import zero-shot prompts</strong>
+                <button
+                  type="button"
+                  class="help-icon-btn"
+                  title="Expected JSON format"
+                  aria-label="Expected JSON format"
+                  @click="showTmImportHelpModal = true"
+                >?</button>
+              </div>
               <p>Upload a JSON array of prompt strings/objects, an object with <code>prompts</code>, or a full generated test suite.</p>
             </div>
             <div class="tm-import-controls">
@@ -613,24 +783,24 @@
           <!-- File picker -->
           <div class="tm-picker">
             <div class="form-row">
-              <label>Strategy</label>
-              <select v-model="tmStrategy" @change="tmLoadFrameworks">
+              <label>Framework</label>
+              <select v-model="tmFramework" @change="tmOnFrameworkChange">
                 <option value="">Select…</option>
-                <option v-for="s in tmStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
+                <option v-for="f in tmVisibleFrameworks" :key="f.slug" :value="f.slug">{{ f.label }}</option>
               </select>
             </div>
             <div class="form-row">
-              <label>Test file</label>
-              <select v-model="tmFramework" @change="tmLoadFile" :disabled="!tmStrategy">
+              <label>Strategy</label>
+              <select v-model="tmStrategy" @change="tmOnStrategyChange" :disabled="!tmFramework">
                 <option value="">Select…</option>
-                <option v-for="f in tmFrameworks" :key="f.slug" :value="f.path">{{ f.label }}</option>
+                <option v-for="s in tmVisibleStrategies" :key="s.slug" :value="s.slug">{{ s.label }}</option>
               </select>
             </div>
           </div>
 
           <!-- No file selected -->
-          <div v-if="!tmFile && tmStrategy && !tmFrameworks.length" style="color:var(--text-dim);font-size:13px;margin-top:16px;">
-            No test files found for this strategy.
+          <div v-if="!tmFile && tmFramework && !tmVisibleStrategies.length" style="color:var(--text-dim);font-size:13px;margin-top:16px;">
+            No strategies found for this framework.
           </div>
 
           <!-- File editor -->
@@ -963,8 +1133,19 @@
 
                 <template v-if="compCfg.submission.transport === 'api'">
                   <div class="form-row">
+                    <label>API format</label>
+                    <select @change="onSettingsApiPreset" style="max-width:280px;">
+                      <option value="" disabled selected>Apply preset…</option>
+                      <option v-for="p in llmApiPresets" :key="p.id" :value="p.id">{{ p.label }}</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
                     <label>API URL</label>
-                    <input v-model="compCfg.submission.api_url" placeholder="http://localhost:3000/api/chat" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                    <input v-model="compCfg.submission.api_url" placeholder="https://api.openai.com/v1/chat/completions" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;">
+                  </div>
+                  <div class="form-row">
+                    <label>Model</label>
+                    <input v-model="compCfg.submission.api_model" :placeholder="PROMPT_MODEL_HINT + ' in URL/body'" style="max-width:320px;font-family:var(--mono);font-size:12px;">
                   </div>
                   <div class="form-row">
                     <label>Method</label>
@@ -977,16 +1158,17 @@
                   </div>
                   <div class="form-row">
                     <label>Response path</label>
-                    <input v-model="compCfg.submission.api_response_path" placeholder="response" style="max-width:200px;font-family:var(--mono);font-size:12px;">
+                    <input v-model="compCfg.submission.api_response_path" placeholder="choices.0.message.content" style="max-width:280px;font-family:var(--mono);font-size:12px;">
                   </div>
                   <div class="form-row" style="align-items:flex-start;">
                     <label style="padding-top:6px;">Request body</label>
-                    <textarea v-model="compCfg.submission.api_body_json" rows="4" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
+                    <textarea v-model="compCfg.submission.api_body_json" rows="6" :placeholder="PROMPT_BODY_PLACEHOLDER" style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
                   </div>
                   <div class="form-row" style="align-items:flex-start;">
-                    <label style="padding-top:6px;">Headers</label>
+                    <label style="padding-top:6px;">Extra headers</label>
                     <textarea v-model="compCfg.submission.api_headers_json" rows="2" placeholder='{}' style="flex:1;max-width:none;font-family:var(--mono);font-size:12px;"></textarea>
                   </div>
+                  <p class="cfg-note">API keys: Connect Target → Step 1 (API key). Not stored in this YAML.</p>
                 </template>
 
                 <template v-else>

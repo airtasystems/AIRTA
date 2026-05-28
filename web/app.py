@@ -28,6 +28,8 @@ from browser_bot.auth_state import (
     auth_config_exists,
     auth_mode_for_domain,
     is_auth_configured,
+    load_auth_config,
+    save_api_key_auth,
     save_public_auth,
 )
 from browser_bot.sites import ensure_site_dir, AUTH_FILE
@@ -125,10 +127,25 @@ async def api_delete_site(site: str):
 @app.get("/api/sites/{site}/auth-status")
 async def api_auth_status(site: str):
     if not auth_config_exists(site):
-        return {"configured": False, "mode": None}
+        return {"configured": False, "mode": None, "has_api_key": False}
+    mode = auth_mode_for_domain(site)
+    cfg = load_auth_config(site) or {}
+    has_api_key = mode == "api_key" and bool(cfg.get("headers") or cfg.get("query_params"))
+    auth_header = ""
+    auth_query_param = ""
+    if mode == "api_key":
+        headers = cfg.get("headers") or {}
+        if headers:
+            auth_header = next(iter(headers.keys()), "")
+        qparams = cfg.get("query_params") or {}
+        if qparams:
+            auth_query_param = next(iter(qparams.keys()), "")
     return {
         "configured": is_auth_configured(site),
-        "mode": auth_mode_for_domain(site),
+        "mode": mode,
+        "has_api_key": has_api_key,
+        "auth_header": auth_header,
+        "auth_query_param": auth_query_param,
     }
 
 
@@ -137,6 +154,37 @@ async def api_init_public_auth(site: str):
     """Initialize auth.json for targets that do not require login."""
     path = save_public_auth(site)
     return {"ok": True, "mode": "none", "path": str(path)}
+
+
+class ApiKeyAuthBody(BaseModel):
+    api_key: str
+    header_name: str = "Authorization"
+    use_bearer: bool | None = None
+    query_param_name: str = ""
+
+
+@app.get("/api/llm-api-presets")
+async def api_llm_api_presets():
+    """LLM API request/response templates for Connect Target → API endpoint."""
+    from browser_bot.api_presets import get_llm_api_presets
+
+    return {"presets": get_llm_api_presets()}
+
+
+@app.post("/api/sites/{site}/auth/api-key")
+async def api_init_api_key_auth(site: str, body: ApiKeyAuthBody):
+    """Initialize auth.json with an API key header; skips browser login like public access."""
+    try:
+        path = save_api_key_auth(
+            site,
+            body.api_key,
+            header_name=body.header_name,
+            use_bearer=body.use_bearer,
+            query_param_name=body.query_param_name or None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True, "mode": "api_key", "path": str(path)}
 
 
 @app.delete("/api/sites/{site}/auth")

@@ -276,7 +276,7 @@ def _get_rubric_text(framework_name: str) -> str:
     elif framework_name == "NIST AI RMF" and RUBRIC_NIST_RMF:
         sections.append("NIST AI RMF rubric:\n" + json.dumps(RUBRIC_NIST_RMF))
     elif framework_name == "EU PLD (AI)" and RUBRIC_PLD:
-        sections.append("EU PLD & AILD rubric:\n" + json.dumps(RUBRIC_PLD))
+        sections.append("EU PLD rubric:\n" + json.dumps(RUBRIC_PLD))
     elif framework_name == "FRIA Core" and RUBRIC_FRIA_CORE:
         sections.append("FRIA Core rubric:\n" + json.dumps(RUBRIC_FRIA_CORE))
     elif framework_name == "FRIA Extended" and RUBRIC_FRIA_EXTENDED:
