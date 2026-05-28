@@ -52,7 +52,7 @@ LLM_API_PRESETS: list[dict[str, Any]] = [
         "headers": {},
         "auth_header": "x-goog-api-key",
         "auth_query_param": "key",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.1-flash-lite",
     },
     {
         "id": "anthropic",

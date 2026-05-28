@@ -1906,7 +1906,7 @@ createApp({
       }
       const model = (apiDiscover.model || '').trim();
       if (apiDiscover.url.includes('{{model}}') && !model) {
-        alert('Set the Model field - the API URL contains {{model}} (e.g. gemini-2.0-flash-lite).');
+        alert('Set the Model field - the API URL contains {{model}} (e.g. gemini-3.1-flash-lite).');
         return;
       }
       const j = await startJob('api_discover', {

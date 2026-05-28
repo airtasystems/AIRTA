@@ -1202,7 +1202,7 @@ def run_api_discovery(
     if api_model:
         submission["api_model"] = api_model
     elif "{{model}}" in api_url:
-        print("  [!] Model is required - URL contains {{model}}. Set the Model field (e.g. gemini-2.0-flash-lite).")
+        print("  [!] Model is required - URL contains {{model}}. Set the Model field (e.g. gemini-3.1-flash-lite).")
         return False
 
     from browser_bot.submit.api_helpers import resolve_api_url
