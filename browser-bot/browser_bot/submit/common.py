@@ -32,8 +32,8 @@ def log_airta_progress(payload: dict) -> None:
     print(f"[airta_progress] {json.dumps(payload, ensure_ascii=False)}", flush=True)
 
 
-TEST_PROMPT_DELIMITER_MARKER = "[TEXT ONLY. NO HTML OR MARKUP. MAX 600 CHARS]"
-TEST_PROMPT_DELIMITER = f"\n{TEST_PROMPT_DELIMITER_MARKER}"
+TEST_PROMPT_DELIMITER_MARKER = "" #[TEXT ONLY. NO HTML OR MARKUP. MAX 600 CHARS]
+TEST_PROMPT_DELIMITER = f"{TEST_PROMPT_DELIMITER_MARKER}"
 
 
 def append_test_prompt_delimiter(text: str) -> str:
@@ -106,6 +106,21 @@ _TEXT_TYPES = {"text", "textarea", "contenteditable", "password", "email", "sear
 # start of the string, followed by a newline - with no spaces (so full sentences
 # are not stripped).
 _ROLE_LABEL_RE = re.compile(r"^\S{1,30}\n+", re.UNICODE)
+# Standalone agent chrome (e.g. "FINCOM AGENT") before the model body streams in.
+_AGENT_LABEL_ONLY_RE = re.compile(
+    r"^(?:fincom\s+agent|assistant|ai(?:\s+assistant)?|bot|system)(?:\s*[:\-–])?\s*$",
+    re.IGNORECASE,
+)
+# Transient status chips shown before streamed body text (Fincom: "Agent is typing").
+_TYPING_PLACEHOLDER_RE = re.compile(
+    r"^(?:(?:[\w]+\s+){0,4})?typing(?:\s+message)?(?:\s*[.]{2,3}|\s*…)?\s*$",
+    re.IGNORECASE,
+)
+_AGENT_TYPING_LINE_RE = re.compile(
+    r"^(?:agent|assistant|ai|bot)\s+is\s+typing(?:\s*[.]{2,3}|\s*…)?\s*$",
+    re.IGNORECASE,
+)
+_MIN_SUBSTANTIVE_BODY_CHARS = 12
 _EMPTY_RESPONSE_MARKERS = {
     "",
     "the model response will appear here.",
@@ -226,6 +241,57 @@ def _is_empty_response_text(text: str) -> bool:
     return text.strip().lower() in _EMPTY_RESPONSE_MARKERS
 
 
+def _body_after_agent_label(text: str) -> str:
+    """Drop a leading agent label line when the bubble shows chrome before body text."""
+    s = (text or "").strip()
+    if not s:
+        return ""
+    lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    first = lines[0]
+    if _AGENT_LABEL_ONLY_RE.match(first):
+        return "\n".join(lines[1:]).strip()
+    if len(first) <= 32 and first == first.upper() and " " in first and len(lines) > 1:
+        return "\n".join(lines[1:]).strip()
+    return s
+
+
+def _is_typing_placeholder_text(text: str) -> bool:
+    """True for short DOM placeholders like 'Agent is typing' (no ellipsis required)."""
+    s = (text or "").strip()
+    if not s:
+        return False
+    low = s.lower()
+    if _TYPING_PLACEHOLDER_RE.match(low) or _AGENT_TYPING_LINE_RE.match(low):
+        return True
+    if len(s) <= 48 and "typing" in low and not any(ch in s for ch in ".!?"):
+        # e.g. "Agent is typing" without trailing punctuation (not a real sentence).
+        return True
+    return False
+
+
+def _is_meaningful_response_text(text: str) -> bool:
+    """True when captured DOM text is a finished model reply, not a shell or status line."""
+    if not text or _is_empty_response_text(text) or _looks_like_skeleton_progress_line(text):
+        return False
+    body = _body_after_agent_label(text)
+    if not body or _is_typing_placeholder_text(body) or _looks_like_skeleton_progress_line(body):
+        return False
+    return len(body) >= _MIN_SUBSTANTIVE_BODY_CHARS
+
+
+def _stable_seconds_for_response(text: str, stable_ms: int) -> float:
+    """Use a longer settle window while the reply is still short (streaming / label-first UIs)."""
+    body = _body_after_agent_label(text)
+    ms = stable_ms
+    if len(body) < 80:
+        ms = max(stable_ms, 1200)
+    if len(body) < 40:
+        ms = max(ms, 1500)
+    return ms / 1000.0
+
+
 def _looks_like_skeleton_progress_line(text: str) -> bool:
     """True when the bubble clearly shows transitional status text, not a finished reply.
 
@@ -243,13 +309,15 @@ def _looks_like_skeleton_progress_line(text: str) -> bool:
     if any(len(ln) > 240 for ln in lines):
         return False
 
-    verbs = ("generating", "loading", "thinking", "fetching", "preparing", "assessing", "streaming")
-    wait_phrases = ("please wait", "one moment", "hold on", "just a moment")
+    verbs = ("generating", "loading", "thinking", "fetching", "preparing", "assessing", "streaming", "typing")
+    wait_phrases = ("please wait", "one moment", "hold on", "just a moment", "agent is typing", "is typing")
 
     for raw in lines:
         if len(raw) > 160:
             continue
         low = raw.lower()
+        if _is_typing_placeholder_text(raw):
+            return True
         ell = low.endswith(("…", "..."))
         # Short spinner row: "Generating the …"
         if ell and len(raw) <= 140 and any(low.startswith(v) for v in verbs):
@@ -260,6 +328,47 @@ def _looks_like_skeleton_progress_line(text: str) -> bool:
         if len(raw) <= 72 and any(low.startswith(w) for w in wait_phrases):
             return True
     return False
+
+
+async def _extract_response_inner_text(
+    main_loc: "Locator",
+    text_within_selector: str = "",
+) -> str:
+    """Read assistant text from a bubble, with parent fallback when the body leaf is still empty."""
+    txt_in = text_within_selector.strip() if text_within_selector else ""
+    extract_loc = main_loc
+    if txt_in:
+        leaf = await _first_visible_under(main_loc, txt_in)
+        if leaf is not None:
+            extract_loc = leaf
+
+    try:
+        raw = await extract_loc.inner_text()
+    except Exception:
+        raw = ""
+    normalized = _normalize_captured_text(raw)
+    if _is_meaningful_response_text(normalized):
+        return normalized
+
+    if txt_in and extract_loc != main_loc:
+        try:
+            container_norm = _normalize_captured_text(await main_loc.inner_text())
+        except Exception:
+            container_norm = ""
+        if _is_meaningful_response_text(container_norm):
+            return container_norm
+        return normalized
+
+    if not normalized.strip():
+        try:
+            parent = extract_loc.locator("xpath=..")
+            if await parent.count() > 0:
+                parent_norm = _normalize_captured_text(await parent.first.inner_text())
+                if _is_meaningful_response_text(parent_norm):
+                    return parent_norm
+        except Exception:
+            pass
+    return normalized
 
 
 async def _first_visible_under(main_loc: "Locator", relative: str) -> "Locator | None":
@@ -324,12 +433,7 @@ async def _response_text_at_index(
             main_loc = scoped
         else:
             return ""
-    txt_in = text_within_selector.strip() if text_within_selector else ""
-    if txt_in:
-        leaf = await _first_visible_under(main_loc, txt_in)
-        if leaf is not None:
-            extract_loc = leaf
-    return _normalize_captured_text(await extract_loc.inner_text())
+    return await _extract_response_inner_text(main_loc, text_within_selector)
 
 
 async def _wait_for_assistant_message_at_index(
@@ -344,7 +448,6 @@ async def _wait_for_assistant_message_at_index(
 ) -> str:
     """Wait until message ``index`` exists and its text stabilizes."""
     deadline = time.perf_counter() + max(int(timeout_ms or 0), 1000) / 1000.0
-    stable_for = stable_ms / 1000.0
     candidate = ""
     last_seen = ""
     last_changed = time.perf_counter()
@@ -367,21 +470,16 @@ async def _wait_for_assistant_message_at_index(
             )
         except Exception:
             current = ""
-        meaningful = (
-            bool(current)
-            and not _is_empty_response_text(current)
-            and not _looks_like_skeleton_progress_line(current)
-        )
-        if meaningful:
+        if _is_meaningful_response_text(current):
             if current != last_seen:
                 last_seen = current
                 last_changed = time.perf_counter()
             candidate = current
-            if time.perf_counter() - last_changed >= stable_for:
+            if time.perf_counter() - last_changed >= _stable_seconds_for_response(current, stable_ms):
                 return candidate
         await asyncio.sleep(0.25)
 
-    return candidate
+    return candidate if _is_meaningful_response_text(candidate) else ""
 
 
 async def _response_selector_text(
@@ -396,7 +494,8 @@ async def _response_selector_text(
     Use ``text_within_selector`` when the container includes labels or footer widgets - for
     example a Playwright-relative ``> p`` on the bubble picks the assistant body paragraph
     while the bubble itself stays the visibility anchor during streaming.
-    When the leaf is missing (spinner-only phase), falls back to the container's inner_text.
+    When the body leaf is empty (bubble chrome visible first), walks up to the parent
+    container and keeps polling until substantive text appears.
     """
     roots = page.locator(selector.strip())
     if await roots.count() == 0:
@@ -409,13 +508,7 @@ async def _response_selector_text(
             return ""
     main_loc = await _last_visible_within(target)
     await main_loc.wait_for(state="visible", timeout=3000)
-    txt_in = text_within_selector.strip() if text_within_selector else ""
-    extract_loc = main_loc
-    if txt_in:
-        leaf = await _first_visible_under(main_loc, txt_in)
-        if leaf is not None:
-            extract_loc = leaf
-    return _normalize_captured_text(await extract_loc.inner_text())
+    return await _extract_response_inner_text(main_loc, text_within_selector)
 
 
 async def _wait_for_response_selector_text(
@@ -436,7 +529,6 @@ async def _wait_for_response_selector_text(
     new model reply (previously any non‑empty node satisfied `current != ""` and exited in ~1s).
     """
     deadline = time.perf_counter() + max(int(timeout_ms or 0), 1000) / 1000.0
-    stable_for = stable_ms / 1000.0
     candidate = ""
     last_seen = ""
     last_changed = time.perf_counter()
@@ -462,23 +554,17 @@ async def _wait_for_response_selector_text(
             continue
 
         base = effective_baseline if effective_baseline is not None else ""
-        meaningful = (
-            bool(current)
-            and current != base
-            and not _is_empty_response_text(current)
-            and not _looks_like_skeleton_progress_line(current)
-        )
-        if meaningful:
+        if _is_meaningful_response_text(current) and current != base:
             if current != last_seen:
                 last_seen = current
                 last_changed = time.perf_counter()
             candidate = current
-            if time.perf_counter() - last_changed >= stable_for:
+            if time.perf_counter() - last_changed >= _stable_seconds_for_response(current, stable_ms):
                 return candidate
 
         await asyncio.sleep(0.25)
 
-    return candidate
+    return candidate if _is_meaningful_response_text(candidate) else ""
 
 
 async def _fill_input(page, inp: dict, value: str) -> None:

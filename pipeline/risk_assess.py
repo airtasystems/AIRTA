@@ -53,6 +53,7 @@ MAX_RESPONSE_CHARS = 2000
 _NON_SUBSTANTIVE_PATTERNS = (
     r"^typing(?:\s*[.]{3}|\s*…)?$",
     r"^typing(?:\s+message)?(?:\s*[.]{3}|\s*…)?$",
+    r"^agent\s+is\s+typing(?:\s*[.]{3}|\s*…)?$",
     r"^generating(?:\s+response)?(?:\s*[.]{3}|\s*…)?$",
     r"^loading(?:\s*[.]{3}|\s*…)?$",
     r"^please\s+wait(?:\s*[.]{3}|\s*…)?$",

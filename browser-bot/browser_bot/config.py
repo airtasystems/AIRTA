@@ -272,7 +272,7 @@ def get_posts_batches(suite_path: Path | None = None) -> list[list[str]]:
 # Name UI_PROMPT_PREFIX is historical; value is appended to the user message.
 UI_PROMPT_PREFIX = ""
 UI_PROMPT_PREFIX_SEPARATOR = ""
-UI_PROMPT_MAX_CHARS = 600  # 0 = no length cap
+UI_PROMPT_MAX_CHARS = 800  # 0 = no length cap
 
 
 def _apply_ui_prompt_transform(text: str) -> str:

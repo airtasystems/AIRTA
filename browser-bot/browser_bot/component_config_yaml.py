@@ -262,6 +262,7 @@ def _format_submission(submission: dict[str, Any]) -> list[str]:
         f"  submit_via: {submit_via}",
         "",
         "  # Max time to wait for a new response after submit, in milliseconds (min ~500).",
+        "  # Use 8000+ when the UI shows an empty bubble before body text streams in.",
         f"  response_wait_ms: {int(response_wait_ms)}",
     ])
 
