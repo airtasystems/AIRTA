@@ -9,7 +9,13 @@ from browser_bot.config import API_CONCURRENCY, EVASION_REQUEST_DELAY_S, get_pos
 from browser_bot.sites import get_submission_config
 
 from browser_bot.submit.api_helpers import ConversationTurn, do_api_request, uses_messages_context
-from browser_bot.submit.common import SubmissionProgressTracker, _write_run_log, append_test_prompt_delimiter, log_evasion
+from browser_bot.submit.common import (
+    SubmissionProgressTracker,
+    _write_run_log,
+    append_test_prompt_delimiter,
+    begin_run_log_session,
+    log_evasion,
+)
 
 
 async def _api_request_one(
@@ -73,6 +79,7 @@ async def run_api_submission_single(
         return [], None
     posts = [append_test_prompt_delimiter(p) for p in posts]
 
+    begin_run_log_session(site, component)
     tracker = SubmissionProgressTracker("single", len(posts))
     tracker.emit_run_start()
 
@@ -106,8 +113,8 @@ async def run_api_submission_single(
             results.append(pair)
             tracker.record_completed(1)
 
-    tracker.emit_run_done()
     log_path = _write_run_log(site, component, results) if results else None
+    tracker.emit_run_done()
     return results, log_path
 
 
@@ -127,6 +134,7 @@ async def run_api_submission_multi(
     batches = [[append_test_prompt_delimiter(t) for t in batch] for batch in batches]
 
     total_turns = sum(len(b) for b in batches)
+    begin_run_log_session(site, component)
     tracker = SubmissionProgressTracker("multi", total_turns)
     tracker.emit_run_start()
 
@@ -160,10 +168,10 @@ async def run_api_submission_multi(
             batch_results = await _api_request_batch(sub, batch, site=site, tracker=tracker)
             all_results.extend(batch_results)
 
-    tracker.emit_run_done()
     log_path = (
         _write_run_log(site, component, all_results, multi_batches=batches)
         if all_results
         else None
     )
+    tracker.emit_run_done()
     return all_results, log_path

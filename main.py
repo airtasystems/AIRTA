@@ -319,6 +319,10 @@ def _run_tests(args) -> None:
     print(f"[+] Run log: {run_log}")
 
     from pipeline.convert_log import convert_run_log
+    print(
+        f"[airta_progress] {json.dumps({'type': 'phase', 'phase': 'convert', 'label': 'Building compliance log…'}, ensure_ascii=False)}",
+        flush=True,
+    )
     compliance_log = convert_run_log(run_log, suite_path)
     print(f"[+] Compliance log: {compliance_log}")
 

@@ -1208,7 +1208,9 @@ createApp({
     const activeJobs = reactive({});
     const sseConnections = {};
     const runProgress = ref(null);
+    const MAX_RUN_PREVIEW_SLOTS = 8;
     const runPreviewSlots = ref([{ slot: 0, url: '' }]);
+    const runPreviewParallelCount = ref(0);
     const runPreviewLightbox = ref(null);
     const runBlockedInfo = ref(null);
     const runRateLimitBackoff = ref(120);
@@ -1216,17 +1218,23 @@ createApp({
     const rateLimitWaiting = ref(false);
     let rateLimitCountdownTimer = null;
 
-    function initRunPreviewSlots(count) {
-      const n = Math.max(1, Number(count) || 1);
+    function initRunPreviewSlots(count, parallelCount = 0) {
+      const raw = Math.max(1, Number(count) || 1);
+      const n = Math.min(MAX_RUN_PREVIEW_SLOTS, raw);
       runPreviewSlots.value = Array.from({ length: n }, (_, slot) => ({ slot, url: '' }));
+      const parallel = Number(parallelCount) || raw;
+      runPreviewParallelCount.value = parallel > 1 ? parallel : 0;
     }
 
     function setRunPreviewSlot(jobId, slot) {
-      const idx = Number(slot) || 0;
+      const idx = Math.min(MAX_RUN_PREVIEW_SLOTS - 1, Math.max(0, Number(slot) || 0));
       const url = `${API}/api/jobs/${jobId}/preview?slot=${idx}&t=${Date.now()}`;
       const slots = runPreviewSlots.value.slice();
-      while (slots.length <= idx) {
+      while (slots.length <= idx && slots.length < MAX_RUN_PREVIEW_SLOTS) {
         slots.push({ slot: slots.length, url: '' });
+      }
+      if (slots.length > MAX_RUN_PREVIEW_SLOTS) {
+        slots.length = MAX_RUN_PREVIEW_SLOTS;
       }
       slots[idx] = { slot: idx, url };
       runPreviewSlots.value = slots;
@@ -1234,6 +1242,7 @@ createApp({
 
     function clearRunPreview() {
       runPreviewSlots.value = [{ slot: 0, url: '' }];
+      runPreviewParallelCount.value = 0;
       runPreviewLightbox.value = null;
     }
 
@@ -1271,9 +1280,13 @@ createApp({
         return `Strategy ${p.current} / ${p.total}${p.strategy ? ' · ' + p.strategy : ''}`;
       }
       if (p.type === 'run_start') return 'Starting tests…';
+      if (p.type === 'phase' && p.phase === 'convert') return p.label || 'Building compliance log…';
       if (p.type === 'run_done') return 'Tests complete';
       if (p.type === 'blocked') return p.message || 'Run blocked';
       if (p.type === 'rate_limit_wait') return p.message || 'Rate limited - waiting…';
+      if (p.phase === 'finishing') {
+        return `${p.mode === 'multi' ? 'Multi-turn' : 'Single'} · ${p.current ?? 0} / ${p.total ?? 0} prompts · wrapping up`;
+      }
       return `${p.mode === 'multi' ? 'Multi-turn' : 'Single'} · ${p.current ?? 0} / ${p.total ?? 0} prompts`;
     });
 
@@ -1287,7 +1300,9 @@ createApp({
         return '-';
       }
       if (p.type === 'run_start' || p.type === 'suite') return 'Estimating…';
+      if (p.type === 'phase' && p.phase === 'convert') return 'Post-run processing…';
       if (p.type === 'run_done') return `${formatRunEta(p.elapsed_sec)} total`;
+      if (p.phase === 'finishing') return `Wrapping up · ${formatRunEta(p.elapsed_sec)} elapsed`;
       if (p.eta_sec != null && p.eta_sec !== '') return `ETA ${formatRunEta(p.eta_sec)} · ${formatRunEta(p.elapsed_sec)} elapsed`;
       return '-';
     });
@@ -1412,7 +1427,7 @@ createApp({
               if (p.type === 'screenshot') {
                 if (isRunJob) setRunPreviewSlot(jobId, p.slot ?? 0);
               } else if (p.type === 'preview_layout') {
-                if (isRunJob) initRunPreviewSlots(p.slots ?? 1);
+                if (isRunJob) initRunPreviewSlots(p.slots ?? 1, p.parallel_count);
               } else if (p.type === 'rate_limit_wait') {
                 if (isRunJob) {
                   runProgress.value = {
@@ -1432,14 +1447,22 @@ createApp({
                 } else if (p.type === 'run_start') {
                   pct = 0;
                   phase = 'submit';
+                } else if (p.type === 'phase' && p.phase === 'convert') {
+                  pct = 99;
+                  phase = 'convert';
                 } else if (p.type === 'progress' && p.mode) {
                   const total = p.total || 0;
                   const cur = p.current || 0;
-                  pct = total ? Math.min(100, Math.round((cur / total) * 100)) : 0;
-                  phase = 'submit';
+                  if (p.phase === 'finishing') {
+                    pct = total ? Math.min(98, Math.round((cur / total) * 100)) : 98;
+                    phase = 'finishing';
+                  } else {
+                    pct = total ? Math.min(97, Math.round((cur / total) * 100)) : 0;
+                    phase = 'submit';
+                  }
                 } else if (p.type === 'run_done') {
                   pct = 100;
-                  phase = 'submit';
+                  phase = 'done';
                 } else if (p.type === 'blocked') {
                   pct = 0;
                   phase = 'blocked';
@@ -2183,7 +2206,7 @@ createApp({
       startLogin, saveAuth, sendLoginEnter, confirmRunLogin, dismissRunLoginModal, onRunTroubleshoot,
       pretty, lineClass, activeOutput, runProgress, runProgressBarLabel, runProgressEtaText, riskTabProgressBarVisible, formatRunEta,
       submissionTransport, runShowsBrowserPreview,
-      runPreviewSlots, initRunPreviewSlots, setRunPreviewSlot, clearRunPreview,
+      runPreviewSlots, runPreviewParallelCount, initRunPreviewSlots, setRunPreviewSlot, clearRunPreview,
       runPreviewLightbox, openRunPreviewLightbox, closeRunPreviewLightbox,
       runBlockedInfo,
       onSiteChange, onComponentChange, loadContext, loadRunTestCatalog, onRunFrameworkChange, onRunStrategyChange, refreshRunTests,

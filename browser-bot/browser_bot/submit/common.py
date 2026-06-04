@@ -3,6 +3,7 @@
 import asyncio
 import html
 import json
+import os
 import random
 import re
 import time
@@ -14,6 +15,37 @@ import tenacity
 
 from browser_bot.config import EVASION_MAX_RETRIES, EVASION_RETRY_WAIT_S
 from browser_bot.sites import ensure_component_dir, get_component_path
+
+MAX_PREVIEW_SLOTS = 8
+
+
+def begin_run_log_session(site: str, component: str) -> Path:
+    """Create logs/{timestamp}/ for this run; reused by run_log.json and screenshots/."""
+    ensure_component_dir(site, component)
+    logs_dir = get_component_path(site, component) / "logs"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = logs_dir / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = run_dir.resolve()
+    os.environ["AIRTA_RUN_LOG_DIR"] = str(run_dir)
+    os.environ["AIRTA_RUN_LOG_TIMESTAMP"] = timestamp
+    from browser_bot.live_preview import reset_compliance_screenshot_sequence
+
+    reset_compliance_screenshot_sequence()
+    return run_dir
+
+
+def preview_ui_slot_count(parallel_count: int) -> int:
+    """How many preview panes the web UI should show (capped at MAX_PREVIEW_SLOTS)."""
+    n = max(0, int(parallel_count))
+    if n <= 1:
+        return 1
+    return min(n, MAX_PREVIEW_SLOTS)
+
+
+def map_preview_display_slot(logical_slot: int) -> int:
+    """Map parallel browser index onto preview panes 0..MAX_PREVIEW_SLOTS-1 (overwrite from pane 1)."""
+    return int(logical_slot) % MAX_PREVIEW_SLOTS
 
 
 def log_evasion(reason: str, *, sleep_s: float | None = None, detail: str = "") -> None:
@@ -44,6 +76,42 @@ def append_test_prompt_delimiter(text: str) -> str:
     return f"{text}{TEST_PROMPT_DELIMITER}"
 
 
+def format_ui_run_label(
+    *,
+    batch_index: int | None = None,
+    batch_count: int | None = None,
+    turn_count: int | None = None,
+    prompt_start: int | None = None,
+    prompt_end: int | None = None,
+    prompt_total: int | None = None,
+    prompt_index: int | None = None,
+    browser_slot: int | None = None,
+    retry: bool = False,
+) -> str:
+    """Human-readable label for per-browser UI logs (cookie dismiss, blockers, etc.)."""
+    parts: list[str] = []
+    if batch_index is not None and batch_count is not None:
+        parts.append(f"batch {batch_index + 1}/{batch_count}")
+    if prompt_index is not None and prompt_total is not None:
+        parts.append(f"prompt {prompt_index}/{prompt_total}")
+    elif (
+        prompt_start is not None
+        and prompt_end is not None
+        and prompt_total is not None
+    ):
+        if prompt_start == prompt_end:
+            parts.append(f"prompt {prompt_start}/{prompt_total}")
+        else:
+            parts.append(f"prompts {prompt_start}-{prompt_end}/{prompt_total}")
+    if turn_count is not None and turn_count > 1:
+        parts.append(f"{turn_count} turns")
+    if browser_slot is not None:
+        parts.append(f"browser {browser_slot + 1}")
+    if retry:
+        parts.append("retry")
+    return " · ".join(parts)
+
+
 class SubmissionProgressTracker:
     """Live ETA via throughput: elapsed/done * remaining."""
 
@@ -71,16 +139,19 @@ class SubmissionProgressTracker:
         elapsed = time.perf_counter() - self._start
         rem = max(0, self.total - self.done)
         eta_sec = None
+        phase = "submit"
         if self.done > 0 and rem > 0:
             eta_sec = (elapsed / self.done) * rem
-        elif rem == 0:
-            eta_sec = 0.0
+        elif rem == 0 and self.done > 0:
+            # All prompts accounted for; retries/log may still be running.
+            phase = "finishing"
         log_airta_progress(
             {
                 "type": "progress",
                 "mode": self.mode,
                 "current": self.done,
                 "total": self.total,
+                "phase": phase,
                 "elapsed_sec": round(elapsed, 1),
                 "eta_sec": round(eta_sec, 1) if eta_sec is not None else None,
             }
@@ -840,11 +911,17 @@ def _write_run_log(
     one batch per multi-shot conversation. Otherwise flat entries (single-shot).
     """
     try:
-        ensure_component_dir(site, component)
-        logs_dir = get_component_path(site, component) / "logs"
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        run_dir = logs_dir / timestamp
-        run_dir.mkdir(parents=True, exist_ok=True)
+        run_dir_env = os.environ.get("AIRTA_RUN_LOG_DIR", "").strip()
+        if run_dir_env:
+            run_dir = Path(run_dir_env)
+            timestamp = os.environ.get("AIRTA_RUN_LOG_TIMESTAMP", "").strip() or run_dir.name
+            run_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            ensure_component_dir(site, component)
+            logs_dir = get_component_path(site, component) / "logs"
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            run_dir = logs_dir / timestamp
+            run_dir.mkdir(parents=True, exist_ok=True)
         log_path = run_dir / "run_log.json"
 
         entries = [{"input": inp, "response": resp} for inp, resp in results]

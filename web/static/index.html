@@ -655,13 +655,15 @@
             <div v-if="activeJobs.run_tests && runShowsBrowserPreview" class="run-preview-panel">
               <div class="run-preview-header">
                 <span>Live browser preview</span>
-                <span v-if="runPreviewSlots.length > 1" class="run-preview-hint">{{ runPreviewSlots.length }} instances</span>
+                <span v-if="runPreviewParallelCount > runPreviewSlots.length" class="run-preview-hint">{{ runPreviewParallelCount }} browsers · {{ runPreviewSlots.length }} panes</span>
+                <span v-else-if="runPreviewSlots.length > 1" class="run-preview-hint">{{ runPreviewSlots.length }} instances</span>
               </div>
               <div
                 class="run-preview-grid"
                 :class="{
                   'run-preview-grid-duo': runPreviewSlots.length > 1 && runPreviewSlots.length < 3,
-                  'run-preview-grid-row': runPreviewSlots.length >= 3
+                  'run-preview-grid-row': runPreviewSlots.length >= 3 && runPreviewSlots.length < 8,
+                  'run-preview-grid-eight': runPreviewSlots.length >= 8
                 }"
               >
                 <div

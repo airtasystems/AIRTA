@@ -17,6 +17,8 @@ from browser_bot.submit.common import (
     _do_one_submit_step,
     _write_run_log,
     append_test_prompt_delimiter,
+    begin_run_log_session,
+    format_ui_run_label,
     log_evasion,
     parallel_fetchers_for_ui,
     run_with_evasion_retry,
@@ -44,6 +46,7 @@ async def do_ui_submit_sequence_with_page(
     component: str = "",
     blockers: list[dict] | None = None,
     preview_slot: int = 0,
+    run_label: str = "",
 ) -> list[tuple[str, str | None]]:
     """Run a sequence of UI submissions on the same page. Returns list of (text, response_text)."""
     async with live_preview_context(page, slot=preview_slot):
@@ -62,18 +65,25 @@ async def do_ui_submit_sequence_with_page(
             submit_selector=submit_selector,
             start_url=start_url,
             blockers=blockers,
+            run_label=run_label,
         )
         if human_behavior:
             await human_mouse_wander(page, count=1)
 
         results: list[tuple[str, str | None]] = []
-        for text in texts:
+        for turn_i, text in enumerate(texts):
+            turn_label = (
+                f"{run_label} · turn {turn_i + 1}/{len(texts)}"
+                if run_label
+                else f"turn {turn_i + 1}/{len(texts)}"
+            )
             await check_login_wall_before_submit(
                 page,
                 site=site,
                 component=component,
                 start_url=start_url,
                 blockers=blockers,
+                run_label=turn_label,
             )
             text_out, response_out, _full_content = await _do_one_submit_step(
                 page,
@@ -144,8 +154,27 @@ async def run_ui_submission_multi(
     storage_str = str(storage_path)
 
     total_turns = sum(len(b) for b in batches)
+    begin_run_log_session(site, component)
     tracker = SubmissionProgressTracker("multi", total_turns)
     tracker.emit_run_start()
+
+    batch_prompt_starts: list[int] = []
+    _offset = 0
+    for _batch in batches:
+        batch_prompt_starts.append(_offset)
+        _offset += len(_batch)
+
+    def _batch_label(i: int, batch: list[str], *, retry: bool = False, parallel: bool) -> str:
+        return format_ui_run_label(
+            batch_index=i,
+            batch_count=len(batches),
+            turn_count=len(batch),
+            prompt_start=batch_prompt_starts[i] + 1,
+            prompt_end=batch_prompt_starts[i] + len(batch),
+            prompt_total=total_turns,
+            browser_slot=i if parallel else None,
+            retry=retry,
+        )
 
     ui_kwargs = dict(
         site=site,
@@ -166,11 +195,16 @@ async def run_ui_submission_multi(
     if parallel_fetchers:
         emit_preview_layout(len(batches))
 
-        async def _run_batch_with_human(batch: list[str], *, preview_slot: int = 0):
+        async def _run_batch_with_human(
+            batch: list[str],
+            *,
+            preview_slot: int = 0,
+            run_label: str = "",
+        ):
             if human_fetcher is None:
                 return None
 
-            async def _cb(page, b=batch, ps=preview_slot):
+            async def _cb(page, b=batch, ps=preview_slot, rl=run_label):
                 return await do_ui_submit_sequence_with_page(
                     page,
                     start_url,
@@ -180,6 +214,7 @@ async def run_ui_submission_multi(
                     human_behavior=True,
                     progress_tracker=None,
                     preview_slot=ps,
+                    run_label=rl,
                     **ui_kwargs,
                 )
 
@@ -192,8 +227,14 @@ async def run_ui_submission_multi(
             except NonSuccessResponseError:
                 return None
 
-        async def _run_batch(batch: list[str], fetcher, *, record_progress: bool = False, preview_slot: int = 0):
-            async def _cb(page, b=batch, ps=preview_slot):
+        async def _run_batch(
+            batch: list[str],
+            fetcher,
+            *,
+            preview_slot: int = 0,
+            run_label: str = "",
+        ):
+            async def _cb(page, b=batch, ps=preview_slot, rl=run_label):
                 return await do_ui_submit_sequence_with_page(
                     page,
                     start_url,
@@ -201,8 +242,9 @@ async def run_ui_submission_multi(
                     submit_selector,
                     b,
                     human_behavior=False,
-                    progress_tracker=tracker if record_progress else None,
+                    progress_tracker=None,
                     preview_slot=ps,
+                    run_label=rl,
                     **ui_kwargs,
                 )
             try:
@@ -212,48 +254,80 @@ async def run_ui_submission_multi(
             except PageBlockedError:
                 raise
 
-        parallel_results = await asyncio.gather(
-            *[
-                _run_batch(batch, parallel_fetchers[0], record_progress=True, preview_slot=i)
-                for i, batch in enumerate(batches)
-            ],
-            return_exceptions=True,
-        )
-
-        async def _retry_fast_then_human(batch: list[str], *, preview_slot: int = 0):
+        async def _retry_fast_then_human(
+            batch: list[str],
+            *,
+            preview_slot: int = 0,
+            run_label: str = "",
+        ):
             for fetcher in parallel_fetchers[1:]:
                 try:
-                    retry_result = await _run_batch(batch, fetcher, preview_slot=preview_slot)
+                    retry_result = await _run_batch(
+                        batch, fetcher, preview_slot=preview_slot, run_label=run_label
+                    )
                 except PageBlockedError:
                     raise
                 except Exception:
                     retry_result = None
                 if retry_result and all(resp for _, resp in retry_result):
                     return retry_result
-            return await _run_batch_with_human(batch, preview_slot=preview_slot)
+            return await _run_batch_with_human(
+                batch, preview_slot=preview_slot, run_label=run_label
+            )
 
-        for i, (batch, r) in enumerate(zip(batches, parallel_results)):
+        async def _finalize_batch_result(
+            batch: list[str],
+            r,
+            *,
+            preview_slot: int,
+            batch_index: int,
+        ) -> list[tuple[str, str | None]]:
+            retry_label = _batch_label(batch_index, batch, retry=True, parallel=True)
             if isinstance(r, PageBlockedError):
                 print(f"[!] {r}", flush=True)
                 raise r
             if isinstance(r, Exception):
-                fallback = await _retry_fast_then_human(batch, preview_slot=i)
+                fallback = await _retry_fast_then_human(
+                    batch, preview_slot=preview_slot, run_label=retry_label
+                )
                 if fallback and all(resp for _, resp in fallback):
-                    all_results.extend(fallback)
-                else:
-                    all_results.extend((t, None) for t in batch)
-            elif r is not None:
+                    return list(fallback)
+                return [(t, None) for t in batch]
+            if r is not None:
                 if all(resp for _, resp in r):
-                    all_results.extend(r)
-                else:
-                    fallback = await _retry_fast_then_human(batch, preview_slot=i)
-                    all_results.extend(fallback if fallback and all(resp for _, resp in fallback) else r)
-            else:
-                fallback = await _retry_fast_then_human(batch, preview_slot=i)
+                    return list(r)
+                fallback = await _retry_fast_then_human(
+                    batch, preview_slot=preview_slot, run_label=retry_label
+                )
                 if fallback and all(resp for _, resp in fallback):
-                    all_results.extend(fallback)
-                else:
-                    all_results.extend((t, None) for t in batch)
+                    return list(fallback)
+                return list(r)
+            fallback = await _retry_fast_then_human(
+                batch, preview_slot=preview_slot, run_label=retry_label
+            )
+            if fallback and all(resp for _, resp in fallback):
+                return list(fallback)
+            return [(t, None) for t in batch]
+
+        async def _run_and_finalize_batch(i: int, batch: list[str]) -> list[tuple[str, str | None]]:
+            run_label = _batch_label(i, batch, parallel=True)
+            r = await _run_batch(
+                batch, parallel_fetchers[0], preview_slot=i, run_label=run_label
+            )
+            rows = await _finalize_batch_result(batch, r, preview_slot=i, batch_index=i)
+            tracker.record_completed(len(batch))
+            return rows
+
+        batch_rows = await asyncio.gather(
+            *[_run_and_finalize_batch(i, batch) for i, batch in enumerate(batches)],
+            return_exceptions=True,
+        )
+        for item in batch_rows:
+            if isinstance(item, PageBlockedError):
+                raise item
+            if isinstance(item, BaseException):
+                raise item
+            all_results.extend(item)
     else:
         for i, batch in enumerate(batches):
             if i > 0:
@@ -264,8 +338,9 @@ async def run_ui_submission_multi(
                 )
                 await asyncio.sleep(EVASION_REQUEST_DELAY_S)
             batch_results = None
+            seq_label = _batch_label(i, batch, parallel=False)
             for fetcher, human_behavior in fetchers_to_try:
-                async def _cb(page, b=batch, hb=human_behavior):
+                async def _cb(page, b=batch, hb=human_behavior, rl=seq_label):
                     return await do_ui_submit_sequence_with_page(
                         page,
                         start_url,
@@ -274,6 +349,7 @@ async def run_ui_submission_multi(
                         b,
                         human_behavior=hb,
                         progress_tracker=tracker,
+                        run_label=rl,
                         **ui_kwargs,
                     )
 
@@ -293,10 +369,10 @@ async def run_ui_submission_multi(
             else:
                 all_results.extend((t, None) for t in batch)
 
-    tracker.emit_run_done()
     log_path = (
         _write_run_log(site, component, all_results, multi_batches=batches)
         if all_results
         else None
     )
+    tracker.emit_run_done()
     return all_results, log_path

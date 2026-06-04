@@ -249,6 +249,10 @@ async def _cookie_consent_blocking(page: Page) -> bool:
     return False
 
 
+def _run_log_prefix(run_label: str) -> str:
+    return f"[{run_label}] " if run_label else ""
+
+
 async def _attempt_cookie_self_heal(
     page: Page,
     *,
@@ -256,6 +260,7 @@ async def _attempt_cookie_self_heal(
     component: str,
     blockers: list[dict[str, Any]] | None,
     start_url: str = "",
+    run_label: str = "",
 ) -> list[dict[str, Any]]:
     """Click cookie/dialog dismiss controls and persist selectors. Returns newly saved blockers."""
     if await _login_wall_visible(page, start_url=start_url):
@@ -270,7 +275,10 @@ async def _attempt_cookie_self_heal(
         if await _click_blocker(page, item):
             clicked_labels.append(item.get("label", "blocker"))
     if clicked_labels:
-        print(f"[+] Dismissed: {', '.join(clicked_labels)}", flush=True)
+        print(
+            f"[+] {_run_log_prefix(run_label)}Dismissed: {', '.join(clicked_labels)}",
+            flush=True,
+        )
         await asyncio.sleep(0.4)
     return saved
 
@@ -282,17 +290,24 @@ async def _resolve_cookie_consent(
     component: str,
     blockers: list[dict[str, Any]] | None,
     start_url: str = "",
+    run_label: str = "",
+    note: str = "",
 ) -> None:
     """Dismiss cookie banners before other blocker checks."""
     if not await _cookie_consent_blocking(page):
         return
-    print("[*] Cookie consent detected - attempting to dismiss…", flush=True)
+    note_part = f" ({note})" if note else ""
+    print(
+        f"[*] {_run_log_prefix(run_label)}Cookie consent detected{note_part} - attempting to dismiss…",
+        flush=True,
+    )
     await _attempt_cookie_self_heal(
         page,
         site=site,
         component=component,
         blockers=blockers,
         start_url=start_url,
+        run_label=run_label,
     )
 
 
@@ -419,6 +434,7 @@ async def check_login_wall_before_submit(
     start_url: str = "",
     blockers: list[dict[str, Any]] | None = None,
     check_rate_limit: bool = True,
+    run_label: str = "",
 ) -> None:
     """Login, cookie, and optional rate-limit checks between multi-turn prompts."""
     await _resolve_login_wall(page, site=site, component=component, start_url=start_url)
@@ -428,6 +444,7 @@ async def check_login_wall_before_submit(
         component=component,
         blockers=blockers,
         start_url=start_url,
+        run_label=run_label,
     )
     if check_rate_limit:
         await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
@@ -744,6 +761,7 @@ async def ensure_page_ready_for_submit(
     blockers: list[dict[str, Any]] | None = None,
     readiness_timeout_ms: int = 5000,
     check_rate_limit: bool = True,
+    run_label: str = "",
 ) -> None:
     """Cookie dismiss, login wall, then rate-limit detection before submit."""
     await asyncio.sleep(0.35)
@@ -755,6 +773,7 @@ async def ensure_page_ready_for_submit(
         component=component,
         blockers=blockers,
         start_url=start_url,
+        run_label=run_label,
     )
     if check_rate_limit:
         await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
@@ -766,6 +785,8 @@ async def ensure_page_ready_for_submit(
         component=component,
         blockers=blockers,
         start_url=start_url,
+        run_label=run_label,
+        note="recheck",
     )
     if check_rate_limit:
         await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
@@ -788,6 +809,8 @@ async def ensure_page_ready_for_submit(
                 component=component,
                 blockers=blockers,
                 start_url=start_url,
+                run_label=run_label,
+                note="recheck",
             )
             continue
         if kind == "rate_limited" and check_rate_limit:

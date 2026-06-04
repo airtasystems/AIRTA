@@ -17,6 +17,8 @@ from browser_bot.submit.common import (
     _do_one_submit_step,
     _write_run_log,
     append_test_prompt_delimiter,
+    begin_run_log_session,
+    format_ui_run_label,
     log_evasion,
     parallel_fetchers_for_ui,
     run_with_evasion_retry,
@@ -44,6 +46,7 @@ async def do_ui_submit_with_page(
     blockers: list[dict] | None = None,
     preview_slot: int = 0,
     check_rate_limit: bool = True,
+    run_label: str = "",
 ) -> tuple[str, str | None]:
     """Run a single UI submission with the given page. Returns (text, response_text)."""
     async with live_preview_context(page, slot=preview_slot):
@@ -63,6 +66,7 @@ async def do_ui_submit_with_page(
             start_url=start_url,
             blockers=blockers,
             check_rate_limit=check_rate_limit,
+            run_label=run_label,
         )
         if human_behavior:
             await human_mouse_wander(page, count=1)
@@ -131,6 +135,7 @@ async def run_ui_submission_single(
     results: list[tuple[str, str | None]] = []
     storage_str = str(storage_path)
 
+    begin_run_log_session(site, component)
     tracker = SubmissionProgressTracker("single", len(posts))
     tracker.emit_run_start()
 
@@ -150,14 +155,27 @@ async def run_ui_submission_single(
     if len(posts) > 1:
         parallel_fetchers = parallel_fetchers_for_ui(method, pool_fetcher, cluster_fetcher)
 
+    def _prompt_label(i: int, *, retry: bool = False, parallel: bool) -> str:
+        return format_ui_run_label(
+            prompt_index=i + 1,
+            prompt_total=len(posts),
+            browser_slot=i if parallel else None,
+            retry=retry,
+        )
+
     if parallel_fetchers:
         emit_preview_layout(len(posts))
 
-        async def _run_one_with_human(text: str, *, preview_slot: int = 0):
+        async def _run_one_with_human(
+            text: str,
+            *,
+            preview_slot: int = 0,
+            run_label: str = "",
+        ):
             if human_fetcher is None:
                 return None
 
-            async def _cb(page, t=text, ps=preview_slot):
+            async def _cb(page, t=text, ps=preview_slot, rl=run_label):
                 return await do_ui_submit_with_page(
                     page,
                     start_url,
@@ -166,6 +184,7 @@ async def run_ui_submission_single(
                     t,
                     human_behavior=True,
                     preview_slot=ps,
+                    run_label=rl,
                     **ui_kwargs,
                 )
 
@@ -178,8 +197,14 @@ async def run_ui_submission_single(
             except NonSuccessResponseError:
                 return None
 
-        async def _run_one(text: str, fetcher, *, record_progress: bool = False, preview_slot: int = 0):
-            async def _cb(page, t=text, ps=preview_slot):
+        async def _run_one(
+            text: str,
+            fetcher,
+            *,
+            preview_slot: int = 0,
+            run_label: str = "",
+        ):
+            async def _cb(page, t=text, ps=preview_slot, rl=run_label):
                 return await do_ui_submit_with_page(
                     page,
                     start_url,
@@ -188,6 +213,7 @@ async def run_ui_submission_single(
                     t,
                     human_behavior=False,
                     preview_slot=ps,
+                    run_label=rl,
                     **ui_kwargs,
                 )
             try:
@@ -196,49 +222,75 @@ async def run_ui_submission_single(
                 )
             except PageBlockedError:
                 raise
-            finally:
-                if record_progress:
-                    tracker.record_completed(1)
 
-        try:
-            parallel_results = await asyncio.gather(
-                *[
-                    _run_one(text, parallel_fetchers[0], record_progress=True, preview_slot=i)
-                    for i, text in enumerate(posts)
-                ],
-                return_exceptions=True,
-            )
-        except PageBlockedError:
-            raise
-
-        async def _retry_fast_then_human(text: str, *, preview_slot: int = 0):
+        async def _retry_fast_then_human(
+            text: str,
+            *,
+            preview_slot: int = 0,
+            run_label: str = "",
+        ):
             for fetcher in parallel_fetchers[1:]:
                 try:
-                    retry_result = await _run_one(text, fetcher, preview_slot=preview_slot)
+                    retry_result = await _run_one(
+                        text, fetcher, preview_slot=preview_slot, run_label=run_label
+                    )
                 except PageBlockedError:
                     raise
                 except Exception:
                     retry_result = None
                 if retry_result and retry_result[1]:
                     return retry_result
-            return await _run_one_with_human(text, preview_slot=preview_slot)
+            return await _run_one_with_human(
+                text, preview_slot=preview_slot, run_label=run_label
+            )
 
-        for i, (text, r) in enumerate(zip(posts, parallel_results)):
+        async def _finalize_one_result(
+            text: str,
+            r,
+            *,
+            preview_slot: int,
+            prompt_index: int,
+        ) -> tuple[str, str | None]:
+            retry_label = _prompt_label(prompt_index, retry=True, parallel=True)
             if isinstance(r, PageBlockedError):
                 print(f"[!] {r}", flush=True)
                 raise r
             if isinstance(r, Exception):
-                fallback = await _retry_fast_then_human(text, preview_slot=i)
-                results.append(fallback if fallback and fallback[1] else (text, None))
-            elif r is not None:
+                fallback = await _retry_fast_then_human(
+                    text, preview_slot=preview_slot, run_label=retry_label
+                )
+                return fallback if fallback and fallback[1] else (text, None)
+            if r is not None:
                 if r[1]:
-                    results.append(r)
-                else:
-                    fallback = await _retry_fast_then_human(text, preview_slot=i)
-                    results.append(fallback if fallback and fallback[1] else r)
-            else:
-                fallback = await _retry_fast_then_human(text, preview_slot=i)
-                results.append(fallback if fallback and fallback[1] else (text, None))
+                    return r
+                fallback = await _retry_fast_then_human(
+                    text, preview_slot=preview_slot, run_label=retry_label
+                )
+                return fallback if fallback and fallback[1] else r
+            fallback = await _retry_fast_then_human(
+                text, preview_slot=preview_slot, run_label=retry_label
+            )
+            return fallback if fallback and fallback[1] else (text, None)
+
+        async def _run_and_finalize_one(i: int, text: str) -> tuple[str, str | None]:
+            run_label = _prompt_label(i, parallel=True)
+            r = await _run_one(
+                text, parallel_fetchers[0], preview_slot=i, run_label=run_label
+            )
+            row = await _finalize_one_result(text, r, preview_slot=i, prompt_index=i)
+            tracker.record_completed(1)
+            return row
+
+        parallel_rows = await asyncio.gather(
+            *[_run_and_finalize_one(i, text) for i, text in enumerate(posts)],
+            return_exceptions=True,
+        )
+        for item in parallel_rows:
+            if isinstance(item, PageBlockedError):
+                raise item
+            if isinstance(item, BaseException):
+                raise item
+            results.append(item)
     else:
         for i, text in enumerate(posts):
             if i > 0:
@@ -249,8 +301,9 @@ async def run_ui_submission_single(
                 )
                 await asyncio.sleep(EVASION_REQUEST_DELAY_S)
             result = None
+            seq_label = _prompt_label(i, parallel=False)
             for fetcher, human_behavior in fetchers_to_try:
-                async def _cb(page, t=text, hb=human_behavior):
+                async def _cb(page, t=text, hb=human_behavior, rl=seq_label):
                     return await do_ui_submit_with_page(
                         page,
                         start_url,
@@ -258,6 +311,7 @@ async def run_ui_submission_single(
                         submit_selector,
                         t,
                         human_behavior=hb,
+                        run_label=rl,
                         **ui_kwargs,
                     )
 
@@ -275,6 +329,6 @@ async def run_ui_submission_single(
             results.append(result if result is not None else (text, None))
             tracker.record_completed(1)
 
-    tracker.emit_run_done()
     log_path = _write_run_log(site, component, results) if results else None
+    tracker.emit_run_done()
     return results, log_path
