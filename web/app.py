@@ -73,7 +73,13 @@ if _img_dir.is_dir():
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return (_static_dir / "index.html").read_text(encoding="utf-8")
+    html = (_static_dir / "index.html").read_text(encoding="utf-8")
+    app_js = _static_dir / "app.js"
+    version = int(app_js.stat().st_mtime) if app_js.is_file() else 0
+    return html.replace(
+        'src="/static/app.js"',
+        f'src="/static/app.js?v={version}"',
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +409,14 @@ async def api_frameworks():
     return list_framework_options()
 
 
+@app.get("/api/playbooks")
+async def api_playbooks_legacy():
+    """Deprecated alias for older UI builds; rubrics are frameworks in this repo."""
+    from pipeline.framework_labels import list_framework_slugs
+
+    return list_framework_slugs()
+
+
 def _pretty(slug: str) -> str:
     short = {"eu", "ai", "uk", "us"}
     long_ = {"oecd", "gdpr", "iso"}
@@ -447,6 +461,24 @@ async def api_all_frameworks(site: str, component: str):
     return [{"slug": s, "label": framework_label(s)} for s in sorted(stems)]
 
 
+@app.get("/api/sites/{site}/{component}/all-playbooks")
+async def api_all_playbooks_legacy(site: str, component: str):
+    return await api_all_frameworks(site, component)
+
+
+@app.get("/api/sites/{site}/{component}/playbooks/{playbook}/strategies")
+async def api_playbook_strategies_legacy(site: str, component: str, playbook: str):
+    tests = _bb_dir / "sites" / site / component / "tests"
+    if not tests.is_dir():
+        return []
+    stem = playbook[:-5] if playbook.endswith(".json") else playbook
+    return [
+        {"slug": strat_dir.name, "label": _pretty(strat_dir.name)}
+        for strat_dir in sorted(tests.iterdir())
+        if strat_dir.is_dir() and (strat_dir / f"{stem}.json").is_file()
+    ]
+
+
 @app.get("/api/sites/{site}/{component}/strategies/{strategy}/frameworks")
 async def api_strategy_frameworks(site: str, component: str, strategy: str):
     from pipeline.framework_labels import framework_label
@@ -467,6 +499,11 @@ async def api_strategy_frameworks(site: str, component: str, strategy: str):
             "path": str(p),
         })
     return out
+
+
+@app.get("/api/sites/{site}/{component}/strategies/{strategy}/playbooks")
+async def api_strategy_playbooks_legacy(site: str, component: str, strategy: str):
+    return await api_strategy_frameworks(site, component, strategy)
 
 
 @app.get("/api/sites/{site}/{component}/tests/{strategy}/{framework}")

@@ -19,6 +19,7 @@ cache/
 # risk level agent
 dev/
 airta-venv/
+.playwright-chromium-installed
 simple-agent/ 
 risk-level-agent/logs/
 

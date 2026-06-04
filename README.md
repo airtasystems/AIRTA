@@ -76,6 +76,12 @@ Open the URL printed in the terminal (default **http://localhost:8000**). API re
 
 `start.py` creates `airta-venv/`, installs dependencies, runs `playwright install chromium` once, and starts the web UI.
 
+**Ubuntu 26.04:** Playwright 1.60 does not ship `ubuntu26.04-x64` browsers yet. `start.py` sets `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` automatically. If Chromium fails to start (missing `libnspr4.so`, etc.), install system deps:
+
+```bash
+PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 airta-venv/bin/python -m playwright install-deps chromium
+```
+
 ### Try it locally (no external SaaS)
 
 ```bash
