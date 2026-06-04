@@ -624,6 +624,10 @@ async def _start_sample_request(job: Job):
                             submit_via=sub.get("submit_via", "click"),
                             response_wait_ms=int(sub.get("response_wait_ms", 5000) or 5000),
                             human_behavior=True,
+                            site=job.site,
+                            component=job.component,
+                            blockers=sub.get("blockers") or [],
+                            check_rate_limit=False,
                         )
                     finally:
                         try:

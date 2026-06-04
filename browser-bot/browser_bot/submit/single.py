@@ -43,6 +43,7 @@ async def do_ui_submit_with_page(
     component: str = "",
     blockers: list[dict] | None = None,
     preview_slot: int = 0,
+    check_rate_limit: bool = True,
 ) -> tuple[str, str | None]:
     """Run a single UI submission with the given page. Returns (text, response_text)."""
     async with live_preview_context(page, slot=preview_slot):
@@ -61,6 +62,7 @@ async def do_ui_submit_with_page(
             submit_selector=submit_selector,
             start_url=start_url,
             blockers=blockers,
+            check_rate_limit=check_rate_limit,
         )
         if human_behavior:
             await human_mouse_wander(page, count=1)

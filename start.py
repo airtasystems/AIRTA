@@ -13,6 +13,9 @@ VENV_DIR = ROOT / "airta-venv"
 REQUIREMENTS = ROOT / "requirements.txt"
 WEB_APP = ROOT / "web" / "app.py"
 PLAYWRIGHT_MARKER = ROOT / ".playwright-chromium-installed"
+PLAYWRIGHT_HOST_PLATFORM_FALLBACKS = {
+    "26.": "ubuntu24.04-x64",
+}
 
 
 def venv_python() -> Path:
@@ -51,14 +54,24 @@ def _ubuntu_version_id() -> str | None:
 
 
 def playwright_subprocess_env() -> dict[str, str]:
-    """Env for `python -m playwright` (Ubuntu 26.04 needs a host-platform override)."""
+    """Env for `python -m playwright` with unsupported OS fallbacks applied."""
     env = os.environ.copy()
     if env.get("PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"):
         return env
     version_id = _ubuntu_version_id()
-    if version_id and version_id.startswith("26."):
-        env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = "ubuntu24.04-x64"
+    for prefix, host_platform in PLAYWRIGHT_HOST_PLATFORM_FALLBACKS.items():
+        if version_id and version_id.startswith(prefix):
+            env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = host_platform
+            break
     return env
+
+
+def apply_playwright_runtime_env() -> None:
+    """Make browser install and runtime resolve the same Playwright browser build."""
+    env = playwright_subprocess_env()
+    override = env.get("PLAYWRIGHT_HOST_PLATFORM_OVERRIDE")
+    if override:
+        os.environ["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = override
 
 
 def playwright_browsers_installed() -> bool:
@@ -93,6 +106,7 @@ def launch_ui(python: Path) -> None:
 
 
 def main() -> None:
+    apply_playwright_runtime_env()
     created = ensure_venv()
     python = venv_python()
     if not python.is_file():

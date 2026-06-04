@@ -985,11 +985,22 @@
                 <div class="cfg-section-title">Report</div>
                 <div class="form-row">
                   <label>Pipeline Report</label>
-                  <select v-model="exp.report">
+                  <select v-model="exp.selection">
                     <option value="">Select...</option>
-                    <option v-for="r in logs.reports" :key="r.path" :value="r.path">{{ r.name }}</option>
+                    <optgroup label="Time period (latest in range)">
+                      <option
+                        v-for="o in expPeriodOptions"
+                        :key="o.value"
+                        :value="o.value"
+                        :disabled="o.disabled"
+                      >{{ o.label }}</option>
+                    </optgroup>
+                    <optgroup v-if="logs.reports.length" label="Specific report">
+                      <option v-for="r in logs.reports" :key="r.path" :value="'report:' + r.path">{{ r.name }}</option>
+                    </optgroup>
                   </select>
                 </div>
+                <p v-if="exp.selection && !expResolvedReportPath" class="cfg-note">No pipeline report in that period. Run Risk Assessment or pick a specific report below.</p>
                 <div v-if="expPreview" class="export-preview">
                   <span class="badge badge-neutral">{{ expPreview.count }} finding(s)</span>
                   <span v-if="expPreview.framework" class="badge badge-info">{{ expPreview.framework }}</span>
@@ -1035,7 +1046,7 @@
                 <p class="cfg-note">Each export targets one program. Change this between submissions to send results to different programs.</p>
               </div>
 
-              <button class="btn btn-primary" @click="startExport" :disabled="!exp.report || !expCreds.has_api_key || !expCreds.host || !exp.program_id">
+              <button class="btn btn-primary" @click="startExport" :disabled="!expResolvedReportPath || !expCreds.has_api_key || !expCreds.host || !exp.program_id">
                 Export to AIRTA Systems
               </button>
             </div>
@@ -1422,12 +1433,13 @@
               <div class="form-row">
                 <label>Chrome channel</label>
                 <select v-model="cfg.CHROME_CHANNEL">
+                  <option :value="null">Bundled Chromium (default)</option>
                   <option v-for="ch in CHANNELS" :key="ch" :value="ch">{{ ch }}</option>
                 </select>
               </div>
               <div class="form-row">
-                <label>Chromium path</label>
-                <input v-model="cfg.CHROMIUM_EXECUTABLE_PATH" style="font-family:var(--mono);font-size:11px;">
+                <label>Browser path</label>
+                <input v-model="cfg.CHROMIUM_EXECUTABLE_PATH" placeholder="Optional executable path" style="font-family:var(--mono);font-size:11px;">
               </div>
               <div class="form-row" style="align-items:flex-start">
                 <label style="padding-top:4px">Block types</label>

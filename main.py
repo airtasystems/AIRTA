@@ -394,7 +394,7 @@ def _run_export(args) -> None:
     if not host:
         host = input("  AIRTA Systems host (e.g. app.airtasystems.com): ").strip()
     if not api_key:
-        api_key = input("  API key (write:bulk_import scope): ").strip()
+        api_key = input("  API key (write:imported_reports scope): ").strip()
     if not program_id:
         program_id = input("  Program ID (MongoDB ObjectId): ").strip()
     if not host or not api_key or not program_id:

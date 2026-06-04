@@ -406,7 +406,12 @@ createApp({
       // Selection validated via computed lists and startRunTests guard.
     }
     const risk = reactive({ log: '' });
-    const exp = reactive({ report: '', program_id: '' });
+    const EXP_REPORT_WINDOWS = [
+      { id: '1h', label: 'Last hour', ms: 60 * 60 * 1000 },
+      { id: '6h', label: 'Last 6 hours', ms: 6 * 60 * 60 * 1000 },
+      { id: '24h', label: 'Last day', ms: 24 * 60 * 60 * 1000 },
+    ];
+    const exp = reactive({ selection: '', program_id: '' });
     const expResult = ref(null);
     const expPreview = ref(null);
     // host + api_key stored server-side in .env; program_id is per-export
@@ -456,9 +461,46 @@ createApp({
       expCredsMsg.value = 'Credentials cleared';
     }
 
-    watch(() => exp.report, async (path) => {
+    function expReportsInWindow(windowId) {
+      const window = EXP_REPORT_WINDOWS.find((w) => w.id === windowId);
+      if (!window || !logs.reports?.length) return [];
+      const cutoffSec = (Date.now() - window.ms) / 1000;
+      return logs.reports.filter((r) => (r.mtime ?? 0) >= cutoffSec);
+    }
+
+    const expPeriodOptions = computed(() =>
+      EXP_REPORT_WINDOWS.map((w) => {
+        const count = expReportsInWindow(w.id).length;
+        return {
+          value: `period:${w.id}`,
+          label: count ? `${w.label} (latest)` : `${w.label} (none)`,
+          disabled: count === 0,
+        };
+      }),
+    );
+
+    const expResolvedReportPath = computed(() => {
+      const sel = exp.selection || '';
+      if (sel.startsWith('report:')) return sel.slice('report:'.length);
+      if (sel.startsWith('period:')) {
+        const inWindow = expReportsInWindow(sel.slice('period:'.length));
+        return inWindow[0]?.path || '';
+      }
+      return '';
+    });
+
+    function defaultExpSelection() {
+      for (const w of EXP_REPORT_WINDOWS) {
+        if (expReportsInWindow(w.id).length) return `period:${w.id}`;
+      }
+      if (logs.reports?.length) return `report:${logs.reports[0].path}`;
+      return '';
+    }
+
+    watch(() => exp.selection, async () => {
       expPreview.value = null;
       expResult.value = null;
+      const path = expResolvedReportPath.value;
       if (!path) return;
       try {
         const data = await api(`/api/log?path=${encodeURIComponent(path)}`);
@@ -1091,7 +1133,7 @@ createApp({
       },
       export: {
         title: 'Export to AIRTA Systems',
-        text: 'Sends a pipeline report to an AIRTA Systems instance via the bulk-import API. Select a report, enter your host, API key, and program ID. Each compliance test result is submitted as a finding.',
+        text: 'POSTs pipeline_report.json to /api/v2/imported-reports/company (scope write:imported_reports). Rows are sent as adversarial_results. Pick a time window or specific report, then set host, API key, and program ID in .env / Program.',
       },
       cache: {
         title: 'Clear Cache',
@@ -1126,6 +1168,9 @@ createApp({
       logs.runs = l.runs;
       logs.compliance = l.compliance;
       logs.reports = l.reports;
+      if (tab.value === 'export' && (!exp.selection || !expResolvedReportPath.value)) {
+        exp.selection = defaultExpSelection();
+      }
     }
 
     async function loadLatestRunLog() {
@@ -1976,7 +2021,9 @@ createApp({
 
     async function startExport() {
       expResult.value = null;
-      const job = await startJob('export', { report: exp.report, program_id: exp.program_id });
+      const reportPath = expResolvedReportPath.value;
+      if (!reportPath) return;
+      const job = await startJob('export', { report: reportPath, program_id: exp.program_id });
       if (job && job.id) {
         const poll = setInterval(async () => {
           const j = await api(`/api/jobs/${job.id}`);
@@ -2148,6 +2195,7 @@ createApp({
       startGenerate, startDiscover, startManualDiscover, openComponentSettings, sendEnter,
       startRunTests, startSampleRequest, startRiskAssess, startExport, startClearCache,
       loadCacheSettings, saveCacheSettings, cacheSettingsSaving, cacheSettingsMsg,
+      EXP_REPORT_WINDOWS, expPeriodOptions, expResolvedReportPath,
       expResult, expPreview, expCreds, expCredsEdit, expCredsSaving, expCredsMsg,
       loadExpCreds, saveExpCreds, clearExpCreds,
       cancelJob, saveConfig, toggleBlocked,

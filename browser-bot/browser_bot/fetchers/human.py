@@ -164,5 +164,15 @@ class HumanFetcher(BaseFetcher):
                 await browser.close()
         except NonSuccessResponseError:
             raise
-        except Exception:
+        except Exception as exc:
+            msg = str(exc)
+            print(f"[!] Human browser tier failed: {msg}", flush=True)
+            if "ERR_CONNECTION_REFUSED" in msg:
+                print(
+                    "[!] Target server is not reachable at that URL from this environment. "
+                    "Start the app and confirm with `curl http://127.0.0.1:<port>/` in the same "
+                    "shell you use for `python start.py`. On WSL, a server on Windows :3001 "
+                    "may not be visible as localhost:3001 here unless port forwarding applies.",
+                    flush=True,
+                )
             return None

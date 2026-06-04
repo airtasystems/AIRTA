@@ -4,9 +4,13 @@ import sys
 from pathlib import Path
 
 _root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_root))
 sys.path.insert(0, str(_root / "browser-bot"))
 
+from start import apply_playwright_runtime_env  # noqa: E402
 from browser_bot.auth import capture_login  # noqa: E402
+
+apply_playwright_runtime_env()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

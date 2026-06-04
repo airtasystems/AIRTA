@@ -97,13 +97,13 @@ settings:
   # Run browser without a visible window. false = headed (easier for debugging login/discovery).
   HEADLESS: true
 
-  # Path to Chromium/Chrome binary. Use null in Python config for Playwright bundled Chromium.
-  # Linux default assumes system package at /usr/bin/chromium-browser.
-  CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium-browser
+  # Optional path to a Chromium/Chrome binary.
+  # null uses Playwright's bundled Chromium and is portable across supported OSes.
+  CHROMIUM_EXECUTABLE_PATH: null
 
-  # Playwright browser channel.
-  # Options: chromium | chrome | chrome-beta | msedge
-  CHROME_CHANNEL: chromium
+  # Optional Playwright browser channel.
+  # null = bundled Chromium. Options: chromium | chrome | chrome-beta | msedge
+  CHROME_CHANNEL: null
 
   # Resource types to block at the network layer (speed / fingerprint reduction).
   # Options (combine as a YAML list): image | font | media | stylesheet

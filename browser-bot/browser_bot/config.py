@@ -452,11 +452,11 @@ def get_human_context_opts():
 # --- Browser ---
 BLOCKED_TYPES = set()
 HEADLESS = True
-# System chromium-browser (Linux). Set to None to use Playwright's bundled Chromium.
-CHROMIUM_EXECUTABLE_PATH = '/usr/bin/chromium-browser'
-# Use real Chrome for human/login (Google trusts it more). Set to "chrome" if Chromium is blocked.
-# Requires: playwright install chrome
-CHROME_CHANNEL = 'chromium'
+# Optional path to a Chromium/Chrome binary. None uses Playwright's bundled Chromium.
+CHROMIUM_EXECUTABLE_PATH = None
+# Optional Playwright browser channel: "chrome", "chrome-beta", "msedge", or "chromium".
+# None uses Playwright's bundled Chromium and is the most portable default.
+CHROME_CHANNEL = None
 # Use persistent browser profile for severe login blocker issues
 LOGIN_USE_PERSISTENT_CONTEXT = False
 

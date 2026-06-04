@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -57,6 +58,21 @@ def _build_config_from_page(storage: dict, session_items: list, page_origin: str
     return config
 
 
+def _login_url_reachable(login_url: str, *, timeout_s: float = 2.0) -> tuple[bool, str]:
+    """TCP check from this process (same network view as Playwright)."""
+    parsed = urlparse(login_url)
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if not host:
+        return False, "invalid login URL (no host)"
+    try:
+        with socket.create_connection((host, port), timeout=timeout_s):
+            pass
+        return True, ""
+    except OSError as exc:
+        return False, str(exc)
+
+
 async def capture_login(login_url: str, *, force_persistent: bool = False) -> str | None:
     """
     Open headful browser, navigate to login_url, wait for user to log in,
@@ -70,9 +86,27 @@ async def capture_login(login_url: str, *, force_persistent: bool = False) -> st
     if not domain:
         return None
 
+    reachable, err = _login_url_reachable(login_url)
+    if not reachable:
+        print(
+            f"[!] Cannot reach login URL from AIRTA ({login_url}): {err}",
+            flush=True,
+        )
+        print(
+            "[!] Start the target server in the same environment as `python start.py` "
+            "(WSL), then verify: curl -I " + login_url,
+            flush=True,
+        )
+        return None
+
     ensure_site_dir(domain)
     auth_path = get_auth_config_path(domain)
-    storage_path = str(auth_path) if auth_path and auth_path.exists() else None
+    # Empty auth.json ({}) must not be loaded as storage_state — it breaks headed login.
+    storage_path = (
+        str(auth_path)
+        if auth_path and auth_path.exists() and is_auth_configured(domain)
+        else None
+    )
 
     async with async_playwright() as p:
         use_persistent = LOGIN_USE_PERSISTENT_CONTEXT or force_persistent
@@ -119,10 +153,22 @@ async def capture_login(login_url: str, *, force_persistent: bool = False) -> st
                 page_origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.netloc else ""
                 return _build_config_from_page(storage, session_items, page_origin, LOCALSTORAGE_MAX_VALUE_LEN)
 
-            config = await run_with_page_from_fetchers(
-                p, domain, _do_login, storage_path=storage_path, interactive=True
-            )
+            try:
+                config = await run_with_page_from_fetchers(
+                    p, domain, _do_login, storage_path=storage_path, interactive=True
+                )
+            except Exception as exc:
+                print(f"[!] Browser login error: {exc}", flush=True)
+                return None
             if config is None:
+                print(
+                    "[!] Login did not complete (browser may have opened but navigation failed). "
+                    "If you see ERR_CONNECTION_REFUSED above, start the target server and use the "
+                    "correct host:port in login_url (test-target often runs on :3000). "
+                    "For Harborline with no sign-in, use Public / no login instead of Add Login. "
+                    "Otherwise run `python start.py` for Playwright, or set DISPLAY on WSL for headed mode.",
+                    flush=True,
+                )
                 return None
 
     save_auth_config(domain, config)

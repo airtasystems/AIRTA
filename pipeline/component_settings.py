@@ -95,9 +95,9 @@ SETTING_META: dict[str, dict[str, Any]] = {
     "HEADLESS": {"type": "bool", "label": "Headless"},
     "CHROME_CHANNEL": {
         "type": "select", "label": "Chrome channel",
-        "options": ["chromium", "chrome", "chrome-beta", "msedge"],
+        "options": ["", "chromium", "chrome", "chrome-beta", "msedge"],
     },
-    "CHROMIUM_EXECUTABLE_PATH": {"type": "string", "label": "Chromium path"},
+    "CHROMIUM_EXECUTABLE_PATH": {"type": "string", "label": "Browser path"},
     "BLOCKED_TYPES": {
         "type": "set", "label": "Block types",
         "options": ["image", "font", "media", "stylesheet"],
@@ -296,6 +296,11 @@ def get_global_setting(key: str) -> Any:
 def _coerce_setting(key: str, value: Any) -> Any:
     if key == "gemini_use_cache":
         return _parse_bool(value, global_gemini_cache_enabled())
+    if key in {"CHROME_CHANNEL", "CHROMIUM_EXECUTABLE_PATH"}:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
     if key == "BLOCKED_TYPES":
         if value is None:
             return set()

@@ -39,7 +39,7 @@ SETTINGS_OVERRIDES_EXAMPLE = """
 #   FETCH_METHOD: pool               # auto | pool | cluster | human
 #   HEADLESS: true                   # true | false
 #   HUMAN_COUNTRY: UK                # US | UK | DE | FR | JP | CA | AU | NL | ES | IT
-#   CHROME_CHANNEL: chromium         # chromium | chrome | chrome-beta | msedge
+#   CHROME_CHANNEL: null             # null | chromium | chrome | chrome-beta | msedge
 #   BLOCKED_TYPES: [image, font]     # image | font | media | stylesheet
 #   POOL_SIZE: 6
 #   API_CONCURRENCY: 8

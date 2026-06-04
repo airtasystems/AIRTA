@@ -20,7 +20,10 @@ ADVICE_BY_KIND: dict[str, list[str]] = {
     "captcha": [
         "Switch Fetch Method to human and disable Headless, complete the captcha during Add Login, then try again.",
     ],
-    "cookie_consent": [],
+    "cookie_consent": [
+        "AIRTA will try to dismiss the banner automatically on the next attempt.",
+        "If it persists, add a blocker in component config or dismiss it once with Headless off.",
+    ],
     "rate_limited": [
         "Wait for the configured backoff period before retrying.",
         "Click Wait & retry in the dialog, or reduce pool size / concurrency in Settings.",
@@ -34,15 +37,36 @@ ADVICE_BY_KIND: dict[str, list[str]] = {
 DISMISS_SELECTORS: list[tuple[str, str]] = [
     ('button:has-text("Accept all")', "cookie consent"),
     ('button:has-text("Accept All")', "cookie consent"),
+    ('button:has-text("Accept")', "cookie consent"),
     ('button:has-text("Reject non-essential")', "cookie consent"),
+    ('button:has-text("Reject All")', "cookie consent"),
     ('button:has-text("Allow all")', "cookie consent"),
     ('button:has-text("Allow All")', "cookie consent"),
     ('button:has-text("I agree")', "cookie consent"),
     ('button:has-text("Got it")', "cookie banner"),
     ('button:has-text("OK")', "dialog dismiss"),
+    ('#onetrust-accept-btn-handler', "cookie consent"),
+    ('[data-testid="cookie-policy-dialog-accept-button"]', "cookie consent"),
     ('[aria-label="Close"]', "dialog close"),
     ('button[aria-label="Close"]', "dialog close"),
 ]
+
+COOKIE_BODY_PHRASES = (
+    "we use cookies",
+    "cookie policy",
+    "cookie preferences",
+    "accept cookies",
+    "cookie consent",
+    "this site uses cookies",
+)
+
+COOKIE_ACTION_PHRASES = (
+    "accept all",
+    "reject non-essential",
+    "allow all",
+    "manage cookies",
+    "cookie settings",
+)
 
 CAPTCHA_SELECTORS = (
     'iframe[src*="recaptcha"]',
@@ -74,14 +98,10 @@ LOGIN_WALL_SELECTORS = (
     'button:has-text("Continue with Microsoft")',
 )
 
-RATE_LIMIT_PHRASES = (
+# Body-text scan: only high-confidence ChatGPT-style messages (not generic "rate limit" in compliance copy).
+RATE_LIMIT_BODY_PHRASES = (
     "too many requests",
     "making requests too quickly",
-    "temporarily limited",
-    "rate limit",
-    "rate-limit",
-    "slow down",
-    "try again later",
 )
 
 RATE_LIMIT_SELECTORS = (
@@ -169,9 +189,14 @@ async def _click_blocker(page: Page, blocker: dict[str, Any]) -> bool:
     return False
 
 
-async def apply_configured_blockers(page: Page, blockers: list[dict[str, Any]] | None) -> list[str]:
+async def apply_configured_blockers(
+    page: Page,
+    blockers: list[dict[str, Any]] | None,
+    *,
+    check_rate_limit: bool = True,
+) -> list[str]:
     """Click configured blockers with action=click. Returns labels that were clicked."""
-    if await _rate_limit_visible(page):
+    if check_rate_limit and await _rate_limit_visible(page):
         return []
     clicked: list[str] = []
     for raw in blockers or []:
@@ -181,6 +206,47 @@ async def apply_configured_blockers(page: Page, blockers: list[dict[str, Any]] |
         if await _click_blocker(page, norm):
             clicked.append(norm["label"])
     return clicked
+
+
+async def _page_body_text(page: Page, *, limit: int = 12000) -> str:
+    try:
+        return (await page.inner_text("body"))[:limit].lower()
+    except Exception:
+        return ""
+
+
+async def _scan_dismiss_selectors(page: Page) -> list[dict[str, Any]]:
+    """Visible cookie/dialog dismiss controls (no rate-limit gate)."""
+    found: list[dict[str, Any]] = []
+    for selector, label in DISMISS_SELECTORS:
+        try:
+            loc = page.locator(selector)
+            if await loc.count() == 0:
+                continue
+            node = await _first_visible_locator(page, selector)
+            if await node.is_visible() and await node.is_enabled():
+                found.append({"selector": selector, "label": label, "action": "click"})
+        except Exception:
+            continue
+    return found
+
+
+async def _cookie_consent_blocking(page: Page) -> bool:
+    """True when cookie/GDPR UI is likely covering the page (not a rate-limit modal)."""
+    if await _rate_limit_modal_visible(page):
+        return False
+    body_text = await _page_body_text(page)
+    has_cookie_copy = any(p in body_text for p in COOKIE_BODY_PHRASES)
+    has_cookie_actions = any(p in body_text for p in COOKIE_ACTION_PHRASES)
+    dismiss_controls = await _scan_dismiss_selectors(page)
+    cookie_dismiss = [d for d in dismiss_controls if "cookie" in str(d.get("label", "")).lower()]
+    if cookie_dismiss:
+        return True
+    if dismiss_controls and (has_cookie_copy or has_cookie_actions):
+        return True
+    if has_cookie_copy and has_cookie_actions:
+        return True
+    return False
 
 
 async def _attempt_cookie_self_heal(
@@ -194,10 +260,8 @@ async def _attempt_cookie_self_heal(
     """Click cookie/dialog dismiss controls and persist selectors. Returns newly saved blockers."""
     if await _login_wall_visible(page, start_url=start_url):
         return []
-    if await _rate_limit_visible(page):
-        return []
     clicked_labels: list[str] = []
-    await apply_configured_blockers(page, blockers)
+    await apply_configured_blockers(page, blockers, check_rate_limit=False)
     discovered = await discover_dismiss_blockers(page)
     saved: list[dict[str, Any]] = []
     if discovered and site and component:
@@ -209,6 +273,27 @@ async def _attempt_cookie_self_heal(
         print(f"[+] Dismissed: {', '.join(clicked_labels)}", flush=True)
         await asyncio.sleep(0.4)
     return saved
+
+
+async def _resolve_cookie_consent(
+    page: Page,
+    *,
+    site: str,
+    component: str,
+    blockers: list[dict[str, Any]] | None,
+    start_url: str = "",
+) -> None:
+    """Dismiss cookie banners before other blocker checks."""
+    if not await _cookie_consent_blocking(page):
+        return
+    print("[*] Cookie consent detected - attempting to dismiss…", flush=True)
+    await _attempt_cookie_self_heal(
+        page,
+        site=site,
+        component=component,
+        blockers=blockers,
+        start_url=start_url,
+    )
 
 
 async def _login_wall_visible(page: Page, *, start_url: str = "") -> bool:
@@ -332,10 +417,20 @@ async def check_login_wall_before_submit(
     site: str,
     component: str = "",
     start_url: str = "",
+    blockers: list[dict[str, Any]] | None = None,
+    check_rate_limit: bool = True,
 ) -> None:
-    """Lightweight login check before each prompt (multi-turn mid-session redirects)."""
+    """Login, cookie, and optional rate-limit checks between multi-turn prompts."""
     await _resolve_login_wall(page, site=site, component=component, start_url=start_url)
-    await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
+    await _resolve_cookie_consent(
+        page,
+        site=site,
+        component=component,
+        blockers=blockers,
+        start_url=start_url,
+    )
+    if check_rate_limit:
+        await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
 
 
 def _rate_limit_settings(site: str, component: str) -> tuple[float, bool]:
@@ -353,17 +448,8 @@ def _rate_limit_settings(site: str, component: str) -> tuple[float, bool]:
     return max(0.0, backoff), auto_wait
 
 
-async def _detect_rate_limit(page: Page) -> bool:
-    try:
-        body_text = (await page.inner_text("body"))[:12000].lower()
-    except Exception:
-        body_text = ""
-    return any(phrase in body_text for phrase in RATE_LIMIT_PHRASES)
-
-
-async def _rate_limit_visible(page: Page) -> bool:
-    if await _detect_rate_limit(page):
-        return True
+async def _rate_limit_modal_visible(page: Page) -> bool:
+    """Visible ChatGPT-style rate-limit UI (not body-text alone)."""
     for selector in RATE_LIMIT_SELECTORS:
         try:
             loc = page.locator(selector)
@@ -375,6 +461,16 @@ async def _rate_limit_visible(page: Page) -> bool:
         except Exception:
             continue
     return False
+
+
+async def _rate_limit_visible(page: Page) -> bool:
+    """High-confidence rate limit only; cookie banners must not trigger backoff."""
+    if await _cookie_consent_blocking(page):
+        return False
+    if not await _rate_limit_modal_visible(page):
+        return False
+    body_text = await _page_body_text(page)
+    return any(phrase in body_text for phrase in RATE_LIMIT_BODY_PHRASES)
 
 
 async def _dismiss_rate_limit_modal(page: Page) -> bool:
@@ -502,23 +598,15 @@ async def _detect_login_wall(page: Page, *, start_url: str = "") -> bool:
 
 async def discover_dismiss_blockers(page: Page) -> list[dict[str, Any]]:
     """Find visible dismiss/accept controls for cookie banners and dialogs."""
-    if await _rate_limit_visible(page):
-        return []
-    found: list[dict[str, Any]] = []
-    for selector, label in DISMISS_SELECTORS:
-        try:
-            loc = page.locator(selector)
-            if await loc.count() == 0:
-                continue
-            node = await _first_visible_locator(page, selector)
-            if await node.is_visible() and await node.is_enabled():
-                found.append({"selector": selector, "label": label, "action": "click"})
-        except Exception:
-            continue
-    return found
+    return await _scan_dismiss_selectors(page)
 
 
-async def detect_heuristic_blockers(page: Page, *, start_url: str = "") -> list[dict[str, Any]]:
+async def detect_heuristic_blockers(
+    page: Page,
+    *,
+    start_url: str = "",
+    check_rate_limit: bool = True,
+) -> list[dict[str, Any]]:
     """Heuristic signals: login wall, captcha widgets, cookie consent text."""
     found: list[dict[str, Any]] = []
     if await _login_wall_visible(page, start_url=start_url):
@@ -529,7 +617,20 @@ async def detect_heuristic_blockers(page: Page, *, start_url: str = "") -> list[
             }
         )
 
-    if await _rate_limit_visible(page):
+    try:
+        body_text = await _page_body_text(page)
+    except Exception:
+        body_text = ""
+
+    if await _cookie_consent_blocking(page):
+        found.append(
+            {
+                "kind": "cookie_consent",
+                "message": "Cookie consent language detected on page",
+            }
+        )
+
+    if check_rate_limit and await _rate_limit_visible(page):
         found.append(
             {
                 "kind": "rate_limited",
@@ -549,22 +650,6 @@ async def detect_heuristic_blockers(page: Page, *, start_url: str = "") -> list[
                 break
         except Exception:
             continue
-
-    try:
-        body_text = (await page.inner_text("body"))[:12000].lower()
-    except Exception:
-        body_text = ""
-
-    cookie_phrases = ("we use cookies", "cookie policy", "cookie preferences", "accept cookies")
-    if any(p in body_text for p in cookie_phrases) and (
-        "accept all" in body_text or "reject non-essential" in body_text or "allow all" in body_text
-    ):
-        found.append(
-            {
-                "kind": "cookie_consent",
-                "message": "Cookie consent language detected on page",
-            }
-        )
 
     return found
 
@@ -626,7 +711,7 @@ def _emit_blocked(
 
 
 def _pick_primary_kind(heuristics: list[dict[str, Any]], readiness_reason: str) -> str:
-    order = ("captcha", "rate_limited", "login_required", "cookie_consent", "not_ready")
+    order = ("captcha", "login_required", "cookie_consent", "rate_limited", "not_ready")
     kinds = [h.get("kind") for h in heuristics if h.get("kind")]
     for kind in order:
         if kind in kinds:
@@ -658,30 +743,54 @@ async def ensure_page_ready_for_submit(
     start_url: str = "",
     blockers: list[dict[str, Any]] | None = None,
     readiness_timeout_ms: int = 5000,
+    check_rate_limit: bool = True,
 ) -> None:
-    """Cookie self-heal, login/rate-limit detection, then captcha checks."""
+    """Cookie dismiss, login wall, then rate-limit detection before submit."""
     await asyncio.sleep(0.35)
 
     await _resolve_login_wall(page, site=site, component=component, start_url=start_url)
-    await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
-
-    await _attempt_cookie_self_heal(
-        page, site=site, component=component, blockers=blockers, start_url=start_url
+    await _resolve_cookie_consent(
+        page,
+        site=site,
+        component=component,
+        blockers=blockers,
+        start_url=start_url,
     )
+    if check_rate_limit:
+        await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
 
     await _resolve_login_wall(page, site=site, component=component, start_url=start_url)
-    await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
+    await _resolve_cookie_consent(
+        page,
+        site=site,
+        component=component,
+        blockers=blockers,
+        start_url=start_url,
+    )
+    if check_rate_limit:
+        await _resolve_rate_limit(page, site=site, component=component, start_url=start_url)
 
     await check_submission_readiness(
         page, inputs, submit_selector, timeout_ms=min(readiness_timeout_ms, 3000)
     )
 
-    heuristics = await detect_heuristic_blockers(page, start_url=start_url)
+    heuristics = await detect_heuristic_blockers(
+        page, start_url=start_url, check_rate_limit=check_rate_limit
+    )
     for h in heuristics:
         kind = h.get("kind")
         if kind == "login_required":
             _raise_login_blocked(site, component=component, start_url=start_url)
-        if kind == "rate_limited":
+        if kind == "cookie_consent":
+            await _resolve_cookie_consent(
+                page,
+                site=site,
+                component=component,
+                blockers=blockers,
+                start_url=start_url,
+            )
+            continue
+        if kind == "rate_limited" and check_rate_limit:
             backoff, auto_wait = _rate_limit_settings(site, component)
             _raise_rate_limit_blocked(
                 site,

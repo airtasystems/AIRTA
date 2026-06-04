@@ -24,14 +24,37 @@ from browser_bot.config import (
 )
 
 
+def _clean_launch_string(value) -> str | None:
+    """Normalize empty UI/config values before passing options to Playwright."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _configured_executable_path() -> str | None:
+    executable_path = _clean_launch_string(CHROMIUM_EXECUTABLE_PATH)
+    if not executable_path:
+        return None
+    if Path(executable_path).is_file():
+        return executable_path
+    print(
+        f"Warning: configured browser executable does not exist: {executable_path}. "
+        "Falling back to Playwright bundled Chromium."
+    )
+    return None
+
+
 def _launch_options(human_mode: bool = False, headless: bool | None = None):
     """Return launch options dict for chromium.launch()."""
     args = HUMAN_CHROME_ARGS if (human_mode and HUMAN_CHROME_ARGS) else CHROME_ARGS
     opts = {"headless": headless if headless is not None else HEADLESS, "args": args}
-    if human_mode and CHROME_CHANNEL:
-        opts["channel"] = CHROME_CHANNEL
-    elif CHROMIUM_EXECUTABLE_PATH:
-        opts["executable_path"] = CHROMIUM_EXECUTABLE_PATH
+    channel = _clean_launch_string(CHROME_CHANNEL)
+    executable_path = _configured_executable_path()
+    if human_mode and channel:
+        opts["channel"] = channel
+    elif executable_path:
+        opts["executable_path"] = executable_path
     return opts
 
 
@@ -288,10 +311,12 @@ async def launch_persistent_context(
         "args": args,
         "accept_downloads": True,
     }
-    if CHROME_CHANNEL:
-        opts["channel"] = CHROME_CHANNEL
-    elif CHROMIUM_EXECUTABLE_PATH:
-        opts["executable_path"] = CHROMIUM_EXECUTABLE_PATH
+    channel = _clean_launch_string(CHROME_CHANNEL)
+    executable_path = _configured_executable_path()
+    if channel:
+        opts["channel"] = channel
+    elif executable_path:
+        opts["executable_path"] = executable_path
 
     _clear_stale_profile_locks(user_data_dir)
 

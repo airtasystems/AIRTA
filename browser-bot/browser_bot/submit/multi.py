@@ -10,7 +10,7 @@ from browser_bot.config import EVASION_REQUEST_DELAY_S, FETCH_METHOD, get_posts_
 from browser_bot.sites import get_storage_state_path, get_submission_config
 
 from browser_bot.live_preview import emit_preview_layout, live_preview_context
-from browser_bot.page_blockers import PageBlockedError, check_login_wall_before_submit, check_rate_limit_before_submit, ensure_page_ready_for_submit
+from browser_bot.page_blockers import PageBlockedError, check_login_wall_before_submit, ensure_page_ready_for_submit
 from browser_bot.submit.common import (
     NonSuccessResponseError,
     SubmissionProgressTracker,
@@ -69,10 +69,11 @@ async def do_ui_submit_sequence_with_page(
         results: list[tuple[str, str | None]] = []
         for text in texts:
             await check_login_wall_before_submit(
-                page, site=site, component=component, start_url=start_url
-            )
-            await check_rate_limit_before_submit(
-                page, site=site, component=component, start_url=start_url
+                page,
+                site=site,
+                component=component,
+                start_url=start_url,
+                blockers=blockers,
             )
             text_out, response_out, _full_content = await _do_one_submit_step(
                 page,

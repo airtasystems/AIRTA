@@ -1,151 +1,153 @@
-# Bulk Import API - Client Integration Guide
+# Import AIRTA testing report batch — Client guide
 
-## Endpoint
+Matches the AIRTA Systems OpenAPI operation:
 
-```
-POST /api/v2/imported-reports/company
-```
+**POST** `/api/v2/imported-reports/company` — Import AIRTA testing report batch  
+**Scope:** `write:imported_reports`
 
-## Required Headers
-
-| Header | Value |
-|---|---|
-| `Authorization` | `Bearer <AIRTASYSTEMS_API_KEY>` |
-| `X-Program-Id` | `<mongodb-program-id>` |
-| `Content-Type` | `application/json` |
-
-The API key must have the `write:bulk_import` scope assigned.
+Bulk-imports an AIRTA `pipeline_report.json` payload. The on-disk report uses `compliance_results[]`; this exporter sends `adversarial_results[]` (same row shape).
 
 ---
 
-## Request Body
+## Headers
 
-Send the export-safe subset of `pipeline_report.json` as the request body. Local-only fields such as file paths, mandate rollups, UI status fields, and rendered `response_html` should not be included.
+| Header | Required | Description |
+|---|---|---|
+| `Authorization` | Yes | `Bearer <AIRTASYSTEMS_API_KEY>` |
+| `X-Program-Id` | Yes | Target program id (`Airta-Program-Id` is also accepted) |
+| `Content-Type` | Yes | `application/json` |
 
-### Expected top-level fields
+The API key must have scope **`write:imported_reports`**.
+
+---
+
+## Request body (`AirtaImportedReportBatchInput`)
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `compliance_results` | array | Yes | Test result items (max 5,000) |
-| `framework` | string | No | e.g. `"EU AI Act"` |
-| `timestamp` | string | No | ISO-format report timestamp |
+| `framework` | string | Yes | e.g. `"EU AI Act"`, `"OECD AI Principles"` |
+| `timestamp` | string | Yes | ISO-8601, e.g. `2026-06-02T12:00:00.000Z` |
+| `source_file` | string | No | Label for the source report (exporter sends basename, default `pipeline_report.json`) |
+| `adversarial_results` | array | Yes | Test result items (max 5,000 per request) |
 
-### Each `compliance_results` item
+### Each `adversarial_results` item
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | External test ID |
-| `mandate` | string | Regulatory article reference |
-| `prompt` | string | Test prompt sent to the AI |
-| `response` | string | AI response captured |
-| `risk_level` | string | e.g. `critical`, `high`, `informational`, `compliant` |
-| `judge_reasoning` | string | Expert assessment rationale |
+| `id` | string | External test id |
+| `mandate` | string | Regulatory / rubric reference |
+| `prompt` | string | Test prompt |
+| `response` | string | Model response |
+| `risk_level` | string | `indeterminate`, `compliant`, `informational`, `low`, `medium`, `high`, `critical` |
+| `judge_reasoning` | string | Assessment rationale |
 | `experts_summary` | array | `[{ framework, risk_level, reasoning }]` |
 | `description` | string | Test description |
-| `ok` | boolean | Whether test passed |
-| `error` | string\|null | Import error if any |
+| `ok` | boolean | Whether the run succeeded |
+| `error` | string \| null | Error message if any |
+
+Local-only fields in `pipeline_report.json` are **not** sent: `mandate_rollup`, `run_log_dir`, `compliance_log`, `response_html`, `status`, `expected_behavior`, etc.
+
+### Legacy servers
+
+Set `AIRTASYSTEMS_EXPORT_SCHEMA=legacy` to POST `compliance_results` instead of `adversarial_results` (older self-hosted imports only).
 
 ---
 
-## Examples
-
-### curl
-
-```bash
-curl -X POST https://<host>/api/v2/imported-reports/company \
-  -H "Authorization: Bearer <AIRTASYSTEMS_API_KEY>" \
-  -H "X-Program-Id: <programId>" \
-  -H "Content-Type: application/json" \
-  -d @pipeline_report.json
-```
-
-### Python
-
-```python
-import json, requests
-
-with open("pipeline_report.json") as f:
-    payload = json.load(f)
-
-response = requests.post(
-    "https://<host>/api/v2/imported-reports/company",
-    headers={
-        "Authorization": "Bearer <AIRTASYSTEMS_API_KEY>",
-        "X-Program-Id": "<programId>",
-        "Content-Type": "application/json",
-    },
-    json=payload
-)
-print(response.json())
-```
-
-### Node.js
-
-```js
-const fs = require("fs");
-
-const payload = JSON.parse(fs.readFileSync("pipeline_report.json", "utf8"));
-
-const res = await fetch("https://<host>/api/v2/imported-reports/company", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer <AIRTASYSTEMS_API_KEY>",
-    "X-Program-Id": "<programId>",
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify(payload),
-});
-
-console.log(await res.json());
-```
-
----
-
-## Responses
-
-### Success - `207 Multi-Status`
+## Example request
 
 ```json
 {
-  "success": true,
-  "message": "Bulk import complete: 8 created, 0 failed",
-  "summary": {
-    "total": 8,
-    "created": 8,
-    "failed": 0
-  }
-}
-```
-
-Partial failures are reported in an `errors` array alongside successful inserts:
-
-```json
-{
-  "success": true,
-  "summary": { "total": 8, "created": 7, "failed": 1 },
-  "errors": [
-    { "index": 3, "id": "art5-social-scoring-analyst-risk", "message": "Write error" }
+  "framework": "AIRTA Core",
+  "timestamp": "2026-06-02T12:00:00.000Z",
+  "source_file": "pipeline_report.json",
+  "adversarial_results": [
+    {
+      "id": "imported-report-001",
+      "mandate": "EU AI Act transparency",
+      "prompt": "Summarise the customer complaint.",
+      "response": "The customer reported an incorrect refund amount.",
+      "risk_level": "medium",
+      "judge_reasoning": "Imported AIRTA finding with moderate consumer harm risk.",
+      "experts_summary": [
+        {
+          "framework": "EU AI Act",
+          "risk_level": "medium",
+          "reasoning": "Financial guidance mismatch."
+        }
+      ],
+      "description": "Imported AIRTA report from external assessment tool.",
+      "ok": true,
+      "error": null
+    }
   ]
 }
 ```
 
-### Error Responses
+---
 
-| Status | `error` | Cause |
+## Example: curl
+
+```bash
+curl -X POST "https://dashboard.airtasystems.com/api/v2/imported-reports/company" \
+  -H "Authorization: Bearer $AIRTASYSTEMS_API_KEY" \
+  -H "X-Program-Id: $AIRTASYSTEMS_PROGRAM_ID" \
+  -H "Content-Type: application/json" \
+  -d @payload.json
+```
+
+AIRTA CLI / web UI run the same mapping via `pipeline/export_genbounty.py`.
+
+---
+
+## Success response (`201`)
+
+```json
+{
+  "success": true,
+  "message": "Imported testing report accepted",
+  "data": {
+    "importBatchId": "674a1b2c3d4e5f6789012399",
+    "programId": "674a1b2c3d4e5f6789012345",
+    "importedCount": 1
+  }
+}
+```
+
+Large reports are split into batches (default 10 rows per POST, configurable via `AIRTASYSTEMS_EXPORT_BATCH_SIZE`).
+
+---
+
+## Error responses
+
+| Status | `error` | Typical cause |
 |---|---|---|
-| `400` | `invalid_body` | Request body is not valid JSON |
-| `400` | `validation_error` | Missing/invalid `X-Program-Id` or empty `compliance_results` |
-| `401` | `invalid_api_key` | Key not found or inactive |
-| `403` | `ip_not_allowed` | Client IP not on key's allowlist |
-| `403` | `forbidden` | Key missing `write:bulk_import` scope, or program not owned by your company |
-| `404` | `not_found` | Program ID does not exist |
-| `500` | `internal_error` | Server error |
+| `400` | `validation_error` | Invalid body, missing program id, empty results, unknown fields |
+| `401` | `invalid_api_key` | Key missing or inactive |
+| `403` | `forbidden` | Missing `write:imported_reports`, or program not in your company |
+| `404` | `not_found` | Program id does not exist |
+| `415` | — | Wrong `Content-Type` |
+| `429` | — | Rate limit (exporter retries with backoff) |
+
+Validation errors include an `errors[]` array with `field` and `message` (surfaced in export job logs).
+
+---
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `AIRTASYSTEMS_HOST` | API host (e.g. `https://dashboard.airtasystems.com`) |
+| `AIRTASYSTEMS_API_KEY` | Bearer token |
+| `AIRTASYSTEMS_PROGRAM_ID` | Program ObjectId (UI can override per export) |
+| `AIRTASYSTEMS_EXPORT_SCHEMA` | `security` (default) or `legacy` |
+| `AIRTASYSTEMS_IMPORT_PATH` | Override path if needed |
+| `AIRTASYSTEMS_EXPORT_BATCH_SIZE` | Rows per request (default 10) |
+| `AIRTASYSTEMS_EXPORT_BATCH_DELAY_S` | Pause between batches (default 2s) |
 
 ---
 
 ## Notes
 
-- `programId` can be provided in the JSON body instead of the header if preferred; body value takes precedence.
-- Requests time out after **5 minutes** - sufficient for the 5,000-item maximum.
-- Imported reports are created with status `submitted` and `pointsAwarded: 0` by default.
-- Manage imported reports after upload via `GET/PUT/DELETE /api/v2/imported-reports/company/[id]`.
+- `pipeline_report.json` on disk keeps `compliance_results` for the risk-assess pipeline; only the HTTP export renames the array to `adversarial_results`.
+- Requests time out after **5 minutes** (up to 5,000 items per request).
+- Do not fork-merge security-repo export docs that still describe `compliance_results` as the API field — that causes `400 validation_error` on the dashboard.

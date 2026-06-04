@@ -74,7 +74,7 @@ python start.py
 
 Open the URL printed in the terminal (default **http://localhost:8000**). API reference: `/api/docs`.
 
-`start.py` creates `airta-venv/`, installs dependencies, runs `playwright install chromium` once, and starts the web UI.
+`start.py` creates `airta-venv/`, installs dependencies, runs `playwright install chromium` once, and starts the web UI. AIRTA uses Playwright's bundled Chromium by default for cross-OS portability. In Settings → Browser Config, set a Chrome channel or executable path only when you intentionally want a system browser.
 
 **Ubuntu 26.04:** Playwright 1.60 does not ship `ubuntu26.04-x64` browsers yet. `start.py` sets `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` automatically. If Chromium fails to start (missing `libnspr4.so`, etc.), install system deps:
 

@@ -632,10 +632,13 @@ async def api_component_logs(site: str, component: str):
         list(logs_dir.glob("*/pipeline_report.json")) + list(logs_dir.glob("pipeline_report*.json")),
         key=lambda p: p.stat().st_mtime, reverse=True,
     )
+    def _entry(p: Path) -> dict:
+        return {"name": _label(p), "path": str(p), "mtime": p.stat().st_mtime}
+
     return {
-        "runs": [{"name": _label(p), "path": str(p)} for p in runs],
-        "compliance": [{"name": _label(p), "path": str(p)} for p in compliance],
-        "reports": [{"name": _label(p), "path": str(p)} for p in reports],
+        "runs": [_entry(p) for p in runs],
+        "compliance": [_entry(p) for p in compliance],
+        "reports": [_entry(p) for p in reports],
     }
 
 
@@ -643,6 +646,7 @@ _CONFIG_PY = _bb_dir / "browser_bot" / "config.py"
 
 from pipeline.component_settings import (  # noqa: E402
     EDITABLE_BROWSER_VARS as _EDITABLE_VARS,
+    _coerce_setting,
     get_effective_settings_detail,
     parse_browser_config_py,
     settings_schema_payload,
@@ -698,6 +702,7 @@ async def api_save_config(body: SaveConfigBody):
     for name, value in body.changes.items():
         if name not in _EDITABLE_VARS:
             raise HTTPException(400, f"Not an editable config key: {name}")
+        value = _coerce_setting(name, value)
         source = _write_config_value(source, name, value)
     _CONFIG_PY.write_text(source, encoding="utf-8")
     return {"ok": True, "updated": list(body.changes.keys())}
